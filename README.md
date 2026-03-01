@@ -90,3 +90,10 @@ See the help information for additional details like usage examples (please note
 ```bash
 python gbcam_extract.py --help
 ```
+
+# Roadmap
+
+- Adjust parameters to find the best settings and make them default
+  - Hand-edit an existing image to be correct, then make unit test and have the AI run it until it matches?
+- Initial crop from phone picture to cropped and rotated image that is input to "warp" step
+- Add color palette selection
