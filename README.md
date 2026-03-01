@@ -26,7 +26,9 @@ I performed the following steps to get the pictures the way they need to be to w
 2. Turn on the Game Boy Advance SP. Make sure the frontlight is turned on. While it boots up, hold B+Left to use the [Grayscale Game Boy Color palette](https://tcrf.net/Notes:Game_Boy_Color_Bootstrap_ROM#Assigned_Palette_Configurations).
 3. In the Game Boy Camera game, navigate through the menu options to view the album.
 4. Select an image. Once you select it, change the frame to [Frame 02](https://tcrf.net/images/5/50/GBCamera-Frame02-INT.png) (white with black dashes):
+
    ![Frame 02](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/supporting-materials/Frame%2002.png)
+
 5. Line up the camera with the Game Boy Advance SP screen (approximately; I did this by hand, and it worked fine). Take a picture of the SP screen. Make sure the picture is very well focused and shows the individual pixels on the screen.
 6. Crop the image and rotate it so the Game Boy Screen (the 160x144 region that has the frame, not the entire SP screen) is approximately centered with just a little bit of dark screen around it and is relatively straight.
 
