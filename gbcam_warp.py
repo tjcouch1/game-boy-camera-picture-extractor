@@ -198,12 +198,34 @@ def main():
     parser = argparse.ArgumentParser(
         description="Warp step: perspective-correct a GBA SP phone photo",
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    parser.add_argument("inputs", nargs="*", help="Input photo files")
-    parser.add_argument("--dir", "-d", help="Directory of input photos")
-    parser.add_argument("--output-dir", "-o", help="Output directory")
-    parser.add_argument("--scale",     type=int, default=8)
-    parser.add_argument("--threshold", type=int, default=180)
-    parser.add_argument("--debug",     action="store_true")
+    parser.add_argument("inputs", nargs="*",
+                        help="Phone photo files to warp (.jpg or .png).")
+    parser.add_argument("--dir", "-d", metavar="DIR",
+                        help="Directory of phone photos to glob.")
+    parser.add_argument("--output-dir", "-o", metavar="DIR",
+                        help="Where to write *_warp.png outputs. Default: same "
+                             "directory as each input file.")
+    parser.add_argument("--scale", type=int, default=8, metavar="N",
+                        help="Working resolution multiplier: how many image pixels "
+                             "represent each Game Boy pixel in the output. At the "
+                             "default of 8 the output is 1280x1152 (160x8 by 144x8). "
+                             "Must be kept consistent with all subsequent steps. "
+                             "Default: 8.")
+    parser.add_argument("--threshold", type=int, default=180, metavar="T",
+                        help="Brightness threshold (0-255) for separating the screen "
+                             "from the background before corner detection. Pixels "
+                             "brighter than this are treated as screen. Lower this if "
+                             "the screen is dim and not being detected; raise it if "
+                             "bright background objects are being mistaken for the "
+                             "screen. Default: 180.")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable verbose logging and save diagnostic images: "
+                             "warp_a_corners (detected corners overlaid on the "
+                             "photo), warp_b_initial_color and warp_c_initial_gray "
+                             "(result after the first perspective transform), "
+                             "warp_d_refined_color (after snapping to the inner "
+                             "border), warp_e_final_gray (the final grayscale "
+                             "output). All saved to <output-dir>/debug/.")
     args = parser.parse_args()
     set_verbose(args.debug)
     files = collect_inputs(args.inputs, args.dir)

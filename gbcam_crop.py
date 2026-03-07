@@ -95,11 +95,26 @@ def main():
     parser = argparse.ArgumentParser(
         description="Crop step: remove the filmstrip frame",
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    parser.add_argument("inputs", nargs="*", help="Warp-step output files (*_warp.png)")
-    parser.add_argument("--dir", "-d", help="Directory of warp-step outputs")
-    parser.add_argument("--output-dir", "-o", help="Output directory")
-    parser.add_argument("--scale", type=int, default=8)
-    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("inputs", nargs="*",
+                        help="Correct-step output files (*_correct.png) to crop. "
+                             "A warp-step output (*_warp.png) is also accepted if "
+                             "skipping the correct step.")
+    parser.add_argument("--dir", "-d", metavar="DIR",
+                        help="Directory of correct-step (or warp-step) outputs to glob.")
+    parser.add_argument("--output-dir", "-o", metavar="DIR",
+                        help="Where to write *_crop.png outputs. Default: same "
+                             "directory as each input file.")
+    parser.add_argument("--scale", type=int, default=8, metavar="N",
+                        help="Working resolution multiplier. Must match the value "
+                             "used in all earlier steps. The crop boundaries are "
+                             "computed as multiples of this value, so using a "
+                             "different scale here than in the warp step will "
+                             "crop the wrong region. Default: 8.")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable verbose logging and save a diagnostic image "
+                             "(crop_a_region) showing the input image with the crop "
+                             "boundary and inner border band highlighted in colour. "
+                             "Saved to <output-dir>/debug/.")
     args = parser.parse_args()
     set_verbose(args.debug)
     files = collect_inputs(args.inputs, args.dir)

@@ -327,13 +327,34 @@ def main():
         description="Correct step: 2-D front-light brightness correction",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__)
-    parser.add_argument("inputs", nargs="*", help="Warp-step output files (*_warp.png)")
-    parser.add_argument("--dir", "-d", help="Directory of warp-step outputs")
-    parser.add_argument("--output-dir", "-o", help="Output directory")
-    parser.add_argument("--scale",      type=int, default=8)
+    parser.add_argument("inputs", nargs="*",
+                        help="Warp-step output files (*_warp.png) to correct.")
+    parser.add_argument("--dir", "-d", metavar="DIR",
+                        help="Directory of warp-step outputs to glob.")
+    parser.add_argument("--output-dir", "-o", metavar="DIR",
+                        help="Where to write *_correct.png outputs. Default: same "
+                             "directory as each input file.")
+    parser.add_argument("--scale", type=int, default=8, metavar="N",
+                        help="Working resolution multiplier. Must match the value "
+                             "used in the warp step. Default: 8.")
     parser.add_argument("--poly-degree", type=int, default=2, metavar="N",
-                        help="Degree of the bivariate polynomial fit (default: 2)")
-    parser.add_argument("--debug",      action="store_true")
+                        help="Degree of the bivariate polynomial fitted to the "
+                             "brightness reference measurements. Controls how complex "
+                             "the fitted front-light gradient surface can be. Degree 1 "
+                             "fits a flat affine plane (linear in both x and y). "
+                             "Degree 2 (default) adds curvature, which handles the "
+                             "typical GBA SP front-light falloff more accurately. "
+                             "Degree 3 or higher can fit more complex gradients but "
+                             "risks overfitting to noise, especially near corners "
+                             "where reference data is sparse. Default: 2.")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable verbose logging and save diagnostic images: "
+                             "correct_a_gain_map (the per-pixel gain surface, brighter "
+                             "= more correction needed), correct_b_before_after "
+                             "(camera area side-by-side before and after correction), "
+                             "correct_c_white_surface and correct_d_dark_surface "
+                             "(the fitted reference surfaces), correct_e_full (the "
+                             "complete corrected image). All saved to <output-dir>/debug/.")
     args = parser.parse_args()
 
     set_verbose(args.debug)

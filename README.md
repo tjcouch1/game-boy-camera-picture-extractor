@@ -8,7 +8,7 @@ WARNING: This script is not fully successful yet. Please back up your Game Boy C
 
 This repository contains a script that accepts a picture of a Game Boy Camera screen displaying a Game Boy Camera image and outputs the GameBoy Camera image in 128x112 in four colors. This script is intended to clean Game Boy Camera images retrieved via taking a picture, but it probably would also work with relatively high-quality [Video Capture](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera#video_capture) (I tried using my [Dazzle DVC100](https://www.pinnaclesys.com/en/products/dazzle/dvd-recorder-hd/), notorious for its low quality video capture, but it did not work). Please note that this is admittedly probably the lowest-quality method of transferring Game Boy Camera images; if you do not have the hardware needed to use this script, you will likely find more success at a more affordable price by pursuing [other avenues](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera) for transferring your Game Boy Camera images. This script aims to accomplish the goal of transferring Game Boy Camera images with specific hardware that I already own.
 
-DISCLAIMER: Though this `README.md` is not AI-generated except where clearly indicated, the code in this repo is almost exclusively AI-generated. It likely contains errors, bad code quality and standards, and does not satisfy the need perfectly.
+DISCLAIMER: Though this `README.md` is not AI-generated, the code in this repo is almost exclusively AI-generated. It likely contains errors, bad code quality and standards, and does not satisfy the need perfectly.
 
 # Taking pictures that work with this script
 

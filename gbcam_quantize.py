@@ -174,12 +174,37 @@ def main():
     parser = argparse.ArgumentParser(
         description="Quantize step: map samples to 4 GB Camera colors",
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    parser.add_argument("inputs", nargs="*", help="Sample-step output files (*_sample.png)")
-    parser.add_argument("--dir", "-d", help="Directory of sample-step outputs")
-    parser.add_argument("--output-dir", "-o", help="Output directory")
-    parser.add_argument("--scale",     type=int, default=8)
-    parser.add_argument("--no-kmeans", action="store_true")
-    parser.add_argument("--debug",     action="store_true")
+    parser.add_argument("inputs", nargs="*",
+                        help="Sample-step output files (*_sample.png) to quantize.")
+    parser.add_argument("--dir", "-d", metavar="DIR",
+                        help="Directory of sample-step outputs to glob.")
+    parser.add_argument("--output-dir", "-o", metavar="DIR",
+                        help="Where to write *_gbcam.png outputs. Default: same "
+                             "directory as each input file.")
+    parser.add_argument("--scale", type=int, default=8, metavar="N",
+                        help="Working resolution multiplier used in earlier steps. "
+                             "Only relevant here for the frame-calibration fallback, "
+                             "which reads reference pixels from a co-located "
+                             "*_correct.png or *_warp.png file at the expected "
+                             "pixel coordinates. Default: 8.")
+    parser.add_argument("--no-kmeans", action="store_true",
+                        help="Skip k-means clustering and use simpler threshold "
+                             "calibration instead. Normally k-means clusters the "
+                             "128x112 sample values into 4 groups and places "
+                             "thresholds at the midpoints between cluster centres — "
+                             "adaptive, requires no tuning. With --no-kmeans the "
+                             "step looks for a co-located *_correct.png or "
+                             "*_warp.png file and reads actual black and white "
+                             "reference pixels from the frame geometry to compute "
+                             "evenly-spaced thresholds; if neither is found it "
+                             "falls back to the sample min and max. Use if "
+                             "scikit-learn is not installed or k-means is producing "
+                             "poor results for a particular image.")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable verbose logging and save a diagnostic 8x "
+                             "upscaled image (quantize_a_8x) so the four-color "
+                             "result is visible at block level. Saved to "
+                             "<output-dir>/debug/.")
     args = parser.parse_args()
     set_verbose(args.debug)
     files = collect_inputs(args.inputs, args.dir)

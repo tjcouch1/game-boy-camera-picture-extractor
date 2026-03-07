@@ -340,75 +340,160 @@ def main():
     )
     parser.add_argument(
         "inputs", nargs="*",
-        help="Input files. For --start warp: phone photos. "
-             "For later start steps: the output files of the previous step.")
+        help="Input files to process. For --start warp (the default): phone "
+             "photos in any format (.jpg, .png, etc.). For later start steps: "
+             "the output files of the preceding step (e.g. *_warp.png for "
+             "--start correct). Can be combined with --dir.")
     parser.add_argument(
         "--dir", "-d", metavar="DIR",
-        help="Directory to glob for input files.")
+        help="Directory to glob for input files. All image files in the "
+             "directory are collected and deduplicated. Can be combined with "
+             "positional file arguments.")
     parser.add_argument(
         "--output-dir", "-o", metavar="DIR",
-        help="Directory for all output files. Defaults to the same directory "
-             "as each input file.")
+        help="Directory where all output files are written. Created if it does "
+             "not exist. Defaults to the same directory as each input file.")
     parser.add_argument(
         "--start", metavar="STEP", default="warp",
         choices=STEP_ORDER,
-        help=f"Begin the pipeline at this step. Choices: {', '.join(STEP_ORDER)}. "
-             f"Default: warp. When starting after warp, input files must be "
-             f"the outputs of the previous step.")
+        help=f"Begin the pipeline at this step and expect input files "
+             f"appropriate for it. Choices: {', '.join(STEP_ORDER)}. Default: "
+             f"warp. Use this to re-run a later step without redoing earlier "
+             f"ones — e.g. --start quantize to re-quantize with different "
+             f"settings without re-running the slow correct step.")
     parser.add_argument(
         "--end", metavar="STEP", default="quantize",
         choices=STEP_ORDER,
-        help=f"Stop after this step. Choices: {', '.join(STEP_ORDER)}. "
-             f"Default: quantize.")
+        help=f"Stop the pipeline after this step and keep its output as the "
+             f"result. Choices: {', '.join(STEP_ORDER)}. Default: quantize. "
+             f"Use this to inspect intermediate outputs — e.g. --end correct "
+             f"to examine the brightness-corrected image before cropping.")
+
+    # ── Warp step ────────────────────────────────────────────
     parser.add_argument(
         "--scale", type=int, default=8, metavar="N",
-        help="Working pixels per GB pixel. Must be consistent across all steps "
-             "for the same image. Default: 8.")
+        help="Working resolution multiplier: how many image pixels represent "
+             "each Game Boy pixel throughout the pipeline. At the default of 8, "
+             "the warp and correct steps operate on a 1280x1152 image (160x8 "
+             "by 144x8), each GB pixel occupying an 8x8 block. A higher scale "
+             "gives the warp refinement and color correction more room to work "
+             "with sub-pixel precision, at the cost of larger intermediate "
+             "files and slower processing. Must be kept consistent across all "
+             "steps for the same image — do not change it mid-pipeline with "
+             "--start. Default: 8.")
     parser.add_argument(
         "--threshold", type=int, default=180, metavar="T",
-        help="Brightness threshold for screen corner detection (warp step only). "
-             "Lower if the screen is dim; raise if background is bright. Default: 180.")
-    parser.add_argument(
-        "--no-kmeans", action="store_true",
-        help="Quantize step: skip k-means clustering and use frame-geometry "
-             "reference points (or sample min/max as a last resort) instead.")
+        help="Brightness threshold (0-255) used in the warp step to separate "
+             "the screen from the background before corner detection. Pixels "
+             "brighter than this value are treated as 'screen', darker pixels "
+             "as background. The largest resulting bright region is assumed to "
+             "be the filmstrip frame. Lower this value if your photos are dim "
+             "(dark room, low front-light setting, or camera underexposure) and "
+             "the screen is not being detected. Raise it if bright background "
+             "objects (a white desk, a bright wall) are being mistaken for the "
+             "screen. Default: 180.")
 
-    # ── Correct step parameters ──────────────────────────────
+    # ── Correct step ─────────────────────────────────────────
     parser.add_argument(
         "--poly-degree", type=int, default=2, metavar="N",
-        help="Correct step: degree of the bivariate polynomial used to fit "
-             "the front-light brightness surface (default: 2). "
-             "Degree 1 = affine plane; degree 2 = adds curvature.")
+        help="Degree of the bivariate polynomial fitted to the brightness "
+             "reference measurements in the correct step. The front-light "
+             "gradient is modelled as a smooth 2D surface; this controls how "
+             "complex that surface can be. Degree 1 fits a flat affine plane "
+             "(linear in both x and y — good if the gradient is simple and "
+             "monotonic). Degree 2 (default) adds curvature terms, which "
+             "handles the typical GBA SP front-light falloff more accurately. "
+             "Degree 3 or higher can fit more complex gradients but risks "
+             "overfitting to noise in the reference measurements, especially "
+             "near image corners where reference data is sparse. Default: 2.")
 
-    # ── Sample step parameters ───────────────────────────────
+    # ── Sample step ──────────────────────────────────────────
     parser.add_argument(
         "--sample-margin", type=int, default=None, metavar="N",
-        help="Sample step: set both h and v interior margins for each GB-pixel "
-             "block. Default: auto = max(1, scale//5), which is 1 at scale=8, "
-             "giving a 6×6 interior region.")
+        help="Number of pixels to discard on each side of every GB-pixel block "
+             "before measuring its brightness. Sets both horizontal and vertical "
+             "margins equally; use --sample-margin-h / --sample-margin-v to set "
+             "them independently. The GB LCD has two spatial artifacts that "
+             "contaminate block edges: pixel gaps (thin dark vertical stripes "
+             "between columns of pixels, visible as darker-than-true readings on "
+             "the left and right edges of each block) and pixel bleeding (bright "
+             "pixels bleed light into vertically adjacent darker pixels, pulling "
+             "top and bottom edge readings too bright). Increasing the margin "
+             "excludes more contaminated edge pixels, leaving a cleaner interior "
+             "sample. Decreasing it uses more pixels but includes more artifact. "
+             "Default: auto = max(1, scale // 5), which is 1 at the default "
+             "scale of 8, leaving a 6x6 interior region.")
     parser.add_argument(
         "--sample-margin-h", type=int, default=None, metavar="N",
-        help="Sample step: horizontal-only interior margin (overrides --sample-margin).")
+        help="Horizontal-only interior margin: pixels discarded on the left and "
+             "right sides of each block. Specifically targets pixel gaps between "
+             "LCD columns. Overrides the horizontal component of --sample-margin. "
+             "The two artifacts (gaps and bleeding) can have different severities "
+             "depending on the screen and lighting, so setting h and v "
+             "independently lets you tune for each one. Default: auto (see "
+             "--sample-margin).")
     parser.add_argument(
         "--sample-margin-v", type=int, default=None, metavar="N",
-        help="Sample step: vertical-only interior margin (overrides --sample-margin).")
+        help="Vertical-only interior margin: pixels discarded on the top and "
+             "bottom of each block. Specifically targets pixel bleeding between "
+             "rows. Overrides the vertical component of --sample-margin. "
+             "Default: auto (see --sample-margin).")
     parser.add_argument(
         "--sample-method", default="median", metavar="METHOD",
-        help="Sample step: how to aggregate the interior block pixels into a "
-             "single brightness value. Default: median. "
-             "Choices: median, mean, mode, min, max, pNN (e.g. p25, p75, p90).")
+        help="How to collapse the interior block pixels into a single brightness "
+             "value. Choices: median (default), mean, mode, min, max, or a "
+             "percentile as pNN where NN is 0-100 (e.g. p25, p75, p90). "
+             "median: takes the middle value after sorting, robust to surviving "
+             "edge artifacts without being pulled toward extremes — best for "
+             "most images. "
+             "mean: arithmetic average, uses all pixel information, slightly "
+             "more sensitive to any contamination that survived the margin. "
+             "mode: most common value after rounding to integer, theoretically "
+             "converges on the dominant brightness level but works poorly when "
+             "optical blur spreads values across a continuous range. "
+             "min / max: darkest or brightest interior pixel, useful mainly for "
+             "diagnosis or if the image has a strong systematic bias in one "
+             "direction. "
+             "pNN: Nth percentile — p25 biases toward darker readings (helps "
+             "when bright bleeding dominates), p75 biases toward brighter "
+             "readings (helps when dark gaps dominate), p50 is identical to "
+             "median. Default: median.")
+
+    # ── Quantize step ────────────────────────────────────────
+    parser.add_argument(
+        "--no-kmeans", action="store_true",
+        help="Skip k-means clustering in the quantize step and fall back to "
+             "simpler threshold calibration. Normally k-means clusters the "
+             "128x112 sample values into 4 groups, finds their centres "
+             "(corresponding to the four GB palette colors as they appear after "
+             "correction), and places thresholds at the midpoints. This is "
+             "adaptive and requires no tuning. With --no-kmeans the step instead "
+             "looks for a co-located *_correct.png or *_warp.png file and reads "
+             "actual black and white reference pixels from the frame geometry to "
+             "compute evenly-spaced thresholds; if neither is found it falls "
+             "back to the sample min/max. Use this if scikit-learn is not "
+             "installed, or if k-means is producing poor clusters for a "
+             "particular image.")
 
     # ── Housekeeping ─────────────────────────────────────────
     parser.add_argument(
         "--clean-steps", action="store_true",
-        help="After all images are processed, remove the intermediate step "
-             "files (warp, correct, crop, sample). With --debug they are moved "
-             "into the debug folder instead of deleted. The final output "
-             "(_gbcam.png, or the --end step output) is always kept.")
+        help="After all images have been processed, delete the intermediate "
+             "step files that were created along the way (the *_warp.png, "
+             "*_correct.png, *_crop.png, and *_sample.png files). Only the "
+             "final output — *_gbcam.png, or whatever --end step was specified "
+             "— is kept. If --debug is also given, the intermediate files are "
+             "moved into the debug folder instead of deleted, so they remain "
+             "available for inspection alongside the debug images.")
     parser.add_argument(
         "--debug", action="store_true",
-        help="Save intermediate debug images at every step into "
-             "<output-dir>/debug/. Also enables verbose logging.")
+        help="Enable verbose logging and save diagnostic images at every step "
+             "into <output-dir>/debug/. Each step saves its own set of debug "
+             "images tagged with the step name (e.g. warp_a_corners.png shows "
+             "detected screen corners; correct_b_before_after.png shows the "
+             "camera area before and after brightness correction side by side). "
+             "Useful for diagnosing detection failures, checking that the "
+             "correction surfaces look sensible, and verifying pixel alignment.")
 
     args = parser.parse_args()
 

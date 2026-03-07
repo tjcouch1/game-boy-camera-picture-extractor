@@ -174,20 +174,59 @@ def main():
         description="Sample step: per-pixel brightness sampling",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__)
-    parser.add_argument("inputs", nargs="*", help="Crop-step output files (*_crop.png)")
-    parser.add_argument("--dir", "-d", help="Directory of crop-step outputs")
-    parser.add_argument("--output-dir", "-o", help="Output directory")
-    parser.add_argument("--scale", type=int, default=8)
+    parser.add_argument("inputs", nargs="*",
+                        help="Crop-step output files (*_crop.png) to sample.")
+    parser.add_argument("--dir", "-d", metavar="DIR",
+                        help="Directory of crop-step outputs to glob.")
+    parser.add_argument("--output-dir", "-o", metavar="DIR",
+                        help="Where to write *_sample.png outputs. Default: same "
+                             "directory as each input file.")
+    parser.add_argument("--scale", type=int, default=8, metavar="N",
+                        help="Working resolution multiplier. Must match the value "
+                             "used in all earlier steps. Default: 8.")
     parser.add_argument("--sample-margin", type=int, default=None, metavar="N",
-                        help="Set both h and v interior margins (default: auto = max(1, scale//5))")
+                        help="Pixels to discard on each side of every GB-pixel block "
+                             "before measuring its brightness. Sets both horizontal "
+                             "and vertical margins equally. The GB LCD has two "
+                             "spatial artifacts that contaminate block edges: pixel "
+                             "gaps (dark vertical stripes between LCD columns, "
+                             "visible on left/right block edges) and pixel bleeding "
+                             "(bright pixels bleed vertically into adjacent rows, "
+                             "visible on top/bottom edges). Increasing the margin "
+                             "excludes more contaminated edge pixels at the cost of "
+                             "using a smaller interior sample. Use "
+                             "--sample-margin-h / --sample-margin-v to set "
+                             "independently. Default: auto = max(1, scale // 5), "
+                             "which is 1 at scale=8, leaving a 6x6 interior.")
     parser.add_argument("--sample-margin-h", type=int, default=None, metavar="N",
-                        help="Horizontal-only interior margin (overrides --sample-margin)")
+                        help="Horizontal-only interior margin (pixels skipped on "
+                             "left and right of each block). Targets pixel gaps "
+                             "between LCD columns. Overrides the horizontal component "
+                             "of --sample-margin. Default: auto (see --sample-margin).")
     parser.add_argument("--sample-margin-v", type=int, default=None, metavar="N",
-                        help="Vertical-only interior margin (overrides --sample-margin)")
+                        help="Vertical-only interior margin (pixels skipped on top "
+                             "and bottom of each block). Targets pixel bleeding "
+                             "between rows. Overrides the vertical component of "
+                             "--sample-margin. Default: auto (see --sample-margin).")
     parser.add_argument("--sample-method", default="median", metavar="METHOD",
-                        help="Block aggregation method: median (default), mean, mode, "
-                             "min, max, pNN (e.g. p25, p75)")
-    parser.add_argument("--debug", action="store_true")
+                        help="How to collapse the interior block pixels into a single "
+                             "brightness value. Choices: median (default), mean, mode, "
+                             "min, max, or pNN where NN is 0-100 (e.g. p25, p75, p90). "
+                             "median: middle value after sorting, robust to surviving "
+                             "edge artifacts. "
+                             "mean: arithmetic average, uses all pixels, slightly more "
+                             "sensitive to contamination. "
+                             "mode: most common integer value, works poorly when "
+                             "optical blur spreads values across a continuous range. "
+                             "min / max: darkest or brightest interior pixel, useful "
+                             "for diagnosis or correcting a systematic brightness bias. "
+                             "pNN: p25 biases toward darker readings (helps when "
+                             "bleeding dominates), p75 toward brighter (helps when "
+                             "gaps dominate), p50 equals median. Default: median.")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable verbose logging and save a diagnostic 8x "
+                             "upscaled image (sample_a_8x) so individual GB pixels "
+                             "are visible as blocks. Saved to <output-dir>/debug/.")
     args = parser.parse_args()
 
     set_verbose(args.debug)
