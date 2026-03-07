@@ -91,6 +91,20 @@ See the help information for additional details like usage examples (please note
 python gbcam_extract.py --help
 ```
 
+# To Test
+
+To run a unit test to test the accuracy of the output, gather the following:
+
+- Input image: an input picture of a Game Boy Camera picture [as described above](#taking-pictures-that-work-with-this-script) (e.g. `test-input/zelda-poster-1.jpg`)
+- Reference image: a perfectly digitized 128x112 reproduction of the input Game Boy Camera picture (e.g. `test-input/zelda-poster-output-corrected.png`)
+
+Then run the following:
+
+```bash
+python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
+python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
+```
+
 # Roadmap
 
 - Adjust parameters to find the best settings and make them default

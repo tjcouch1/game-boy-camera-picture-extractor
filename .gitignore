@@ -206,5 +206,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Sample picture output debug files
+# Output debug files
 sample-pictures-out/debug
+test-output/**/debug
