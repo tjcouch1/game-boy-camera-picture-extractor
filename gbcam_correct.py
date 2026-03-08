@@ -7,30 +7,28 @@ gradient across the screen — both horizontally and vertically. The effect is
 affine per pixel: both the black floor and white ceiling shift together, so a
 single global multiplicative correction is wrong.
 
-This step fits a degree-2 bivariate polynomial to observed brightness
-measurements taken from the screen's own built-in reference regions, then
-inverts the model pixel-by-pixel.
-
 REFERENCE REGIONS USED
   White reference (true value = 255):
     All four filmstrip frame strips — top (GB rows 0–14), bottom (GB rows
     129–143), left (GB cols 0–14), right (GB cols 145–159).  For each GB-pixel
     block the 85th-percentile brightness is used; blocks below 75% of the
     median are dropped (excludes dashes and corner artifacts).
+    A degree-2 bivariate polynomial is fit to these scattered samples.
 
   Dark reference (true value = 82 = #525252):
-    All four inner border bands — left side (GB col 15), right side (GB
-    col 144), top (GB row 15), bottom (GB row 128).  Each band is 1 GB pixel
-    wide and runs the full length of the corresponding camera edge, giving
-    dense sampling along all four sides of the camera area.
+    All four inner border bands — left (GB col 15), right (GB col 144),
+    top (GB row 15), bottom (GB row 128).  These form a complete rectangle
+    around the camera area, giving one per-row profile on the left and right
+    and one per-column profile on the top and bottom.
+    A Coons bilinear patch is built from these four smoothed boundary curves.
+    This exactly reproduces the measured border values and smoothly blends
+    across the interior — far more accurate than a polynomial fit for this
+    closed-boundary data.
 
 CORRECTION MODEL
-  A degree-2 bivariate polynomial is fit independently to the white and dark
-  reference points using least-squares.  Coordinates are normalised to [-1, 1]
-  for numerical stability.  This produces two smooth surfaces:
-
-      white_surface(y, x)  — observed brightness of a true-white pixel
-      dark_surface(y, x)   — observed brightness of a true-#525252 pixel
+  Two surfaces are computed:
+      white_surface(y, x)  — observed brightness of a true-white pixel (poly)
+      dark_surface(y, x)   — observed brightness of a true-#525252 pixel (Coons)
 
   The affine inverse is applied at every pixel:
       gain   = (white_surface − dark_surface) / (255 − 82)
@@ -45,10 +43,12 @@ Standalone usage:
   python gbcam_correct.py --dir ./warp_outputs [options]
 
 Options:
-  --output-dir DIR    Output directory (default: same dir as input)
-  --scale N           Pixels per GB pixel — must match warp step (default: 8)
-  --poly-degree N     Degree of the bivariate polynomial fit (default: 2)
-  --debug             Save correction-map and comparison debug images
+  --output-dir DIR       Output directory (default: same dir as input)
+  --scale N              Pixels per GB pixel — must match warp step (default: 8)
+  --poly-degree N        Degree of the polynomial fit for the white surface (default: 2)
+  --dark-smooth N        Smoothing window (in GB pixels) applied to each inner
+                         border curve before building the Coons dark surface (default: 13)
+  --debug                Save correction-map and comparison debug images
 """
 
 import cv2
@@ -57,6 +57,7 @@ import argparse
 import sys
 import traceback
 from pathlib import Path
+from scipy.ndimage import uniform_filter1d
 
 from gbcam_common import (
     SCREEN_W, SCREEN_H, FRAME_THICK, CAM_W, CAM_H,
@@ -142,44 +143,106 @@ def collect_white_samples(gray, scale):
 
 def collect_dark_samples(gray, scale):
     """
-    Collect (y_px, x_px, brightness) dark (#525252) reference samples from
-    all four inner border bands.
+    Collect per-row and per-column dark (#525252) reference profiles from the
+    four inner border bands.
 
-    Left / right borders span the full height of the camera area.
-    Top / bottom borders span the full width of the camera area.
+    Returns four arrays (left, right, top, bot) each containing the median
+    brightness of each GB-pixel block along that border:
+      left  — shape (CAM_H+1,)  rows INNER_TOP..INNER_BOT at col INNER_LEFT
+      right — shape (CAM_H+1,)  rows INNER_TOP..INNER_BOT at col INNER_RIGHT
+      top   — shape (CAM_W+1,)  cols INNER_LEFT..INNER_RIGHT at row INNER_TOP
+      bot   — shape (CAM_W+1,)  cols INNER_LEFT..INNER_RIGHT at row INNER_BOT
     """
-    raw = []
+    def _strip(gy_range, gx_val):
+        return np.array([_gb_block_sample(gray, gy, gx_val, scale, 50)
+                         for gy in gy_range], dtype=float)
 
-    # Left border: GB col INNER_LEFT
-    for gy in range(FRAME_THICK, FRAME_THICK + CAM_H):
-        v = _gb_block_sample(gray, gy, INNER_LEFT, scale, 50)
-        raw.append((gy * scale + scale // 2,
-                     INNER_LEFT * scale + scale // 2, v))
+    def _row(gy_val, gx_range):
+        return np.array([_gb_block_sample(gray, gy_val, gx, scale, 50)
+                         for gx in gx_range], dtype=float)
 
-    # Right border: GB col INNER_RIGHT
-    for gy in range(FRAME_THICK, FRAME_THICK + CAM_H):
-        v = _gb_block_sample(gray, gy, INNER_RIGHT, scale, 50)
-        raw.append((gy * scale + scale // 2,
-                     INNER_RIGHT * scale + scale // 2, v))
+    gy_range = range(INNER_TOP, INNER_BOT + 1)
+    gx_range = range(INNER_LEFT, INNER_RIGHT + 1)
 
-    # Top inner border: GB row INNER_TOP
-    for gx in range(FRAME_THICK, FRAME_THICK + CAM_W):
-        v = _gb_block_sample(gray, INNER_TOP, gx, scale, 50)
-        raw.append((INNER_TOP * scale + scale // 2,
-                     gx * scale + scale // 2, v))
+    left  = _strip(gy_range, INNER_LEFT)
+    right = _strip(gy_range, INNER_RIGHT)
+    top   = _row(INNER_TOP, gx_range)
+    bot   = _row(INNER_BOT, gx_range)
 
-    # Bottom inner border: GB row INNER_BOT
-    for gx in range(FRAME_THICK, FRAME_THICK + CAM_W):
-        v = _gb_block_sample(gray, INNER_BOT, gx, scale, 50)
-        raw.append((INNER_BOT * scale + scale // 2,
-                     gx * scale + scale // 2, v))
+    n_left, n_top = len(left), len(top)
+    log(f"  Dark  samples: {n_left}×2 + {n_top}×2 border pixels  "
+        f"(left range {left.min():.1f}–{left.max():.1f}, "
+        f"right {right.min():.1f}–{right.max():.1f})")
+    return left, right, top, bot
 
-    ys = [p[0] for p in raw]
-    xs = [p[1] for p in raw]
-    vs = [p[2] for p in raw]
-    log(f"  Dark  samples: {len(raw)} blocks  "
-        f"(range {min(vs):.1f}–{max(vs):.1f})")
-    return ys, xs, vs
+
+def build_dark_surface(left, right, top, bot, H, W, scale, smooth_k=13):
+    """
+    Build a full (H, W) dark-reference surface using a Coons bilinear patch.
+
+    The four input arrays (left, right, top, bot) are the raw per-pixel border
+    measurements.  Each is smoothed with a uniform filter of width smooth_k
+    to reduce noise before interpolation.
+
+    The Coons patch exactly reproduces the smoothed boundary values along all
+    four edges of the camera rectangle and blends them bilinearly across the
+    interior.  This is far more accurate than a polynomial fit for this
+    closed-boundary problem because the polynomial tends to extrapolate badly
+    outside the measured region and cannot capture independent variation on
+    each of the four sides.
+
+    y_rows / x_cols are the image-pixel centre coordinates of each border
+    sample point.
+    """
+    # Smooth each border curve independently
+    def sm(arr):
+        return uniform_filter1d(arr, size=smooth_k, mode='nearest')
+
+    ld = sm(left);  rd = sm(right)
+    td = sm(top);   bd = sm(bot)
+
+    # Image-pixel centre positions of each border sample
+    gy_range = range(INNER_TOP, INNER_BOT + 1)
+    gx_range = range(INNER_LEFT, INNER_RIGHT + 1)
+    y_rows = np.array([gy * scale + scale // 2 for gy in gy_range], dtype=float)
+    x_cols = np.array([gx * scale + scale // 2 for gx in gx_range], dtype=float)
+
+    y_start, y_end = float(y_rows[0]), float(y_rows[-1])
+    x_start, x_end = float(x_cols[0]), float(x_cols[-1])
+
+    # Build full-image coordinate grids
+    y_px = np.arange(H, dtype=float)
+    x_px = np.arange(W, dtype=float)
+
+    # Interpolate each border curve onto the full pixel axis
+    L = np.interp(y_px, y_rows, ld)   # (H,) — left boundary value at each row
+    R = np.interp(y_px, y_rows, rd)   # (H,)
+    T = np.interp(x_px, x_cols, td)   # (W,) — top boundary value at each col
+    B = np.interp(x_px, x_cols, bd)   # (W,)
+
+    # Normalised [0,1] coordinates for the blending weights
+    yn = np.clip((y_px - y_start) / (y_end - y_start), 0.0, 1.0)   # (H,)
+    xn = np.clip((x_px - x_start) / (x_end - x_start), 0.0, 1.0)   # (W,)
+    YN, XN = np.meshgrid(yn, xn, indexing='ij')   # (H, W)
+
+    # Corner values (average of the two meeting boundary curves)
+    TL = (float(ld[0]) + float(td[0])) / 2
+    TR = (float(rd[0]) + float(td[-1])) / 2
+    BL = (float(ld[-1]) + float(bd[0])) / 2
+    BR = (float(rd[-1]) + float(bd[-1])) / 2
+
+    # Coons bilinear patch:
+    #   horizontal blend of left/right  +  vertical blend of top/bottom
+    #   minus bilinear blend of the four corners  (avoids double-counting)
+    surface = (
+        (1 - XN) * L[:, None] + XN * R[:, None]
+        + (1 - YN) * T[None, :] + YN * B[None, :]
+        - (1 - XN) * (1 - YN) * TL
+        - XN       * (1 - YN) * TR
+        - (1 - XN) * YN       * BL
+        - XN       * YN       * BR
+    )
+    return surface.astype(np.float32)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -228,7 +291,7 @@ def fit_surface(ys, xs, vals, H, W, degree=2):
 # ─────────────────────────────────────────────────────────────
 
 def process_file(input_path, output_path, scale=8, poly_degree=2,
-                 debug=False, debug_dir=None):
+                 dark_smooth=13, debug=False, debug_dir=None):
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
     log(f"[correct] {input_path}", always=True)
@@ -246,13 +309,13 @@ def process_file(input_path, output_path, scale=8, poly_degree=2,
     H, W = gray.shape
     log(f"  Loaded {W}×{H} px (scale={scale})")
 
-    log(f"  Collecting reference samples (poly degree={poly_degree})…")
-    wy, wx, wv = collect_white_samples(gray, scale)
-    dy, dx, dv = collect_dark_samples(gray, scale)
+    log(f"  Collecting reference samples (white poly degree={poly_degree}, dark smooth_k={dark_smooth})…")
+    wy, wx, wv             = collect_white_samples(gray, scale)
+    left, right, top, bot  = collect_dark_samples(gray, scale)
 
-    log("  Fitting 2-D brightness surfaces…")
+    log("  Fitting brightness surfaces…")
     white_surf = fit_surface(wy, wx, wv, H, W, poly_degree)
-    dark_surf  = fit_surface(dy, dx, dv, H, W, poly_degree)
+    dark_surf  = build_dark_surface(left, right, top, bot, H, W, scale, dark_smooth)
 
     # Log corner values of each surface for sanity
     corners = [(0, 0), (0, W-1), (H-1, 0), (H-1, W-1)]
@@ -339,22 +402,21 @@ def main():
                              "used in the warp step. Default: 8.")
     parser.add_argument("--poly-degree", type=int, default=2, metavar="N",
                         help="Degree of the bivariate polynomial fitted to the "
-                             "brightness reference measurements. Controls how complex "
-                             "the fitted front-light gradient surface can be. Degree 1 "
-                             "fits a flat affine plane (linear in both x and y). "
-                             "Degree 2 (default) adds curvature, which handles the "
-                             "typical GBA SP front-light falloff more accurately. "
-                             "Degree 3 or higher can fit more complex gradients but "
-                             "risks overfitting to noise, especially near corners "
-                             "where reference data is sparse. Default: 2.")
+                             "white brightness reference measurements. Controls how "
+                             "complex the fitted front-light gradient surface can be. "
+                             "Degree 1 fits a flat affine plane. Degree 2 (default) "
+                             "adds curvature. Default: 2.")
+    parser.add_argument("--dark-smooth", type=int, default=13, metavar="N",
+                        help="Smoothing window size (in GB pixels) applied to each "
+                             "of the four inner border curves before building the Coons "
+                             "dark reference surface. A larger value averages out more "
+                             "noise in the border measurement at the cost of less "
+                             "spatial detail. Must be an odd integer ≥ 1. Default: 13.")
     parser.add_argument("--debug", action="store_true",
                         help="Enable verbose logging and save diagnostic images: "
-                             "correct_a_gain_map (the per-pixel gain surface, brighter "
-                             "= more correction needed), correct_b_before_after "
-                             "(camera area side-by-side before and after correction), "
-                             "correct_c_white_surface and correct_d_dark_surface "
-                             "(the fitted reference surfaces), correct_e_full (the "
-                             "complete corrected image). All saved to <output-dir>/debug/.")
+                             "correct_a_gain_map, correct_b_before_after, "
+                             "correct_c_white_surface, correct_d_dark_surface, "
+                             "correct_e_full. All saved to <output-dir>/debug/.")
     args = parser.parse_args()
 
     set_verbose(args.debug)
@@ -366,7 +428,7 @@ def main():
     for f in files:
         out = make_output_path(f, args.output_dir, SUFFIX)
         try:
-            process_file(f, out, args.scale, args.poly_degree, args.debug, debug_dir)
+            process_file(f, out, args.scale, args.poly_degree, args.dark_smooth, args.debug, debug_dir)
         except Exception as e:
             print(f"ERROR — {f}: {e}", file=sys.stderr)
             if args.debug: traceback.print_exc()

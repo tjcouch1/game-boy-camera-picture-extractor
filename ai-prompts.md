@@ -309,6 +309,10 @@ For some examples of what steps along the way might look like, attached are some
 
 The transformed `20260216_130838~2.jpg` is still not quite correct. Attached is `20260216_130838~2_gbcam-corrected.png`, a hand-corrected perfect transformation of `20260216_130838~2.jpg`. Write a unit test that performs the transformation on `20260216_130838~2.jpg` and checks it against `20260216_130838~2_gbcam-corrected.png`. There should be lots of helpful output data on what is not correct such as a full list of which pixels are not correct, which color they are, and which color they should be. Make sure running the test provides as much debug and output info as possible in order to have all the information you need to correct the problem. Do not correct the problem yet, though; just write the test and tell me how to run it.
 
+## Run and iterate on unit test
+
+I attached input file `zelda-poster-1.jpg` and reference file `zelda-poster-output-corrected.png`. Run the test on those. Then, analyze the output, consider which steps are contributing to the issues, adjust the code accordingly, and run the test again. Keep running and correcting until you get the output 100% correct.
+
 # Prompt Plan -> Act Frame 02 Grayscale Cropped Refined
 
 ```

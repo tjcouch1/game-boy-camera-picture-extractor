@@ -216,7 +216,7 @@ def _collect_for_start(inputs_list, directory, start_step):
 def run_pipeline(input_files, output_dir,
                  start_step="warp", end_step="quantize",
                  scale=8, thresh_val=180,
-                 poly_degree=2,
+                 poly_degree=2, dark_smooth=13,
                  sample_margin_h=None, sample_margin_v=None, sample_method="median",
                  use_kmeans=True,
                  clean_steps=False,
@@ -263,6 +263,7 @@ def run_pipeline(input_files, output_dir,
                     step_correct.process_file(
                         in_path, out_path,
                         scale=scale, poly_degree=poly_degree,
+                        dark_smooth=dark_smooth,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "crop":
@@ -409,6 +410,12 @@ def main():
 
     # ── Sample step ──────────────────────────────────────────
     parser.add_argument(
+        "--dark-smooth", type=int, default=13, metavar="N",
+        help="Smoothing window size (in GB pixels) applied to each of the four "
+             "inner border curves before building the Coons bilinear dark reference "
+             "surface. A larger value reduces noise at the cost of less spatial "
+             "detail along the border. Must be an odd integer ≥ 1. Default: 13.")
+    parser.add_argument(
         "--sample-margin", type=int, default=None, metavar="N",
         help="Number of pixels to discard on each side of every GB-pixel block "
              "before measuring its brightness. Sets both horizontal and vertical "
@@ -537,6 +544,7 @@ def main():
         scale           = args.scale,
         thresh_val      = args.threshold,
         poly_degree     = args.poly_degree,
+        dark_smooth     = args.dark_smooth,
         sample_margin_h = hm,
         sample_margin_v = vm,
         sample_method   = args.sample_method,

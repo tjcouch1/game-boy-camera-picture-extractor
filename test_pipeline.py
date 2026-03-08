@@ -48,6 +48,7 @@ COLOR_NAMES = {0: "black (#000000)", 82: "dark-gray (#525252)",
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
+                 dark_smooth=13,
                  sample_margin_h=None, sample_margin_v=None, sample_method="median",
                  use_kmeans=True, debug=True):
     """Run the full pipeline and return the path to the _gbcam.png output."""
@@ -74,7 +75,7 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
     print(f"PIPELINE RUN")
     print(f"  Input:      {input_path}")
     print(f"  Output dir: {output_dir}")
-    print(f"  scale={scale}  threshold={thresh_val}  poly_degree={poly_degree}")
+    print(f"  scale={scale}  threshold={thresh_val}  poly_degree={poly_degree}  dark_smooth={dark_smooth}")
     print(f"  sample_margin_h={sample_margin_h}  sample_margin_v={sample_margin_v}")
     print(f"  sample_method={sample_method}  kmeans={use_kmeans}")
     print(f"{'='*70}\n")
@@ -84,6 +85,7 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
                            debug=debug, debug_dir=dbg)
     step_correct.process_file(p("_warp"), p("_correct"),
                               scale=scale, poly_degree=poly_degree,
+                              dark_smooth=dark_smooth,
                               debug=debug, debug_dir=dbg)
     step_crop.process_file(p("_correct"), p("_crop"),
                            scale=scale, debug=debug, debug_dir=dbg)
@@ -102,6 +104,15 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
 # Comparison and diagnostics
 # ─────────────────────────────────────────────────────────────────────────────
 
+def quantize_to_palette(img):
+    """Snap every pixel to the nearest GB palette value."""
+    gb = np.array(GB_COLORS, dtype=np.int32)
+    flat = img.ravel().astype(np.int32)
+    dists = np.abs(flat[:, None] - gb[None, :])   # (N, 4)
+    nearest_idx = np.argmin(dists, axis=1)
+    return gb[nearest_idx].astype(np.uint8).reshape(img.shape)
+
+
 def load_and_validate(path, label):
     img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
@@ -114,7 +125,12 @@ def load_and_validate(path, label):
     unique = sorted(np.unique(img).tolist())
     bad    = [v for v in unique if v not in GB_COLORS]
     if bad:
-        print(f"WARNING: {label} image contains non-palette values: {bad}")
+        max_dist = max(min(abs(int(v) - g) for g in GB_COLORS) for v in bad)
+        print(f"  [{label}] Non-palette values detected (max dist to palette: {max_dist}). "
+              f"Auto-snapping to nearest GB color.")
+        img = quantize_to_palette(img)
+        unique_after = sorted(np.unique(img).tolist())
+        print(f"  [{label}] After snap: {unique_after}")
     return img
 
 
@@ -349,6 +365,7 @@ def main():
     parser.add_argument("--scale",          type=int,   default=8)
     parser.add_argument("--threshold",      type=int,   default=180)
     parser.add_argument("--poly-degree",    type=int,   default=2)
+    parser.add_argument("--dark-smooth",    type=int,   default=13)
     parser.add_argument("--sample-margin",  type=int,   default=None)
     parser.add_argument("--sample-margin-h",type=int,   default=None)
     parser.add_argument("--sample-margin-v",type=int,   default=None)
@@ -386,6 +403,7 @@ def main():
             scale           = args.scale,
             thresh_val      = args.threshold,
             poly_degree     = args.poly_degree,
+            dark_smooth     = args.dark_smooth,
             sample_margin_h = hm,
             sample_margin_v = vm,
             sample_method   = args.sample_method,
