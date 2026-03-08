@@ -209,3 +209,6 @@ __marimo__/
 # Output debug files
 sample-pictures-out/debug
 test-output/**/debug
+
+# Keep the output log file
+!test-output/**/*.log

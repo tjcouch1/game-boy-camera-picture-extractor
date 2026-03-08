@@ -216,7 +216,7 @@ def _collect_for_start(inputs_list, directory, start_step):
 def run_pipeline(input_files, output_dir,
                  start_step="warp", end_step="quantize",
                  scale=8, thresh_val=180,
-                 poly_degree=2, dark_smooth=13,
+                 poly_degree=2, dark_smooth=13, refine_passes=1,
                  sample_margin_h=None, sample_margin_v=None, sample_method="median",
                  use_kmeans=True,
                  clean_steps=False,
@@ -264,6 +264,7 @@ def run_pipeline(input_files, output_dir,
                         in_path, out_path,
                         scale=scale, poly_degree=poly_degree,
                         dark_smooth=dark_smooth,
+                        refine_passes=refine_passes,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "crop":
@@ -416,6 +417,12 @@ def main():
              "surface. A larger value reduces noise at the cost of less spatial "
              "detail along the border. Must be an odd integer ≥ 1. Default: 13.")
     parser.add_argument(
+        "--refine-passes", type=int, default=1, metavar="N",
+        help="Number of interior-calibration refinement passes in the correct step. "
+             "After the initial Coons patch, each pass samples the corrected image, "
+             "collects confident dark-gray interior pixels as additional calibration, "
+             "and re-fits a degree-4 polynomial dark surface. Default: 1.")
+    parser.add_argument(
         "--sample-margin", type=int, default=None, metavar="N",
         help="Number of pixels to discard on each side of every GB-pixel block "
              "before measuring its brightness. Sets both horizontal and vertical "
@@ -545,6 +552,7 @@ def main():
         thresh_val      = args.threshold,
         poly_degree     = args.poly_degree,
         dark_smooth     = args.dark_smooth,
+        refine_passes   = args.refine_passes,
         sample_margin_h = hm,
         sample_margin_v = vm,
         sample_method   = args.sample_method,

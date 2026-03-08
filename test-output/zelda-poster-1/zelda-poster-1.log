@@ -1,0 +1,174 @@
+
+======================================================================
+PIPELINE RUN
+  Input:      test-input/zelda-poster-1.jpg
+  Output dir: ./test-output/zelda-poster-1
+  scale=8  threshold=180  poly_degree=2  dark_smooth=13
+  sample_margin_h=None  sample_margin_v=None
+  sample_method=median  kmeans=True
+======================================================================
+
+
+============================================================
+[warp] test-input/zelda-poster-1.jpg
+  Loaded 1489×1305 px
+  a — Detecting screen corners
+  Contour: area=1699088  bbox=(50,28,1392×1240)  aspect=1.123 (expected≈1.111)
+  Corners (TL TR BR BL): [[67, 28], [1424, 30], [1441, 1263], [58, 1265]]
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_a_corners.png
+  b — Initial perspective warp
+  Initial warp → 1280×1152  (scale=8)
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_b_initial_color.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_c_initial_gray.png
+  c — Refining alignment from inner border
+  Border edges: top=119(exp=120,err=-1), bot=1026(exp=1024,err=2), left=117(exp=120,err=-3), right=1154(exp=1152,err=2)
+  After refinement: top=120(exp=120), bot=1024(exp=1024), left=120(exp=120), right=1152(exp=1152)
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_d_refined_color.png
+  Saved → test-output\zelda-poster-1\zelda-poster-1_warp.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_e_final_gray.png
+
+============================================================
+[correct] test-output\zelda-poster-1\zelda-poster-1_warp.png
+  Loaded 1280×1152 px (scale=8)
+  Collecting reference samples (white poly degree=2, dark smooth_k=13)…
+  White samples: 7437/7920 blocks kept  (median 213.6, range 160.2–254.0)
+  Dark  samples: 114×2 + 130×2 border pixels  (left range 109.0–165.0, right 122.0–158.0)
+  Fitting brightness surfaces…
+    (   0,   0): white=196.4  dark=115.1
+    (   0,1279): white=184.1  dark=130.8
+    (1151,   0): white=243.6  dark=161.2
+    (1151,1279): white=199.5  dark=150.3
+  Applying per-pixel affine correction (pass 1 — Coons patch dark surface)…
+  Dark  samples: 114×2 + 130×2 border pixels  (left range 109.0–165.0, right 122.0–158.0)
+  Refinement pass 1: 3179 interior dark-gray calibration pixels…
+    Dark surface refined — corner delta: (0,0): +29.4, (0,1279): +43.6, (1151,0): -18.3, (1151,1279): +33.6
+  Inner border (#525252 ref, target=82): before mean=141.0 (err=59.0), after mean=91.0 (err=9.0) (improved)
+  Saved → test-output\zelda-poster-1\zelda-poster-1_correct.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_a_gain_map.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_b_before_after.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_c_white_surface.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_d_dark_surface.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_e_full.png
+
+============================================================
+[crop] test-output\zelda-poster-1\zelda-poster-1_correct.png
+  Loaded 1280×1152 px (scale=8)
+  Camera region: (128,128) → (1152,1024)  = 1024×896 px  (128×112 GB pixels)
+  Validation: inner border mean=90.9, white frame mean=234.9 (OK)
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_correct__crop_a_region.png
+  Saved → test-output\zelda-poster-1\zelda-poster-1_crop.png  (1024×896 px)
+
+============================================================
+[sample] test-output\zelda-poster-1\zelda-poster-1_crop.png
+  Loaded 1024×896 px  (128×112 GB pixels at scale=8)
+  Block 8×8  margins h=2 v=1  sample region 4×6  method=median
+  Stats: min=0.0  max=255.0  mean=152.8
+  Saved → test-output\zelda-poster-1\zelda-poster-1_sample.png  (128×112 px)
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_crop__sample_a_8x.png
+
+============================================================
+[quantize] test-output\zelda-poster-1\zelda-poster-1_sample.png
+  Loaded 128×112 px — range 0–255
+  K-means centres: ['3.9', '73.2', '158.0', '251.7']
+  Cluster gaps:    ['69.3', '84.8', '93.6']
+  K-means thresholds: ['38.6', '115.6', '204.8']
+  Color   0:  1568 px  ( 10.9%)
+  Color  82:  3529 px  ( 24.6%)
+  Color 165:  4256 px  ( 29.7%)
+  Color 255:  4983 px  ( 34.8%)
+  Saved → test-output\zelda-poster-1\zelda-poster-1_gbcam.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_a_8x.png
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14328  (99.94%)
+  Different    : 8   (0.06%)
+
+──────────────────────────────────────────────────────────────────────
+COLOR DISTRIBUTION
+──────────────────────────────────────────────────────────────────────
+  Color                               Result   Reference      Diff
+  black (#000000)                       1568        1573        -5
+  dark-gray (#525252)                   3529        3525        +4
+  light-gray (#A5A5A5)                  4256        4255        +1
+  white (#FFFFFF)                       4983        4983        +0
+
+──────────────────────────────────────────────────────────────────────
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+──────────────────────────────────────────────────────────────────────
+  Result \ Ref               0        82       165       255   TOTAL
+  black (#000000)        1567 ✓        1 ✗        0          0      1568
+  dark-gray (#525252)        6 ✗     3523 ✓        0          0      3529
+  light-gray (#A5A5A5)        0          1 ✗     4255 ✓        0      4256
+  white (#FFFFFF)           0          0          0       4983 ✓    4983
+                           1573       3525       4255       4983
+
+──────────────────────────────────────────────────────────────────────
+SPATIAL DISTRIBUTION OF ERRORS  (8 pixels)
+──────────────────────────────────────────────────────────────────────
+  Row range  : 20–94  (top=0, bottom=111)
+  Col range  : 12–112  (left=0, right=127)
+  top (rows 0-55) / left (cols 0-63): 1 errors
+  top (rows 0-55) / right (cols 64-127): 1 errors
+  bottom (rows 56-111) / left (cols 0-63): 3 errors
+  bottom (rows 56-111) / right (cols 64-127): 3 errors
+
+  Errors per row (GB rows 0–111):
+    row  20:    1  █
+    row  54:    1  █
+    row  67:    1  █
+    row  71:    1  █
+    row  82:    1  █
+    row  87:    1  █
+    row  89:    1  █
+    row  94:    1  █
+
+  Errors per column (GB cols 0–127):
+    col  12:    1  █
+    col  14:    1  █
+    col  51:    1  █
+    col  63:    1  █
+    col  69:    1  █
+    col  76:    1  █
+    col 101:    1  █
+    col 112:    1  █
+
+──────────────────────────────────────────────────────────────────────
+FULL PIXEL ERROR LIST  (8 pixels, sorted by row then col)
+──────────────────────────────────────────────────────────────────────
+   Row   Col                  Pipeline                 Reference  Error type
+    20    63       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    54    69       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    67    51      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    71    76       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    82   112           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+    87    12       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    89    14       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    94   101       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+
+──────────────────────────────────────────────────────────────────────
+DIAGNOSTIC IMAGES  (saved to test-output\zelda-poster-1/)
+──────────────────────────────────────────────────────────────────────
+  zelda-poster-1_diag_result_vs_reference.png   — pipeline result (left) vs reference (right)
+  zelda-poster-1_diag_error_map.png             — white=correct; blue=too-dark; red/orange=too-light
+  zelda-poster-1_diag_abs_diff.png              — absolute brightness difference (scaled)
+  zelda-poster-1_diag_level_diff.png            — level difference: mid-gray=correct, darker=result too dark, lighter=result too light
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14328  (99.94%)
+  Different    : 8   (0.06%)
+  Color                               Result   Reference      Diff
+  black (#000000)                       1568        1573        -5
+  dark-gray (#525252)                   3529        3525        +4
+  light-gray (#A5A5A5)                  4256        4255        +1
+  white (#FFFFFF)                       4983        4983        +0
+
+======================================================================
+RESULT: FAIL — see diagnostics above and in the output directory.
+======================================================================
+

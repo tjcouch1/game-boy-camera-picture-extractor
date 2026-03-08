@@ -313,6 +313,12 @@ The transformed `20260216_130838~2.jpg` is still not quite correct. Attached is 
 
 I attached input file `zelda-poster-1.jpg` and reference file `zelda-poster-output-corrected.png`. Run the test on those. Then, analyze the output, consider which steps are contributing to the issues, adjust the code accordingly, and run the test again. Keep running and correcting until you get the output 100% correct.
 
+## Iterate further
+
+Adjust the default auto calculation for the sample margin so it resolves to h=2. When you find a value that works better than default, adjust that to be the new default.
+
+Keep running the test and see what additional adjustments you can make to get higher percent correct. Don't stop until 99.9%
+
 # Prompt Plan -> Act Frame 02 Grayscale Cropped Refined
 
 ```

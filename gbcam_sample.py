@@ -22,8 +22,8 @@ SAMPLING METHODS
   p10, p25, p75, p90, pNN — Nth percentile
 
 MARGIN DEFAULTS
-  At scale=8: h_margin=1, v_margin=1, giving a 6×6 sample interior.
-  The auto formula is max(1, scale // 5); use --sample-margin to override.
+  At scale=8: h_margin=2, v_margin=1, giving a 4×6 sample interior.
+  Auto: h=max(2, scale//4), v=max(1, scale//5). Use --sample-margin to override.
 
 Input:  <stem>_crop.png   — from the crop step  ((128*scale)×(112*scale) px)
 Output: <stem>_sample.png — 128×112 grayscale PNG (raw brightness, 0–255)
@@ -35,7 +35,7 @@ Standalone usage:
 Options:
   --output-dir DIR        Output directory (default: same dir as input)
   --scale N               Pixels per GB pixel (default: 8)
-  --sample-margin N       Set both h and v interior margins (default: auto = max(1, scale//5))
+  --sample-margin N       Set both h and v interior margins (default: auto h=max(2,scale//4), v=max(1,scale//5))
   --sample-margin-h N     Horizontal-only interior margin (overrides --sample-margin)
   --sample-margin-v N     Vertical-only interior margin (overrides --sample-margin)
   --sample-method METHOD  Aggregation method for interior block (default: median)
@@ -98,10 +98,10 @@ def process_file(input_path, output_path, scale=8,
     ----------
     h_margin : int or None
         Pixels to skip on each horizontal (left/right) side of each block.
-        None → use auto formula max(1, scale // 5).
+        None → use auto formula: h=max(2,scale//4), v=max(1,scale//5).
     v_margin : int or None
         Pixels to skip on each vertical (top/bottom) side.
-        None → use auto formula max(1, scale // 5).
+        None → use auto formula: h=max(2,scale//4), v=max(1,scale//5).
     method : str
         Aggregation method name (see module docstring).
     """
@@ -123,9 +123,12 @@ def process_file(input_path, output_path, scale=8,
         f"({CAM_W}×{CAM_H} GB pixels at scale={scale})")
 
     # Resolve margins
-    auto = max(1, scale // 5)
-    hm = h_margin if h_margin is not None else auto
-    vm = v_margin if v_margin is not None else auto
+    # Auto horizontal margin = 2 (excludes inter-column pixel gaps more aggressively)
+    # Auto vertical margin = max(1, scale // 5) (excludes pixel bleeding between rows)
+    auto_h = max(2, scale // 4)
+    auto_v = max(1, scale // 5)
+    hm = h_margin if h_margin is not None else auto_h
+    vm = v_margin if v_margin is not None else auto_v
 
     # Validate: margins must leave at least 1 pixel
     max_hm = (scale - 1) // 2
