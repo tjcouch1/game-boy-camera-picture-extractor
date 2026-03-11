@@ -319,6 +319,10 @@ Adjust the default auto calculation for the sample margin so it resolves to h=2.
 
 Keep running the test and see what additional adjustments you can make to get higher percent correct. Don't stop until 99.9%
 
+## Iterate with corrected reference image and two poster images
+
+The latest results helped me to find an error in the reference image. This is now corrected. I attached it again as `zelda-poster-output-corrected-2.png`. Also attached are `zelda-poster-1.jpg` and `zelda-poster-2.jpg`. They are both pictures of the same Game Boy Camera picture. Test both of them against the reference image `zelda-poster-output-corrected-2.png` and get them both above 99.95% accurate. Try for 100%.
+
 # Prompt Plan -> Act Frame 02 Grayscale Cropped Refined
 
 ```

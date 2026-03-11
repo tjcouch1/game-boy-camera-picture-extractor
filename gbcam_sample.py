@@ -14,7 +14,7 @@ h_margin pixels on each horizontal edge and v_margin pixels on each vertical
 edge.  A statistical aggregate of the remaining interior pixels is taken.
 
 SAMPLING METHODS
-  median  — median value (default; robust to gaps and bleeding)
+  mean    — arithmetic mean (default; reduces bias at tone boundaries)
   mean    — arithmetic mean
   mode    — most common value (rounded to nearest integer)
   min     — minimum (darkest interior pixel)
@@ -38,7 +38,7 @@ Options:
   --sample-margin N       Set both h and v interior margins (default: auto h=max(2,scale//4), v=max(1,scale//5))
   --sample-margin-h N     Horizontal-only interior margin (overrides --sample-margin)
   --sample-margin-v N     Vertical-only interior margin (overrides --sample-margin)
-  --sample-method METHOD  Aggregation method for interior block (default: median)
+  --sample-method METHOD  Aggregation method for interior block (default: mean)
                           Choices: median, mean, mode, min, max, p10, p25, p75, p90, pNN
   --debug                 Save 8× upscaled debug image
 """
@@ -89,7 +89,7 @@ def _parse_method(method_str):
 
 
 def process_file(input_path, output_path, scale=8,
-                 h_margin=None, v_margin=None, method="median",
+                 h_margin=None, v_margin=None, method="mean",
                  debug=False, debug_dir=None):
     """
     Sample one brightness value per GB pixel from a crop-step output.
@@ -211,21 +211,21 @@ def main():
                              "and bottom of each block). Targets pixel bleeding "
                              "between rows. Overrides the vertical component of "
                              "--sample-margin. Default: auto (see --sample-margin).")
-    parser.add_argument("--sample-method", default="median", metavar="METHOD",
+    parser.add_argument("--sample-method", default="mean", metavar="METHOD",
                         help="How to collapse the interior block pixels into a single "
-                             "brightness value. Choices: median (default), mean, mode, "
+                             "brightness value. Choices: mean (default), median, mode, "
                              "min, max, or pNN where NN is 0-100 (e.g. p25, p75, p90). "
+                             "mean: arithmetic average, uses all pixels, reduces bias at "
+                             "tone boundaries (default). "
                              "median: middle value after sorting, robust to surviving "
-                             "edge artifacts. "
-                             "mean: arithmetic average, uses all pixels, slightly more "
-                             "sensitive to contamination. "
+                             "edge artifacts but can introduce slight boundary bias. "
                              "mode: most common integer value, works poorly when "
                              "optical blur spreads values across a continuous range. "
                              "min / max: darkest or brightest interior pixel, useful "
                              "for diagnosis or correcting a systematic brightness bias. "
                              "pNN: p25 biases toward darker readings (helps when "
                              "bleeding dominates), p75 toward brighter (helps when "
-                             "gaps dominate), p50 equals median. Default: median.")
+                             "gaps dominate), p50 equals median.")
     parser.add_argument("--debug", action="store_true",
                         help="Enable verbose logging and save a diagnostic 8x "
                              "upscaled image (sample_a_8x) so individual GB pixels "

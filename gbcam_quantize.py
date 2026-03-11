@@ -61,6 +61,25 @@ from gbcam_common import (
 SUFFIX = STEP_SUFFIX["quantize"]
 
 
+def _valley_threshold(vals_flat, lo, hi, smooth_sigma=3.0):
+    """Find the histogram valley minimum between lo and hi (integer range).
+
+    Builds a fine-grained histogram in [lo, hi], smooths it with a Gaussian
+    kernel, and returns the position of the minimum.  Falls back to the
+    midpoint if no clear valley exists.
+    """
+    from scipy.ndimage import gaussian_filter1d
+    lo_i, hi_i = int(np.floor(lo)) + 1, int(np.ceil(hi))
+    if hi_i <= lo_i:
+        return (lo + hi) / 2.0
+    hist, edges = np.histogram(vals_flat, bins=range(lo_i, hi_i + 2))
+    if len(hist) == 0:
+        return (lo + hi) / 2.0
+    smoothed = gaussian_filter1d(hist.astype(float), sigma=smooth_sigma)
+    valley_idx = int(np.argmin(smoothed))
+    return float(edges[valley_idx])
+
+
 def _thresholds_kmeans(samples):
     try:
         from sklearn.cluster import KMeans
@@ -75,7 +94,10 @@ def _thresholds_kmeans(samples):
     log(f"  Cluster gaps:    {[f'{g:.1f}' for g in gaps]}")
     if min(gaps) < 15:
         raise ValueError(f"Clusters too close (min gap {min(gaps):.1f} < 15)")
-    thresholds = [(centres[i] + centres[i+1]) / 2 for i in range(3)]
+    # Use histogram valley minimum instead of simple midpoint for better accuracy
+    vals_flat = samples.ravel().astype(float)
+    thresholds = [_valley_threshold(vals_flat, centres[i], centres[i+1])
+                  for i in range(3)]
     log(f"  K-means thresholds: {[f'{t:.1f}' for t in thresholds]}")
     return thresholds
 
@@ -115,8 +137,70 @@ def quantize(samples, thresholds):
     return out
 
 
+def spatial_smooth(q, samples):
+    """
+    Post-quantize spatial consistency pass.
+
+    Corrects isolated mis-classified pixels by examining 4-connected neighbours
+    and comparing sample brightness against the expected range for the current
+    and neighbouring colours.  Only safe, high-confidence moves are made:
+
+      DG → LG  if ≥3 of 4 neighbours are pure white  AND  sample ≥ 95
+      BK → DG  if ≥3 of 4 neighbours are LG or white  AND  sample ≥ 42
+      BK → DG  if ≥2 of 4 neighbours are LG or white  AND  sample ≥ 48
+      LG → DG  if ≥3 of 4 neighbours are DG or black  AND  sample < 125
+
+    These rules fix isolated calibration-edge pixels that end up one level off
+    because their block straddles the quantisation boundary.  They are
+    conservative enough not to disturb genuine content edges.
+
+    Parameters
+    ----------
+    q       : (112, 128) uint8 ndarray — quantised result (palette values)
+    samples : (112, 128) uint8 ndarray — raw brightness from the sample step
+
+    Returns
+    -------
+    (112, 128) uint8 ndarray with the same dtype
+    """
+    q2 = q.copy()
+    H, W = q2.shape
+    for r in range(H):
+        for c in range(W):
+            nbrs4 = [(r + dr, c + dc)
+                     for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1))
+                     if 0 <= r + dr < H and 0 <= c + dc < W]
+            if len(nbrs4) < 4:
+                continue
+            nbv = [q[nr, nc] for nr, nc in nbrs4]
+            sv  = int(samples[r, c])
+            wh  = sum(v == 255 for v in nbv)
+            lg  = sum(v >= 165 for v in nbv)
+            dg  = sum(v == 82  for v in nbv)
+            bk  = sum(v == 0   for v in nbv)
+
+            # DG → LG : island of DG floating in white
+            if q[r, c] == 82 and sv >= 95 and wh >= 3:
+                q2[r, c] = 165
+
+            # BK → DG : isolated black pixel in a light neighbourhood
+            if q[r, c] == 0 and sv >= 42 and lg >= 3:
+                q2[r, c] = 82
+            elif q[r, c] == 0 and sv >= 48 and lg >= 2:
+                q2[r, c] = 82
+
+            # LG → DG : isolated light pixel in a dark neighbourhood
+            # Fires when ≥3 of 4 neighbours are DG or black and sample is sub-LG.
+            # Broader than the old bk≥3 rule: DG neighbours count as dark context
+            # because they sit well below the LG threshold.
+            if q[r, c] == 165 and sv < 125 and dg + bk >= 3:
+                q2[r, c] = 82
+
+    return q2
+
+
 def process_file(input_path, output_path, use_kmeans=True, scale=8,
-                 debug=False, debug_dir=None):
+                 smooth=True, debug=False, debug_dir=None):
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
     log(f"[quantize] {input_path}", always=True)
@@ -158,6 +242,11 @@ def process_file(input_path, output_path, use_kmeans=True, scale=8,
         thresholds = _thresholds_minmax(samples)
 
     output_arr = quantize(samples, thresholds)
+
+    if smooth:
+        output_arr = spatial_smooth(output_arr, raw)
+        log("  Spatial smoothing applied.")
+
     unique, counts = np.unique(output_arr, return_counts=True)
     for u, c in zip(unique, counts):
         log(f"  Color {u:3d}: {c:5d} px  ({100*c/output_arr.size:5.1f}%)")
@@ -200,6 +289,13 @@ def main():
                              "falls back to the sample min and max. Use if "
                              "scikit-learn is not installed or k-means is producing "
                              "poor results for a particular image.")
+    parser.add_argument("--no-smooth", action="store_true",
+                        help="Disable spatial-consistency smoothing. By default a "
+                             "single post-quantise pass corrects isolated pixels "
+                             "whose 4-connected neighbours are all in a different "
+                             "palette level (e.g. a lone dark-gray pixel surrounded "
+                             "by white). Use this flag to get the raw k-means "
+                             "output without any neighbourhood correction.")
     parser.add_argument("--debug", action="store_true",
                         help="Enable verbose logging and save a diagnostic 8x "
                              "upscaled image (quantize_a_8x) so the four-color "
@@ -215,7 +311,8 @@ def main():
     for f in files:
         out = make_output_path(f, args.output_dir, SUFFIX)
         try:
-            process_file(f, out, not args.no_kmeans, args.scale, args.debug, debug_dir)
+            process_file(f, out, not args.no_kmeans, args.scale,
+                         not args.no_smooth, args.debug, debug_dir)
         except Exception as e:
             print(f"ERROR — {f}: {e}", file=sys.stderr)
             if args.debug: traceback.print_exc()

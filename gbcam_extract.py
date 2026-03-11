@@ -119,7 +119,7 @@ def _build_help():
         "                        Increase to avoid more gap/bleed; decrease to use more pixels.",
         "    --sample-margin-h N  Horizontal-only margin (overrides --sample-margin).",
         "    --sample-margin-v N  Vertical-only margin (overrides --sample-margin).",
-        "    --sample-method M    How to aggregate the interior block (default: median).",
+        "    --sample-method M    How to aggregate the interior block (default: mean).",
         "                        Choices: median, mean, mode, min, max, pNN (e.g. p25, p75).",
         "",
         "  Quantize step:",
@@ -217,8 +217,8 @@ def run_pipeline(input_files, output_dir,
                  start_step="warp", end_step="quantize",
                  scale=8, thresh_val=180,
                  poly_degree=2, dark_smooth=13, refine_passes=1,
-                 sample_margin_h=None, sample_margin_v=None, sample_method="median",
-                 use_kmeans=True,
+                 sample_margin_h=None, sample_margin_v=None, sample_method="mean",
+                 use_kmeans=True, smooth=True,
                  clean_steps=False,
                  debug=False, debug_dir=None):
     """
@@ -288,6 +288,7 @@ def run_pipeline(input_files, output_dir,
                     step_quantize.process_file(
                         in_path, out_path,
                         use_kmeans=use_kmeans, scale=scale,
+                        smooth=smooth,
                         debug=debug, debug_dir=debug_dir)
 
                 if not is_final:
@@ -453,15 +454,15 @@ def main():
              "rows. Overrides the vertical component of --sample-margin. "
              "Default: auto (see --sample-margin).")
     parser.add_argument(
-        "--sample-method", default="median", metavar="METHOD",
+        "--sample-method", default="mean", metavar="METHOD",
         help="How to collapse the interior block pixels into a single brightness "
-             "value. Choices: median (default), mean, mode, min, max, or a "
+             "value. Choices: mean, median, mode, min, max, or a "
              "percentile as pNN where NN is 0-100 (e.g. p25, p75, p90). "
-             "median: takes the middle value after sorting, robust to surviving "
-             "edge artifacts without being pulled toward extremes — best for "
-             "most images. "
-             "mean: arithmetic average, uses all pixel information, slightly "
-             "more sensitive to any contamination that survived the margin. "
+             "mean: arithmetic average of all interior pixels — default, best "
+             "for most images as it fully uses block information and pairs well "
+             "with the spatial smoothing pass. "
+             "median: middle value after sorting, robust to surviving edge "
+             "artifacts. "
              "mode: most common value after rounding to integer, theoretically "
              "converges on the dominant brightness level but works poorly when "
              "optical blur spreads values across a continuous range. "
@@ -471,7 +472,7 @@ def main():
              "pNN: Nth percentile — p25 biases toward darker readings (helps "
              "when bright bleeding dominates), p75 biases toward brighter "
              "readings (helps when dark gaps dominate), p50 is identical to "
-             "median. Default: median.")
+             "median. Default: mean.")
 
     # ── Quantize step ────────────────────────────────────────
     parser.add_argument(
@@ -557,6 +558,7 @@ def main():
         sample_margin_v = vm,
         sample_method   = args.sample_method,
         use_kmeans      = not args.no_kmeans,
+        smooth          = not getattr(args, 'no_smooth', False),
         clean_steps     = args.clean_steps,
         debug           = args.debug,
         debug_dir       = debug_dir,

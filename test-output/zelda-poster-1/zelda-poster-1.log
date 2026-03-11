@@ -71,7 +71,8 @@ PIPELINE RUN
   Loaded 128×112 px — range 0–255
   K-means centres: ['3.9', '73.2', '158.0', '251.7']
   Cluster gaps:    ['69.3', '84.8', '93.6']
-  K-means thresholds: ['38.6', '115.6', '204.8']
+  K-means thresholds: ['39.0', '120.0', '200.0']
+  Spatial smoothing applied.
   Color   0:  1568 px  ( 10.9%)
   Color  82:  3529 px  ( 24.6%)
   Color 165:  4256 px  ( 29.7%)
@@ -83,15 +84,15 @@ PIPELINE RUN
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14328  (99.94%)
-  Different    : 8   (0.06%)
+  Matching     : 14329  (99.95%)
+  Different    : 7   (0.05%)
 
 ──────────────────────────────────────────────────────────────────────
 COLOR DISTRIBUTION
 ──────────────────────────────────────────────────────────────────────
   Color                               Result   Reference      Diff
-  black (#000000)                       1568        1573        -5
-  dark-gray (#525252)                   3529        3525        +4
+  black (#000000)                       1568        1572        -4
+  dark-gray (#525252)                   3529        3526        +3
   light-gray (#A5A5A5)                  4256        4255        +1
   white (#FFFFFF)                       4983        4983        +0
 
@@ -100,24 +101,23 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ──────────────────────────────────────────────────────────────────────
   Result \ Ref               0        82       165       255   TOTAL
   black (#000000)        1567 ✓        1 ✗        0          0      1568
-  dark-gray (#525252)        6 ✗     3523 ✓        0          0      3529
+  dark-gray (#525252)        5 ✗     3524 ✓        0          0      3529
   light-gray (#A5A5A5)        0          1 ✗     4255 ✓        0      4256
   white (#FFFFFF)           0          0          0       4983 ✓    4983
-                           1573       3525       4255       4983
+                           1572       3526       4255       4983
 
 ──────────────────────────────────────────────────────────────────────
-SPATIAL DISTRIBUTION OF ERRORS  (8 pixels)
+SPATIAL DISTRIBUTION OF ERRORS  (7 pixels)
 ──────────────────────────────────────────────────────────────────────
   Row range  : 20–94  (top=0, bottom=111)
   Col range  : 12–112  (left=0, right=127)
   top (rows 0-55) / left (cols 0-63): 1 errors
-  top (rows 0-55) / right (cols 64-127): 1 errors
+  top (rows 0-55) / right (cols 64-127): 0 errors
   bottom (rows 56-111) / left (cols 0-63): 3 errors
   bottom (rows 56-111) / right (cols 64-127): 3 errors
 
   Errors per row (GB rows 0–111):
     row  20:    1  █
-    row  54:    1  █
     row  67:    1  █
     row  71:    1  █
     row  82:    1  █
@@ -130,17 +130,15 @@ SPATIAL DISTRIBUTION OF ERRORS  (8 pixels)
     col  14:    1  █
     col  51:    1  █
     col  63:    1  █
-    col  69:    1  █
     col  76:    1  █
     col 101:    1  █
     col 112:    1  █
 
 ──────────────────────────────────────────────────────────────────────
-FULL PIXEL ERROR LIST  (8 pixels, sorted by row then col)
+FULL PIXEL ERROR LIST  (7 pixels, sorted by row then col)
 ──────────────────────────────────────────────────────────────────────
    Row   Col                  Pipeline                 Reference  Error type
     20    63       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
-    54    69       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     67    51      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
     71    76       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     82   112           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
@@ -160,11 +158,11 @@ DIAGNOSTIC IMAGES  (saved to test-output\zelda-poster-1/)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14328  (99.94%)
-  Different    : 8   (0.06%)
+  Matching     : 14329  (99.95%)
+  Different    : 7   (0.05%)
   Color                               Result   Reference      Diff
-  black (#000000)                       1568        1573        -5
-  dark-gray (#525252)                   3529        3525        +4
+  black (#000000)                       1568        1572        -4
+  dark-gray (#525252)                   3529        3526        +3
   light-gray (#A5A5A5)                  4256        4255        +1
   white (#FFFFFF)                       4983        4983        +0
 

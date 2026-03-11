@@ -71,11 +71,12 @@ PIPELINE RUN
   Loaded 128×112 px — range 0–255
   K-means centres: ['14.4', '87.7', '155.3', '247.7']
   Cluster gaps:    ['73.3', '67.6', '92.4']
-  K-means thresholds: ['51.1', '121.5', '201.5']
-  Color   0:  1613 px  ( 11.3%)
-  Color  82:  3689 px  ( 25.7%)
-  Color 165:  4049 px  ( 28.2%)
-  Color 255:  4985 px  ( 34.8%)
+  K-means thresholds: ['43.0', '115.0', '209.0']
+  Spatial smoothing applied.
+  Color   0:  1555 px  ( 10.8%)
+  Color  82:  3540 px  ( 24.7%)
+  Color 165:  4258 px  ( 29.7%)
+  Color 255:  4983 px  ( 34.8%)
   Saved → test-output\zelda-poster-2\zelda-poster-2_gbcam.png
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_sample__quantize_a_8x.png
 
@@ -83,479 +84,113 @@ PIPELINE RUN
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14060  (98.07%)
-  Different    : 276   (1.93%)
+  Matching     : 14310  (99.82%)
+  Different    : 26   (0.18%)
 
 ──────────────────────────────────────────────────────────────────────
 COLOR DISTRIBUTION
 ──────────────────────────────────────────────────────────────────────
   Color                               Result   Reference      Diff
-  black (#000000)                       1613        1573       +40
-  dark-gray (#525252)                   3689        3525      +164
-  light-gray (#A5A5A5)                  4049        4255      -206
-  white (#FFFFFF)                       4985        4983        +2
+  black (#000000)                       1555        1572       -17
+  dark-gray (#525252)                   3540        3526       +14
+  light-gray (#A5A5A5)                  4258        4255        +3
+  white (#FFFFFF)                       4983        4983        +0
 
 ──────────────────────────────────────────────────────────────────────
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ──────────────────────────────────────────────────────────────────────
   Result \ Ref               0        82       165       255   TOTAL
-  black (#000000)        1565 ✓       48 ✗        0          0      1613
-  dark-gray (#525252)        8 ✗     3470 ✓      211 ✗        0      3689
-  light-gray (#A5A5A5)        0          7 ✗     4042 ✓        0      4049
-  white (#FFFFFF)           0          0          2 ✗     4983 ✓    4985
-                           1573       3525       4255       4983
+  black (#000000)        1552 ✓        3 ✗        0          0      1555
+  dark-gray (#525252)       20 ✗     3520 ✓        0          0      3540
+  light-gray (#A5A5A5)        0          3 ✗     4255 ✓        0      4258
+  white (#FFFFFF)           0          0          0       4983 ✓    4983
+                           1572       3526       4255       4983
 
 ──────────────────────────────────────────────────────────────────────
-SPATIAL DISTRIBUTION OF ERRORS  (276 pixels)
+SPATIAL DISTRIBUTION OF ERRORS  (26 pixels)
 ──────────────────────────────────────────────────────────────────────
-  Row range  : 2–110  (top=0, bottom=111)
-  Col range  : 0–126  (left=0, right=127)
-  top (rows 0-55) / left (cols 0-63): 57 errors
-  top (rows 0-55) / right (cols 64-127): 128 errors
-  bottom (rows 56-111) / left (cols 0-63): 25 errors
-  bottom (rows 56-111) / right (cols 64-127): 66 errors
+  Row range  : 15–96  (top=0, bottom=111)
+  Col range  : 7–108  (left=0, right=127)
+  top (rows 0-55) / left (cols 0-63): 6 errors
+  top (rows 0-55) / right (cols 64-127): 1 errors
+  bottom (rows 56-111) / left (cols 0-63): 5 errors
+  bottom (rows 56-111) / right (cols 64-127): 14 errors
 
   Errors per row (GB rows 0–111):
-    row   2:    2  ██
-    row   4:    2  ██
-    row   7:    1  █
-    row   8:    4  ████
-    row  10:    6  ██████
-    row  11:    1  █
-    row  12:    3  ███
-    row  13:    1  █
-    row  14:    6  ██████
     row  15:    1  █
-    row  17:    3  ███
-    row  18:    2  ██
     row  19:    1  █
-    row  20:    5  █████
-    row  22:    2  ██
-    row  23:    1  █
-    row  24:    6  ██████
-    row  26:    4  ████
-    row  27:    2  ██
+    row  22:    1  █
     row  29:    1  █
-    row  30:    6  ██████
-    row  32:    3  ███
-    row  33:    3  ███
-    row  34:    5  █████
-    row  36:   12  ████████████
-    row  37:    1  █
-    row  38:    8  ████████
-    row  39:    6  ██████
-    row  40:   10  ██████████
-    row  42:   19  ███████████████████
-    row  43:    3  ███
-    row  44:    9  █████████
-    row  45:    8  ████████
-    row  46:   13  █████████████
-    row  47:    3  ███
-    row  48:    9  █████████
-    row  49:    1  █
-    row  50:    5  █████
-    row  51:    1  █
-    row  52:    2  ██
-    row  54:    2  ██
-    row  55:    2  ██
-    row  56:    2  ██
-    row  57:    1  █
-    row  58:    5  █████
-    row  60:    5  █████
-    row  61:    1  █
-    row  62:    2  ██
-    row  64:    3  ███
-    row  66:    2  ██
-    row  68:    1  █
-    row  71:    1  █
-    row  72:    2  ██
-    row  74:    1  █
-    row  75:    1  █
-    row  76:    2  ██
-    row  78:    4  ████
-    row  79:    1  █
-    row  80:    2  ██
-    row  81:    1  █
-    row  82:    3  ███
-    row  84:    4  ████
-    row  85:    1  █
-    row  87:    1  █
-    row  88:    4  ████
-    row  90:    2  ██
-    row  93:    2  ██
-    row  94:    4  ████
+    row  36:    1  █
+    row  45:    1  █
+    row  55:    1  █
+    row  62:    1  █
+    row  71:    3  ███
+    row  73:    1  █
+    row  77:    1  █
+    row  80:    1  █
+    row  86:    1  █
+    row  89:    2  ██
     row  95:    1  █
-    row  96:    6  ██████
-    row  97:    1  █
-    row  98:    1  █
-    row  99:    1  █
-    row 100:    8  ████████
-    row 102:    1  █
-    row 104:    5  █████
-    row 106:    1  █
-    row 108:    1  █
-    row 109:    1  █
-    row 110:    6  ██████
+    row  96:    8  ████████
 
   Errors per column (GB cols 0–127):
-    col   0:    1  █
-    col   1:    6  ██████
-    col   3:    6  ██████
-    col   4:    1  █
-    col   5:    4  ████
-    col   6:    2  ██
-    col   7:   11  ███████████
-    col   9:    3  ███
-    col  10:    1  █
-    col  11:    2  ██
-    col  12:    2  ██
-    col  13:    3  ███
-    col  14:    3  ███
-    col  17:    2  ██
-    col  18:    1  █
-    col  19:    6  ██████
-    col  21:    2  ██
-    col  22:    2  ██
-    col  23:    2  ██
-    col  24:    1  █
-    col  27:    1  █
-    col  29:    1  █
-    col  30:    1  █
-    col  31:    1  █
+    col   7:    1  █
+    col  14:    1  █
+    col  19:    1  █
+    col  21:    1  █
+    col  23:    1  █
     col  32:    1  █
-    col  33:    1  █
     col  34:    1  █
-    col  35:    1  █
-    col  36:    1  █
-    col  37:    2  ██
-    col  38:    1  █
-    col  42:    1  █
-    col  43:    1  █
-    col  47:    1  █
-    col  50:    1  █
-    col  55:    1  █
-    col  56:    1  █
+    col  60:    1  █
     col  62:    2  ██
     col  63:    1  █
+    col  65:    1  █
     col  67:    1  █
-    col  68:    1  █
-    col  69:    4  ████
+    col  69:    1  █
+    col  70:    1  █
     col  71:    1  █
+    col  73:    1  █
     col  74:    1  █
     col  75:    1  █
-    col  87:    1  █
-    col  89:    1  █
-    col  90:    1  █
-    col  91:    3  ███
-    col  93:    1  █
-    col  95:    1  █
-    col  97:    1  █
-    col  99:    5  █████
-    col 101:    3  ███
-    col 103:    8  ████████
-    col 105:   11  ███████████
-    col 106:    1  █
-    col 107:   12  ████████████
-    col 108:    2  ██
-    col 109:   11  ███████████
-    col 110:    2  ██
-    col 111:   12  ████████████
-    col 112:    1  █
-    col 113:   18  ██████████████████
-    col 114:    2  ██
-    col 115:   14  ██████████████
-    col 116:    5  █████
-    col 117:   14  ██████████████
-    col 118:    2  ██
-    col 119:   12  ████████████
-    col 120:    3  ███
-    col 121:   13  █████████████
-    col 122:    1  █
-    col 123:   11  ███████████
-    col 124:    4  ████
-    col 125:    5  █████
-    col 126:    4  ████
+    col  76:    1  █
+    col  77:    1  █
+    col  78:    1  █
+    col  82:    1  █
+    col  83:    1  █
+    col  86:    1  █
+    col 108:    1  █
 
 ──────────────────────────────────────────────────────────────────────
-FULL PIXEL ERROR LIST  (276 pixels, sorted by row then col)
+FULL PIXEL ERROR LIST  (26 pixels, sorted by row then col)
 ──────────────────────────────────────────────────────────────────────
    Row   Col                  Pipeline                 Reference  Error type
-     2    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-     2   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-     4     3           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-     4   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-     7   110       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-     8    91       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-     8   101       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-     8   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-     8   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    10     9       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    10    97       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    10    99       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    10   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    10   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    10   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    11   116       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    12   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    12   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    12   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    13    38           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    14    89       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    14    99       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    14   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    14   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    14   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    14   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
     15    62       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
-    17    69      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    17   106       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    17   126       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    18   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    18   125       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
     19    19      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    20    22           white (#FFFFFF)      light-gray (#A5A5A5)  too light (off by 1 level)
-    20    99       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    20   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    20   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    20   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
     22    32      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    22    99       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    23   116       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    24    42      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    24   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    24   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    24   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    24   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    24   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    26    13       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    26   101       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    26   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    26   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    27   108       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    27   126       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    29   120       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    30     7       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    30   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    30   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    30   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    30   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    30   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    32     7       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    32    27           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    32   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    33    14       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    33    87           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    33   126       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    34     7       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    34   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    34   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    34   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    34   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36     3       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36     7       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    29    60       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     36    23           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    36    33       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    36   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    37   110       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    38     1       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    38    29           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    38   103           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    38   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    38   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    38   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    38   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    38   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    39     4       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    39     6       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    39    36           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    39    50           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    39   112       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    39   124       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40   125       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42     3       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42     5       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42     7       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42    13       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42    37           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    42    47           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    42    69           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    42    91           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    42    99           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    42   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42   125       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    43    90           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    43   116       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    43   124       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    44     1       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    44     3       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    44    43           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    44    93           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    44   105           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    44   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    44   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    44   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    44   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    45     6       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
     45    14           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    45    37           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    45    62       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    45   116       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    45   118       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    45   124       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    45   126       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46     1       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46     5       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46     7       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46     9       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46    19           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    46    21       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    46   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    47    14           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    47    56           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    47   116       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48     1       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48     3       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48     5       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48     7       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48     9       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48    13       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48    23           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    48    31       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48    35           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    49   122       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    50    11       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    50   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    50   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    50   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    50   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    51    24           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    52   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    52   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    54    55           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    54    69       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     55   108           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    55   120       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    56     1           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    56   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    57    12           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    58     1           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    58   109       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    58   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    58   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    58   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    60     3           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    60     5           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    60     7           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    60    30      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    60   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    61    10           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
     62    34      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    62   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    64    21           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    64   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    64   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    66   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    66   125       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    68   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
     71    74       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
-    72   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    72   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    74    75       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    75    12           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    76    68      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    76   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    78   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    78   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    78   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    78   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    79   120       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    71    76       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    71    78       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    73    70       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    77    83       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     80     7       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
-    80    19           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    81   114       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    82   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    82   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    82   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    84     7           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    84    11           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    84   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    84   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    85   118       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    87    22           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    88    17           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    88   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    88   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    88   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    90   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    90   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    93    18           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    93    19           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    94     7           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    94   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    94   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    94   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    95   124       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    96    19           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+    86    21       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    89    82       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    89    86       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    95    62       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     96    63       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    96    65       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     96    67       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     96    69       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
     96    71       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
-    96   114           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    97   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    98   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    99   109           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-   100    19       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   100    91       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   100   101       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   100   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   100   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   100   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   100   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   100   115       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   102   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   104   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   104   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   104   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   104   121       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   104   123       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   106    17       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   108   117       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   109     0           white (#FFFFFF)      light-gray (#A5A5A5)  too light (off by 1 level)
-   110   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   110   107       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   110   111       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   110   113       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   110   119       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-   110   125       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    96    73       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    96    75       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
+    96    77       dark-gray (#525252)           black (#000000)  too light (off by 1 level)
 
 ──────────────────────────────────────────────────────────────────────
 DIAGNOSTIC IMAGES  (saved to test-output\zelda-poster-2/)
@@ -569,13 +204,13 @@ DIAGNOSTIC IMAGES  (saved to test-output\zelda-poster-2/)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14060  (98.07%)
-  Different    : 276   (1.93%)
+  Matching     : 14310  (99.82%)
+  Different    : 26   (0.18%)
   Color                               Result   Reference      Diff
-  black (#000000)                       1613        1573       +40
-  dark-gray (#525252)                   3689        3525      +164
-  light-gray (#A5A5A5)                  4049        4255      -206
-  white (#FFFFFF)                       4985        4983        +2
+  black (#000000)                       1555        1572       -17
+  dark-gray (#525252)                   3540        3526       +14
+  light-gray (#A5A5A5)                  4258        4255        +3
+  white (#FFFFFF)                       4983        4983        +0
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
