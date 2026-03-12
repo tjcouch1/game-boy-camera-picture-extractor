@@ -293,6 +293,14 @@ def run_pipeline(input_files, output_dir,
 
                 if not is_final:
                     intermediates.append(out_path)
+                    if step_name == "sample":
+                        # The sample step also writes auxiliary stat images used
+                        # by the quantize step's spatial smoother.  Track them so
+                        # --clean-steps removes / moves them along with the main
+                        # sample output.
+                        sp = Path(out_path)
+                        intermediates.append(str(sp.parent / (sp.stem + "_med" + sp.suffix)))
+                        intermediates.append(str(sp.parent / (sp.stem + "_zc"  + sp.suffix)))
                 current_file = out_path
 
         except Exception as exc:

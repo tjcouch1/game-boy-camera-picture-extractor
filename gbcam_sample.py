@@ -147,25 +147,37 @@ def process_file(input_path, output_path, scale=8,
 
     aggregate = _parse_method(method)
 
-    samples = np.empty((CAM_H, CAM_W), dtype=np.float32)
+    samples    = np.empty((CAM_H, CAM_W), dtype=np.float32)
+    medians    = np.empty((CAM_H, CAM_W), dtype=np.float32)
+    zerocounts = np.zeros((CAM_H, CAM_W), dtype=np.uint8)
     for gy in range(CAM_H):
         for gx in range(CAM_W):
             y1 = gy * scale + vm;  y2 = (gy + 1) * scale - vm
             x1 = gx * scale + hm;  x2 = (gx + 1) * scale - hm
             block = gray[y1:y2, x1:x2]
             if block.size > 0:
-                samples[gy, gx] = aggregate(block.ravel().astype(float))
+                flat = block.ravel().astype(float)
             else:
                 # Fallback if margins are too large
-                full = gray[gy*scale:(gy+1)*scale, gx*scale:(gx+1)*scale]
-                samples[gy, gx] = aggregate(full.ravel().astype(float))
+                flat = gray[gy*scale:(gy+1)*scale, gx*scale:(gx+1)*scale].ravel().astype(float)
+            samples[gy, gx]    = aggregate(flat)
+            medians[gy, gx]    = float(np.median(flat))
+            zerocounts[gy, gx] = int((flat == 0).sum())
 
     log(f"  Stats: min={samples.min():.1f}  max={samples.max():.1f}  "
         f"mean={samples.mean():.1f}")
 
+    output_path = Path(output_path)
     output_arr = np.clip(np.round(samples), 0, 255).astype(np.uint8)
     cv2.imwrite(str(output_path), output_arr)
     log(f"  Saved → {output_path}  (128×112 px)", always=True)
+
+    # Save auxiliary stat images consumed by the quantize step.
+    stem = output_path.stem
+    med_path = output_path.parent / (stem + "_med" + output_path.suffix)
+    zc_path  = output_path.parent / (stem + "_zc"  + output_path.suffix)
+    cv2.imwrite(str(med_path), np.clip(np.round(medians), 0, 255).astype(np.uint8))
+    cv2.imwrite(str(zc_path),  zerocounts)
 
     if debug and debug_dir and stem:
         big = np.repeat(np.repeat(output_arr, 8, axis=0), 8, axis=1)
