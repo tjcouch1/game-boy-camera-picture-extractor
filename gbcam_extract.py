@@ -219,6 +219,7 @@ def run_pipeline(input_files, output_dir,
                  poly_degree=2, dark_smooth=13, refine_passes=1,
                  sample_margin_h=None, sample_margin_v=None, sample_method="mean",
                  use_kmeans=True, smooth=True,
+                 color=False,
                  clean_steps=False,
                  debug=False, debug_dir=None):
     """
@@ -256,6 +257,7 @@ def run_pipeline(input_files, output_dir,
                     step_warp.process_file(
                         current_file, out_path,
                         scale=scale, thresh_val=thresh_val,
+                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "correct":
@@ -265,6 +267,7 @@ def run_pipeline(input_files, output_dir,
                         scale=scale, poly_degree=poly_degree,
                         dark_smooth=dark_smooth,
                         refine_passes=refine_passes,
+                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "crop":
@@ -281,6 +284,7 @@ def run_pipeline(input_files, output_dir,
                         scale=scale,
                         h_margin=sample_margin_h, v_margin=sample_margin_v,
                         method=sample_method,
+                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "quantize":
@@ -289,6 +293,7 @@ def run_pipeline(input_files, output_dir,
                         in_path, out_path,
                         use_kmeans=use_kmeans, scale=scale,
                         smooth=smooth,
+                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 if not is_final:
@@ -498,6 +503,14 @@ def main():
              "installed, or if k-means is producing poor clusters for a "
              "particular image.")
 
+    parser.add_argument(
+        "--color", action="store_true",
+        help="Enable colour-palette mode. Expects photos taken with "
+             "the #FFFFA5/#FF9494/#9494FF/#000000 palette. Warp saves a "
+             "colour PNG; correct applies per-channel R+G front-light "
+             "correction; quantize classifies in corrected RG space and "
+             "writes both _gbcam.png (grayscale) and _gbcam_rgb.png (colour).")
+
     # ── Housekeeping ─────────────────────────────────────────
     parser.add_argument(
         "--clean-steps", action="store_true",
@@ -567,6 +580,7 @@ def main():
         sample_method   = args.sample_method,
         use_kmeans      = not args.no_kmeans,
         smooth          = not getattr(args, 'no_smooth', False),
+        color           = getattr(args, 'color', False),
         clean_steps     = args.clean_steps,
         debug           = args.debug,
         debug_dir       = debug_dir,

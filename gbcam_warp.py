@@ -173,7 +173,11 @@ def refine_warp(warped, scale, debug=False, debug_dir=None, stem=None):
 
 
 def process_file(input_path, output_path, scale=8, thresh_val=180,
-                 debug=False, debug_dir=None):
+                 color=False, debug=False, debug_dir=None):
+    """
+    color : bool
+        When True, save a colour (BGR) PNG instead of grayscale.
+    """
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
     log(f"[warp] {input_path}", always=True)
@@ -187,11 +191,46 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
     warped = _initial_warp(img, corners, scale, debug, debug_dir, stem)
     log("  c — Refining alignment from inner border")
     warped = refine_warp(warped, scale, debug, debug_dir, stem)
-    gray   = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-    cv2.imwrite(str(output_path), gray)
-    log(f"  Saved → {output_path}", always=True)
-    if debug and debug_dir and stem:
-        save_debug(gray, debug_dir, stem, "warp_e_final_gray")
+    if color:
+        # ── Warmth pre-processing (colour mode only) ─────────────────────────
+        # The GBA SP front-light over-saturates the blue sub-pixel, shifting the
+        # whole screen toward cyan/blue.  Applying a fixed-coefficient warmth
+        # transform on the warped image before the correction step:
+        #   • brings the filmstrip frame closer to target #FFFFA5 (warm yellow),
+        #   • boosts the R channel, improving BK/DG/LG/WH separation,
+        #   • reduces the B channel, moving toward the palette's warm colours.
+        #
+        # Coefficients are measured from a hand-warmed reference photo of a
+        # real GBA SP screen in colour-palette mode (BGR convention):
+        #   R_out = 1.073·R_in + 26.5,  G = 0.983·G_in − 2.9,  B = 0.925·B_in − 32.6
+        # Applied at 75 % strength — calibrated to maximise accuracy across both
+        # well-exposed and heavily blue-tinted shots.
+        _WARMTH_STRENGTH = 0.75
+        _W_MAT_FULL = np.array([           # full-strength (BGR rows)
+            [0.925, 0.0,   0.0  ],         # B_out = 0.925·B_in
+            [0.0,   0.983, 0.0  ],         # G_out = 0.983·G_in
+            [0.0,   0.0,   1.073],         # R_out = 1.073·R_in
+        ], dtype=np.float32)
+        _W_OFF_FULL = np.array([-32.58, -2.92, 26.53], dtype=np.float32)
+        _W_MAT = (np.eye(3, dtype=np.float32)
+                  + _WARMTH_STRENGTH * (_W_MAT_FULL - np.eye(3, dtype=np.float32)))
+        _W_OFF = _W_OFF_FULL * _WARMTH_STRENGTH
+        warmed = np.clip(warped.astype(np.float32) @ _W_MAT.T + _W_OFF,
+                         0, 255).astype(np.uint8)
+        warped = refine_warp(warmed, scale, debug, debug_dir, stem)
+        log(f"  d — Warmth ({_WARMTH_STRENGTH:.0%}): "
+            f"R×{_W_MAT[2,2]:.3f}{_W_OFF[2]:+.1f}  "
+            f"G×{_W_MAT[1,1]:.3f}{_W_OFF[1]:+.1f}  "
+            f"B×{_W_MAT[0,0]:.3f}{_W_OFF[0]:+.1f}")
+
+        cv2.imwrite(str(output_path), warped)
+        log(f"  Saved → {output_path}  (colour BGR, warmth-corrected)", always=True)
+    else:
+        gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+        cv2.imwrite(str(output_path), gray)
+        log(f"  Saved → {output_path}", always=True)
+        if debug and debug_dir and stem:
+            save_debug(gray, debug_dir, stem, "warp_e_final_gray")
 
 
 def main():

@@ -50,7 +50,7 @@ COLOR_NAMES = {0: "black (#000000)", 82: "dark-gray (#525252)",
 def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
                  dark_smooth=13,
                  sample_margin_h=None, sample_margin_v=None, sample_method="median",
-                 use_kmeans=True, debug=True):
+                 use_kmeans=True, color=False, debug=True):
     """Run the full pipeline and return the path to the _gbcam.png output."""
     # Import here so the test can be run from the pipeline directory
     sys.path.insert(0, str(Path(__file__).parent))
@@ -82,10 +82,12 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
 
     step_warp.process_file(input_path, p("_warp"),
                            scale=scale, thresh_val=thresh_val,
+                           color=color,
                            debug=debug, debug_dir=dbg)
     step_correct.process_file(p("_warp"), p("_correct"),
                               scale=scale, poly_degree=poly_degree,
                               dark_smooth=dark_smooth,
+                              color=color,
                               debug=debug, debug_dir=dbg)
     step_crop.process_file(p("_correct"), p("_crop"),
                            scale=scale, debug=debug, debug_dir=dbg)
@@ -93,9 +95,11 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
                              scale=scale,
                              h_margin=sample_margin_h, v_margin=sample_margin_v,
                              method=sample_method,
+                             color=color,
                              debug=debug, debug_dir=dbg)
     step_quantize.process_file(p("_sample"), p("_gbcam"),
                                use_kmeans=use_kmeans, scale=scale,
+                               color=color,
                                debug=debug, debug_dir=dbg)
     return p("_gbcam")
 
@@ -371,6 +375,8 @@ def main():
     parser.add_argument("--sample-margin-v",type=int,   default=None)
     parser.add_argument("--sample-method",  default="median")
     parser.add_argument("--no-kmeans",      action="store_true")
+    parser.add_argument("--color",          action="store_true",
+                        help="Enable colour-palette mode (new #FFFFA5/#FF9494/#9494FF/#000000 palette).")
     args = parser.parse_args()
 
     # Compute stem early — used for log filename and diagnostic image names
@@ -408,6 +414,7 @@ def main():
             sample_margin_v = vm,
             sample_method   = args.sample_method,
             use_kmeans      = not args.no_kmeans,
+            color           = args.color,
             debug           = True,
         )
     except Exception as e:

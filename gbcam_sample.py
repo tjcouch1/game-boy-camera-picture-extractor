@@ -90,7 +90,7 @@ def _parse_method(method_str):
 
 def process_file(input_path, output_path, scale=8,
                  h_margin=None, v_margin=None, method="mean",
-                 debug=False, debug_dir=None):
+                 color=False, debug=False, debug_dir=None):
     """
     Sample one brightness value per GB pixel from a crop-step output.
 
@@ -147,6 +147,51 @@ def process_file(input_path, output_path, scale=8,
 
     aggregate = _parse_method(method)
 
+    if color:
+        # ── Colour mode ──────────────────────────────────────────────
+        # Input is a 3-channel BGR warp/correct PNG.  Sample mean R, G, B
+        # per block and save a 3-channel BGR sample image.
+        # Auxiliary _med and _zc images are derived from the R channel.
+        bgr_in = cv2.imread(str(input_path))
+        if bgr_in is None:
+            raise RuntimeError(f"Cannot read image: {input_path}")
+        img_rgb = cv2.cvtColor(bgr_in, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+        samp_r  = np.empty((CAM_H, CAM_W), dtype=np.float32)
+        samp_g  = np.empty((CAM_H, CAM_W), dtype=np.float32)
+        samp_b  = np.empty((CAM_H, CAM_W), dtype=np.float32)
+        med_r   = np.empty((CAM_H, CAM_W), dtype=np.float32)
+        zc_r    = np.zeros((CAM_H, CAM_W), dtype=np.uint8)
+
+        for gy in range(CAM_H):
+            for gx in range(CAM_W):
+                y1 = gy * scale + vm;  y2 = (gy + 1) * scale - vm
+                x1 = gx * scale + hm;  x2 = (gx + 1) * scale - hm
+                blk = img_rgb[y1:y2, x1:x2, :]  if (y2>y1 and x2>x1) else img_rgb[gy*scale:(gy+1)*scale, gx*scale:(gx+1)*scale, :]
+                samp_r[gy, gx] = float(blk[:,:,0].mean())
+                samp_g[gy, gx] = float(blk[:,:,1].mean())
+                samp_b[gy, gx] = float(blk[:,:,2].mean())
+                flat_r = blk[:,:,0].ravel().astype(float)
+                med_r[gy, gx]  = float(np.median(flat_r))
+                zc_r[gy, gx]   = int((flat_r == 0.0).sum())
+
+        # Save 3-channel sample as BGR PNG (R→R, G→G, B→B)
+        out_bgr = cv2.cvtColor(
+            np.clip(np.stack([samp_r, samp_g, samp_b], axis=-1), 0, 255).astype(np.uint8),
+            cv2.COLOR_RGB2BGR)
+        output_path = Path(output_path)
+        cv2.imwrite(str(output_path), out_bgr)
+        log(f"  Saved → {output_path}  (colour, 128×112 px)", always=True)
+
+        # Auxiliary stat images (same naming as grayscale mode)
+        stem_c = output_path.stem
+        med_path = output_path.parent / (stem_c + "_med" + output_path.suffix)
+        zc_path  = output_path.parent / (stem_c + "_zc"  + output_path.suffix)
+        cv2.imwrite(str(med_path), np.clip(np.round(med_r), 0, 255).astype(np.uint8))
+        cv2.imwrite(str(zc_path),  zc_r)
+        return
+
+    # ── Grayscale mode (original) ─────────────────────────────────
     samples    = np.empty((CAM_H, CAM_W), dtype=np.float32)
     medians    = np.empty((CAM_H, CAM_W), dtype=np.float32)
     zerocounts = np.zeros((CAM_H, CAM_W), dtype=np.uint8)

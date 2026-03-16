@@ -1,0 +1,286 @@
+
+======================================================================
+PIPELINE RUN
+  Input:      test-input/thing-1.jpg
+  Output dir: ./test-output/thing-1
+  scale=8  threshold=180  poly_degree=2  dark_smooth=13
+  sample_margin_h=None  sample_margin_v=None
+  sample_method=median  kmeans=True
+======================================================================
+
+
+============================================================
+[warp] test-input/thing-1.jpg
+  Loaded 1299×1186 px
+  a — Detecting screen corners
+  Contour: area=1393862  bbox=(13,20,1258×1135)  aspect=1.108 (expected≈1.111)
+  Corners (TL TR BR BL): [[25, 21], [1269, 38], [1250, 1153], [17, 1150]]
+    [debug] test-output\thing-1\debug\thing-1__warp_a_corners.png
+  b — Initial perspective warp
+  Initial warp → 1280×1152  (scale=8)
+    [debug] test-output\thing-1\debug\thing-1__warp_b_initial_color.png
+    [debug] test-output\thing-1\debug\thing-1__warp_c_initial_gray.png
+  c — Refining alignment from inner border
+  Border edges: top=119(exp=120,err=-1), bot=1024(exp=1024,err=0), left=119(exp=120,err=-1), right=1155(exp=1152,err=3)
+  After refinement: top=120(exp=120), bot=1024(exp=1024), left=120(exp=120), right=1152(exp=1152)
+    [debug] test-output\thing-1\debug\thing-1__warp_d_refined_color.png
+  Saved → test-output\thing-1\thing-1_warp.png
+    [debug] test-output\thing-1\debug\thing-1__warp_e_final_gray.png
+
+============================================================
+[correct] test-output\thing-1\thing-1_warp.png
+  Loaded 1280×1152 px (scale=8)
+  Collecting reference samples (white poly degree=2, dark smooth_k=13)…
+  White samples: 7367/7920 blocks kept  (median 211.0, range 158.6–244.1)
+  Dark  samples: 114×2 + 130×2 border pixels  (left range 127.0–159.0, right 133.0–153.5)
+  Fitting brightness surfaces…
+    (   0,   0): white=207.0  dark=131.8
+    (   0,1279): white=190.4  dark=137.2
+    (1151,   0): white=224.6  dark=156.2
+    (1151,1279): white=180.5  dark=139.5
+  Applying per-pixel affine correction (pass 1 — Coons patch dark surface)…
+  Dark  samples: 114×2 + 130×2 border pixels  (left range 127.0–159.0, right 133.0–153.5)
+  Refinement pass 1: 6441 interior dark-gray calibration pixels…
+    Dark surface refined — corner delta: (0,0): +7.7, (0,1279): -16.2, (1151,0): -5.1, (1151,1279): +9.6
+  Inner border (#525252 ref, target=82): before mean=139.5 (err=57.5), after mean=72.5 (err=-9.5) (improved)
+  Saved → test-output\thing-1\thing-1_correct.png
+    [debug] test-output\thing-1\debug\thing-1_warp__correct_a_gain_map.png
+    [debug] test-output\thing-1\debug\thing-1_warp__correct_b_before_after.png
+    [debug] test-output\thing-1\debug\thing-1_warp__correct_c_white_surface.png
+    [debug] test-output\thing-1\debug\thing-1_warp__correct_d_dark_surface.png
+    [debug] test-output\thing-1\debug\thing-1_warp__correct_e_full.png
+
+============================================================
+[crop] test-output\thing-1\thing-1_correct.png
+  Loaded 1280×1152 px (scale=8, colour=False)
+  Camera region: (128,128) → (1152,1024)  = 1024×896 px  (128×112 GB pixels)
+  Validation: inner border mean=72.3, white frame mean=191.9 (OK)
+    [debug] test-output\thing-1\debug\thing-1_correct__crop_a_region.png
+  Saved → test-output\thing-1\thing-1_crop.png  (1024×896 px)
+
+============================================================
+[sample] test-output\thing-1\thing-1_crop.png
+  Loaded 1024×896 px  (128×112 GB pixels at scale=8)
+  Block 8×8  margins h=2 v=1  sample region 4×6  method=median
+  Stats: min=0.0  max=255.0  mean=114.6
+  Saved → test-output\thing-1\thing-1_sample.png  (128×112 px)
+    [debug] test-output\thing-1\debug\thing-1_sample__sample_a_8x.png
+
+============================================================
+[quantize] test-output\thing-1\thing-1_sample.png
+  Loaded 128×112 px — range 0–255
+  K-means centres: ['0.0', '86.4', '175.2', '253.0']
+  Cluster gaps:    ['86.4', '88.7', '77.8']
+  K-means thresholds: ['27.0', '131.0', '224.0']
+  Spatial smoothing applied.
+  Color   0:  1336 px  (  9.3%)
+  Color  82:  8637 px  ( 60.2%)
+  Color 165:  2679 px  ( 18.7%)
+  Color 255:  1684 px  ( 11.7%)
+  Saved → test-output\thing-1\thing-1_gbcam.png
+    [debug] test-output\thing-1\debug\thing-1_sample__quantize_a_8x.png
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14277  (99.59%)
+  Different    : 59   (0.41%)
+
+──────────────────────────────────────────────────────────────────────
+COLOR DISTRIBUTION
+──────────────────────────────────────────────────────────────────────
+  Color                               Result   Reference      Diff
+  black (#000000)                       1336        1330        +6
+  dark-gray (#525252)                   8637        8632        +5
+  light-gray (#A5A5A5)                  2679        2690       -11
+  white (#FFFFFF)                       1684        1684        +0
+
+──────────────────────────────────────────────────────────────────────
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+──────────────────────────────────────────────────────────────────────
+  Result \ Ref               0        82       165       255   TOTAL
+  black (#000000)        1330 ✓        6 ✗        0          0      1336
+  dark-gray (#525252)        0       8605 ✓       32 ✗        0      8637
+  light-gray (#A5A5A5)        0         21 ✗     2658 ✓        0      2679
+  white (#FFFFFF)           0          0          0       1684 ✓    1684
+                           1330       8632       2690       1684
+
+──────────────────────────────────────────────────────────────────────
+SPATIAL DISTRIBUTION OF ERRORS  (59 pixels)
+──────────────────────────────────────────────────────────────────────
+  Row range  : 38–110  (top=0, bottom=111)
+  Col range  : 6–127  (left=0, right=127)
+  top (rows 0-55) / left (cols 0-63): 2 errors
+  top (rows 0-55) / right (cols 64-127): 11 errors
+  bottom (rows 56-111) / left (cols 0-63): 8 errors
+  bottom (rows 56-111) / right (cols 64-127): 38 errors
+
+  Errors per row (GB rows 0–111):
+    row  38:    3  ███
+    row  40:    2  ██
+    row  46:    1  █
+    row  47:    1  █
+    row  49:    1  █
+    row  50:    2  ██
+    row  51:    1  █
+    row  53:    1  █
+    row  54:    1  █
+    row  56:    1  █
+    row  59:    2  ██
+    row  60:    2  ██
+    row  62:    1  █
+    row  65:    1  █
+    row  66:    1  █
+    row  67:    1  █
+    row  68:    1  █
+    row  70:    3  ███
+    row  71:    3  ███
+    row  72:    6  ██████
+    row  74:    1  █
+    row  75:    1  █
+    row  76:    1  █
+    row  79:    1  █
+    row  82:    3  ███
+    row  83:    1  █
+    row  84:    3  ███
+    row  85:    1  █
+    row  86:    2  ██
+    row  87:    1  █
+    row  89:    3  ███
+    row  90:    2  ██
+    row  91:    1  █
+    row 110:    3  ███
+
+  Errors per column (GB cols 0–127):
+    col   6:    2  ██
+    col  23:    1  █
+    col  29:    1  █
+    col  37:    1  █
+    col  40:    2  ██
+    col  44:    1  █
+    col  45:    1  █
+    col  51:    1  █
+    col  69:    1  █
+    col  71:    2  ██
+    col  73:    1  █
+    col  74:    1  █
+    col  75:    2  ██
+    col  76:    1  █
+    col  77:    2  ██
+    col  78:    1  █
+    col  79:    1  █
+    col  80:    1  █
+    col  81:    3  ███
+    col  82:    1  █
+    col  83:    1  █
+    col  84:    1  █
+    col  85:    1  █
+    col  86:    1  █
+    col  87:    1  █
+    col  88:    1  █
+    col  89:    2  ██
+    col  90:    1  █
+    col  91:    1  █
+    col  92:    2  ██
+    col  93:    2  ██
+    col  94:    2  ██
+    col  95:    3  ███
+    col  96:    3  ███
+    col  97:    1  █
+    col  98:    1  █
+    col  99:    1  █
+    col 101:    1  █
+    col 104:    2  ██
+    col 105:    2  ██
+    col 121:    1  █
+    col 127:    1  █
+
+──────────────────────────────────────────────────────────────────────
+FULL PIXEL ERROR LIST  (59 pixels, sorted by row then col)
+──────────────────────────────────────────────────────────────────────
+   Row   Col                  Pipeline                 Reference  Error type
+    38    29           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+    38    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    38    98           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+    40    45           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+    40    82           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+    46    89       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    47    88       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    49    93       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    50    94       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    50    99       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    51    94       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    53    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    54   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    56    91       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    59    75      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    59   104       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    60    37       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    60    90       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    62    81      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    65   127      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    66    92       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    67    93       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    68   101       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    70    44      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    70    81      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    70    83      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    71    80      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    71    87       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    71    96       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    72    75      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    72    77      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    72    79      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    72    84       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    72    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    72   105       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    74    78       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    75    96       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    76    96       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    79    81      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    82     6      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    82    73      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    82   121      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    83    40      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    84    40      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    84    85      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    84    92       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    85    89       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    86    86       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    86    97       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    87    51      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    89    71      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    89    76       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    89    77       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    90    69      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+    90    74       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+    91    71       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
+   110     6      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
+   110    23           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+   110   104           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
+
+──────────────────────────────────────────────────────────────────────
+DIAGNOSTIC IMAGES  (saved to test-output\thing-1/)
+──────────────────────────────────────────────────────────────────────
+  thing-1_diag_result_vs_reference.png   — pipeline result (left) vs reference (right)
+  thing-1_diag_error_map.png             — white=correct; blue=too-dark; red/orange=too-light
+  thing-1_diag_abs_diff.png              — absolute brightness difference (scaled)
+  thing-1_diag_level_diff.png            — level difference: mid-gray=correct, darker=result too dark, lighter=result too light
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14277  (99.59%)
+  Different    : 59   (0.41%)
+  Color                               Result   Reference      Diff
+  black (#000000)                       1336        1330        +6
+  dark-gray (#525252)                   8637        8632        +5
+  light-gray (#A5A5A5)                  2679        2690       -11
+  white (#FFFFFF)                       1684        1684        +0
+
+======================================================================
+RESULT: FAIL — see diagnostics above and in the output directory.
+======================================================================
+

@@ -102,7 +102,16 @@ Then run the following:
 
 ```bash
 python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
+```
+
+To regenerate all the images checked into this repo, run the following:
+
+```bash
+python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps
+python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
 python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
+python test_pipeline.py --input "test-input/thing-1.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-1 --keep-intermediates
+python test_pipeline.py --input "test-input/thing-2.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-2 --keep-intermediates
 ```
 
 # Roadmap
