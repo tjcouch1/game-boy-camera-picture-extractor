@@ -219,7 +219,7 @@ def run_pipeline(input_files, output_dir,
                  poly_degree=2, dark_smooth=13, refine_passes=1,
                  sample_margin_h=None, sample_margin_v=None, sample_method="mean",
                  use_kmeans=True, smooth=True,
-                 color=False,
+                 color=True,
                  clean_steps=False,
                  debug=False, debug_dir=None):
     """
@@ -298,11 +298,9 @@ def run_pipeline(input_files, output_dir,
 
                 if not is_final:
                     intermediates.append(out_path)
-                    if step_name == "sample":
-                        # The sample step also writes auxiliary stat images used
-                        # by the quantize step's spatial smoother.  Track them so
-                        # --clean-steps removes / moves them along with the main
-                        # sample output.
+                    if step_name == "sample" and not color:
+                        # In grayscale mode the sample step also writes auxiliary
+                        # _med and _zc stat images for the spatial smoother.
                         sp = Path(out_path)
                         intermediates.append(str(sp.parent / (sp.stem + "_med" + sp.suffix)))
                         intermediates.append(str(sp.parent / (sp.stem + "_zc"  + sp.suffix)))
@@ -504,12 +502,15 @@ def main():
              "particular image.")
 
     parser.add_argument(
+        "--grayscale", action="store_true",
+        help="Use the legacy greyscale pipeline for photos taken with the "
+             "original 4-shade greyscale palette (#000000/#525252/#A5A5A5/#FFFFFF). "
+             "By default the pipeline now expects the new colour palette "
+             "(#FFFFA5/#FF9494/#9494FF/#000000) and works entirely in colour. "
+             "Pass --grayscale to revert to the original greyscale behaviour.")
+    parser.add_argument(
         "--color", action="store_true",
-        help="Enable colour-palette mode. Expects photos taken with "
-             "the #FFFFA5/#FF9494/#9494FF/#000000 palette. Warp saves a "
-             "colour PNG; correct applies per-channel R+G front-light "
-             "correction; quantize classifies in corrected RG space and "
-             "writes both _gbcam.png (grayscale) and _gbcam_rgb.png (colour).")
+        help="(deprecated — colour mode is now the default; this flag is a no-op)")
 
     # ── Housekeeping ─────────────────────────────────────────
     parser.add_argument(
@@ -580,7 +581,7 @@ def main():
         sample_method   = args.sample_method,
         use_kmeans      = not args.no_kmeans,
         smooth          = not getattr(args, 'no_smooth', False),
-        color           = getattr(args, 'color', False),
+        color           = not getattr(args, 'grayscale', False),
         clean_steps     = args.clean_steps,
         debug           = args.debug,
         debug_dir       = debug_dir,

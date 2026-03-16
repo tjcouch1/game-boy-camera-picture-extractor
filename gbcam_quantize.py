@@ -98,83 +98,54 @@ _COLOR_TARGETS_RG = COLOR_PALETTE_RGB[:, :2].astype(np.float32)  # shape (4, 2)
 
 def _classify_color(samples_rgb, init_centers=None):
     """
-    Classify 128×112 corrected (R, G, B) samples to one of the four palette indices.
+    Classify 128×112 corrected samples into the four palette colours.
 
-    Uses k-means in 3-D RGB space with two-stage cluster matching:
-      1. G channel (primary): darkest-G cluster → BK; brightest-G → WH.
-         G reliably separates BK (G≈0) from WH (G=255) in all images.
-      2. R−G difference (secondary): among the two middle-G clusters,
-         lower R−G → DG (#9494FF: R=G=148), higher R−G → LG (#FF9494: R=255>G=148).
+    Uses **R, G, and B×0.5** (B down-weighted) for nearest-neighbour distance in
+    3-D space.  B contributes at half weight because its absolute level is less
+    reliable after the frontlight correction, but it still provides crucial
+    tiebreaking between DG (B=255, high blue) and LG (B=148, lower blue) for
+    pixels where R is ambiguous — particularly LG pixels near the left edge of
+    the frame where the R correction slightly undershoots.
 
-    Falls back to G-channel percentile segmentation if k-means fails.
+    After correction and subpixel-aware sampling, the expected positions are:
+
+        BK  #000000   R=  0  G=  0  B=  0   → weighted (  0,  0,   0)
+        DG  #9494FF   R=148  G=148  B=255   → weighted (148,148,127.5)
+        LG  #FF9494   R=255  G=148  B=148   → weighted (255,148, 74.0)
+        WH  #FFFFA5   R=255  G=255  B=165   → weighted (255,255, 82.5)
 
     Parameters
     ----------
-    samples_rgb  : (112, 128, 3) float32 — corrected (R, G, B) per camera pixel
-    init_centers : (4, 3) float32 or None — optional k-means initial seeds
+    samples_rgb  : (112, 128, 3) float32 — corrected, subpixel-sampled R, G, B
+    init_centers : ignored (kept for API compatibility)
 
     Returns
     -------
     labels : (112, 128) uint8  — palette index 0=BK 1=DG 2=LG 3=WH
-    method : str
+    method : str  — always "nearest-RGB(B×0.5)"
     """
-    flat = samples_rgb.reshape(-1, 3).astype(np.float32)   # (14336, 3)
+    _B_WEIGHT = 0.5
+    flat = samples_rgb.reshape(-1, 3).astype(np.float32)        # (N, 3)
+    flat_w = np.column_stack([flat[:, :2], flat[:, 2] * _B_WEIGHT])  # (N, 3) with B scaled
 
-    if init_centers is None:
-        init_centers = COLOR_PALETTE_RGB.astype(np.float32)
+    targets = COLOR_PALETTE_RGB.astype(np.float32)
+    targets_w = np.column_stack([targets[:, :2], targets[:, 2] * _B_WEIGHT])  # (4, 3)
 
-    # ── Try k-means in 3-D RGB ────────────────────────────────────────────────
-    try:
-        from sklearn.cluster import KMeans
-        from itertools import combinations
+    # Euclidean distance in B-weighted RGB space
+    dists = np.sum((flat_w[:, None, :] - targets_w[None, :, :])**2, axis=-1)  # (N, 4)
+    labels_flat = np.argmin(dists, axis=1)
 
-        km = KMeans(n_clusters=4, init=init_centers,
-                    n_init=3, max_iter=300, random_state=42)
-        km.fit(flat)
-        centers = km.cluster_centers_    # (4, 3)
+    # Log cluster means for diagnostics
+    counts = np.bincount(labels_flat, minlength=4)
+    names  = ['BK', 'DG', 'LG', 'WH']
+    center_info = []
+    for i, (name, cnt) in enumerate(zip(names, counts)):
+        if cnt > 0:
+            m = flat[labels_flat == i].mean(axis=0)
+            center_info.append(f"{name}({cnt})≈(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
+    log("  Nearest-RGB(B×0.5): " + "  ".join(center_info))
 
-        # Degenerate-cluster guard
-        min_sep = min(np.linalg.norm(centers[i] - centers[j])
-                      for i, j in combinations(range(4), 2))
-        if min_sep < 15.0:
-            raise ValueError(f"Degenerate k-means: min separation {min_sep:.1f}")
-
-        # Stage 1: sort by G → assign BK and WH
-        g_order = np.argsort(centers[:, 1])
-        km_to_palette = np.empty(4, dtype=int)
-        km_to_palette[g_order[0]] = 0   # darkest G  → BK
-        km_to_palette[g_order[3]] = 3   # brightest G → WH
-
-        # Stage 2: R−G difference distinguishes DG from LG
-        mid = [g_order[1], g_order[2]]
-        rg0 = centers[mid[0], 0] - centers[mid[0], 1]
-        rg1 = centers[mid[1], 0] - centers[mid[1], 1]
-        if rg0 <= rg1:
-            km_to_palette[mid[0]] = 1   # lower R−G → DG
-            km_to_palette[mid[1]] = 2   # higher R−G → LG
-        else:
-            km_to_palette[mid[0]] = 2
-            km_to_palette[mid[1]] = 1
-
-        labels_flat = km_to_palette[km.labels_]
-        names = ['BK', 'DG', 'LG', 'WH']
-        log(f"  Color k-means (3D RGB): centres "
-            f"{[(int(c[0]),int(c[1]),int(c[2])) for c in centers[g_order]]} "
-            f"→ {[names[km_to_palette[g_order[i]]] for i in range(4)]}  (G-primary, R−G-secondary)")
-        return labels_flat.reshape(112, 128).astype(np.uint8), "kmeans"
-
-    except Exception as e:
-        log(f"  Color k-means failed ({e}); falling back to G-percentile segmentation")
-
-    # ── G-percentile fallback ─────────────────────────────────────────────────
-    g_vals = flat[:, 1]
-    q1, q2, q3 = np.percentile(g_vals, [25, 50, 75])
-    labels_flat = np.zeros(len(g_vals), dtype=np.uint8)
-    labels_flat[g_vals >= q1] = 1
-    labels_flat[g_vals >= q2] = 2
-    labels_flat[g_vals >= q3] = 3
-    log(f"  G-percentile thresholds: {q1:.1f} / {q2:.1f} / {q3:.1f}")
-    return labels_flat.reshape(112, 128).astype(np.uint8), "percentile"
+    return labels_flat.reshape(112, 128).astype(np.uint8), "nearest-RGB(B×0.5)"
 
 
 def _process_file_color(input_path, output_path, smooth=True,
@@ -208,78 +179,20 @@ def _process_file_color(input_path, output_path, smooth=True,
         raise RuntimeError(f"Unexpected size {bgr.shape[1]}×{bgr.shape[0]}; "
                            f"expected {CAM_W}×{CAM_H}.")
 
-    # Load auxiliary zero-count image for DG→BK rule
-    zc_path = stem_p.parent / (stem + "_zc" + stem_p.suffix)
-    zerocounts = cv2.imread(str(zc_path), cv2.IMREAD_GRAYSCALE) if zc_path.exists() else None
-    med_path   = stem_p.parent / (stem + "_med" + stem_p.suffix)
-    medians    = cv2.imread(str(med_path), cv2.IMREAD_GRAYSCALE) if med_path.exists() else None
-
-    # Read correction metadata (obs_frame_R, obs_border_R) saved by the correct step.
-    # These are used to compute adaptive k-means initial centres that reflect the
-    # actual white-normalised positions of the palette colours in this specific image,
-    # rather than relying on the canonical target positions which only hold for
-    # well-exposed images.
-    init_centers = None
-    # The correct step saves a <stem_correct>.json alongside the correct PNG.
-    # The sample PNG stem ends in _sample; the correct PNG stem ends in _correct.
-    # Find the sibling correct.json by walking back from the sample path.
-    from gbcam_common import strip_step_suffix
-    base_stem = strip_step_suffix(stem)
-    meta_path = stem_p.parent / (base_stem + "_correct.json")
-    if not meta_path.exists():
-        # Also try one directory up (if output_dir differs from correct_dir)
-        meta_path2 = stem_p.parent.parent / (base_stem + "_correct.json")
-        if meta_path2.exists():
-            meta_path = meta_path2
-    if meta_path.exists():
-        try:
-            import json as _json
-            meta = _json.load(open(meta_path))
-            obs_fr = float(meta.get("obs_frame_R", 255))
-            obs_br = float(meta.get("obs_border_R", 148))
-            # After white-only R correction, the expected corrected positions are:
-            #   WH.R ≈ 255  (by construction)
-            #   DG.R ≈ obs_br / obs_fr * 255  (border R normalised to white)
-            #   LG.R ≈ 255  (LG has max R, same as WH)
-            #   BK.R ≈ 0    (theoretical; actual slightly above 0)
-            dg_r_init = float(np.clip(obs_br / max(obs_fr, 1.0) * 255, 0, 200))
-            init_centers = np.array([
-                [0.0,       0.0,   0.0],    # BK
-                [dg_r_init, 148.0, 255.0],  # DG: adaptive R, G=148, B=255
-                [255.0,     148.0, 148.0],  # LG
-                [255.0,     255.0, 165.0],  # WH
-            ], dtype=np.float32)
-            log(f"  Adaptive k-means seeds: DG.R_init={dg_r_init:.0f}  "
-                f"(obs_frame_R={obs_fr:.0f}, obs_border_R={obs_br:.0f})")
-        except Exception as e:
-            log(f"  Could not read correction metadata ({e}); using default k-means seeds")
-            init_centers = None
-
+    # Load the subpixel-sampled colour image from the sample step.
     img_rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-    samples_rgb = img_rgb.astype(np.float32)   # (112, 128, 3) — corrected R, G, B
+    samples_rgb = img_rgb.astype(np.float32)   # (112, 128, 3) — R, G, B
 
     log(f"  Loaded {CAM_W}×{CAM_H} colour sample image")
     log(f"  R: {samples_rgb[:,:,0].min():.0f}–{samples_rgb[:,:,0].max():.0f}  "
         f"G: {samples_rgb[:,:,1].min():.0f}–{samples_rgb[:,:,1].max():.0f}  "
         f"B: {samples_rgb[:,:,2].min():.0f}–{samples_rgb[:,:,2].max():.0f}")
 
-    # Classify in 3D RGB space (G primary, R-G secondary for DG/LG disambiguation)
-    labels, method = _classify_color(samples_rgb, init_centers=init_centers)
+    # Nearest-colour classification: Euclidean distance in 3-D RGB space.
+    # After spatial correction (correct step) + subpixel-aware sampling (sample step)
+    # each pixel should sit close to one of the four palette targets; no smoothing needed.
+    labels, method = _classify_color(samples_rgb)
     log(f"  Classification: {method}")
-
-    # Optional DG→BK zero-count rule (same as grayscale pipeline)
-    if smooth and zerocounts is not None:
-        changed = 0
-        for r in range(CAM_H):
-            for c in range(CAM_W):
-                if labels[r, c] == 1:   # DG
-                    zc = int(zerocounts[r, c])
-                    sv = int(samples_rgb[r, c, 0])   # R channel as brightness proxy
-                    if zc >= 12 or (zc >= 8 and sv <= 57):
-                        labels[r, c] = 0   # → BK
-                        changed += 1
-        if changed:
-            log(f"  Zero-count DG→BK: {changed} pixels corrected")
 
     # Build output images
     GRAY_VALS = np.array([0, 82, 165, 255], dtype=np.uint8)
@@ -454,7 +367,7 @@ def spatial_smooth(q, samples, medians=None, zerocounts=None):
 
 
 def process_file(input_path, output_path, use_kmeans=True, scale=8,
-                 smooth=True, color=False, debug=False, debug_dir=None):
+                 smooth=True, color=True, debug=False, debug_dir=None):
     if color:
         _process_file_color(input_path, output_path, smooth=smooth,
                             debug=debug, debug_dir=debug_dir)

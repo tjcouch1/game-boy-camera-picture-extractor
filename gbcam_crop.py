@@ -42,7 +42,8 @@ from gbcam_common import (
 SUFFIX = STEP_SUFFIX["crop"]
 
 
-def process_file(input_path, output_path, scale=8, debug=False, debug_dir=None):
+def process_file(input_path, output_path, scale=8, color=True,
+                 debug=False, debug_dir=None):
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
     log(f"[crop] {input_path}", always=True)

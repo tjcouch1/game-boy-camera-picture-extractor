@@ -417,24 +417,29 @@ def collect_white_samples_ch_color(img_rgb, scale, ch, pct=85):
 
 def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
                         dark_smooth=13, refine_passes=1,
-                        warm_strength=1.0,
                         debug=False, debug_dir=None):
     """
-    Color-mode correction.  Loads a BGR colour warp image, applies 2-D
-    front-light correction independently to the R and G channels using the
-    same Coons-patch + polynomial approach as the grayscale pipeline.
+    Colour-mode correction pipeline.
 
-    The correction anchors on two known references:
-      White (filmstrip frame)  → target R=255, G=255  (#FFFFA5, but only R/G used)
-      Dark  (inner DG border)  → target R=148, G=148  (#9494FF, but only R/G used)
+    Three stages applied in sequence:
 
-    The B channel is also corrected with two anchors, but with inverted targets:
-    the WH frame should be B=165 (#FFFFA5 is yellowish) and the DG border should
-    be B=255 (#9494FF is blue).  Because WH.B < DG.B the gain is negative —
-    corrected_B decreases as raw_B increases — which correctly maps the
-    front-lit blue screen back to the warm palette colours.
+    1. Per-channel spatial correction
+       Removes the front-light brightness gradient across the screen by fitting
+       a 2-D polynomial white surface to the filmstrip frame and normalising
+       every pixel against it.  The G channel additionally uses the inner
+       #9494FF border as a second (dark) anchor via a Coons bilinear patch
+       with an optional refinement pass using interior DG pixels.
+         R: white-surface normalisation → target 255  (#FFFFA5.R)
+         G: Coons + polynomial, two anchors  → target 255 / 148
+         B: white-surface normalisation → target 165  (#FFFFA5.B)
 
-    The corrected colour image is saved as a BGR PNG (same size as input).
+    2. Global colour normalisation
+       Measures the mean of the 85th-percentile block samples across all four
+       filmstrip frame strips (the solid yellow-white areas, ignoring dash
+       holes) and scales each channel globally so the frame matches EXACTLY
+       the target palette white colour (#FFFFA5 = R255 G255 B165).
+
+    3. Saves a colour BGR PNG and a sidecar JSON for downstream metadata.
     """
     from pathlib import Path as _Path
     stem = _Path(input_path).stem
@@ -454,51 +459,22 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     H, W = img_rgb.shape[:2]
     log(f"  Loaded {W}×{H} px (colour, scale={scale})")
 
-    # ── Warmth pre-processing ─────────────────────────────────────────────────
-    # Boost R and reduce B before the spatial correction so the four palette
-    # colours become more distinct.  The coefficients were derived by fitting a
-    # per-channel linear transform between an unedited phone photo and a
-    # hand-edited version where warmth was increased until the colours matched
-    # the intended palette appearance (#FFFFA5 / #FF9494 / #9494FF / #000000).
-    #   R: ×1.07 + 27   (lifts and warms)
-    #   G: ×0.98 − 2    (nearly unchanged)
-    #   B: ×0.90 − 28   (cools down the blue frontlight tint)
-    # warm_strength=0 disables this step; 1.0 applies the full reference
-    # transform; values > 1 increase the effect proportionally.
-    if warm_strength != 0.0:
-        s = float(warm_strength)
-        wg = 1.0 + (_WARM_GAIN - 1.0) * s     # per-channel gain
-        wb = _WARM_BIAS * s                     # per-channel bias
-        img_rgb = np.clip(
-            img_rgb * wg[None, None, :] + wb[None, None, :],
-            0.0, 255.0).astype(np.float32)
-        log(f"  Warmth s={s:.2f}: "
-            f"R×{wg[0]:.3f}{wb[0]:+.1f}  "
-            f"G×{wg[1]:.3f}{wb[1]:+.1f}  "
-            f"B×{wg[2]:.3f}{wb[2]:+.1f}")
+    # NOTE: Warmth pre-processing was already applied in the warp step.
+    # Do NOT apply it again here.
 
     corrected_rgb = np.zeros((H, W, 3), dtype=np.float32)
 
-    # ── R channel: white-surface normalisation → 255 ──────────────────────────
-    # Single-anchor: scales each pixel so the spatially-varying white frame level
-    # maps to 255.  This is more robust than a two-anchor correction because the
-    # DG inner border can still be compressed near zero in R after the warmth
-    # pre-processing in severely blue-tinted images.
-    log("  Channel R: white-norm → 255")
+    # ── Stage 1a: R channel — white-surface normalisation → 255 ───────────────
+    log("  R: white-surface normalisation → 255")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 0)
     white_surf_R = fit_surface(wy, wx, wv, H, W, poly_degree)
     obs_frame_R  = float(np.median(wv))
     corr_R = np.clip(img_rgb[:, :, 0] * (255.0 / np.maximum(white_surf_R, 5.0)),
                      0.0, 255.0).astype(np.float32)
     corrected_rgb[:, :, 0] = corr_R
-    log(f"    R corrected: camera-area mean="
-        f"{corr_R[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale, FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale].mean():.1f}")
 
-    # ── G channel: Coons-patch + polynomial, two anchors → 255 / 148 ─────────
-    # DG.G=148 stays above BK.G=0 in all viewing angles, so the two-anchor
-    # correction is reliable for G.  A refinement pass uses confident interior
-    # DG pixels (100≤corrected_G≤196) to improve the dark-surface estimate.
-    log("  Channel G: Coons+poly → 255 / 148")
+    # ── Stage 1b: G channel — Coons + polynomial, two anchors → 255 / 148 ─────
+    log("  G: Coons+poly → 255 / 148")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 1)
     white_surf_G = fit_surface(wy, wx, wv, H, W, poly_degree)
     left_g  = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_LEFT,  scale, 1)
@@ -520,46 +496,73 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
             img_rgb, scale, dark_smooth, 1)
         samp_G_approx = _quick_sample_color(
             np.stack([corr_R, corr_G], axis=-1), scale)[:, :, 1]
+        # DG pixels have corrected G in [100, 196] — the range between BK (≈0) and WH (≈255).
+        # LG pixels also land in this range (LG.G ≈ 148) but their contamination of the
+        # calibration surface is smaller than the benefit of the refinement pass.
         dg_mask = (samp_G_approx >= 100.0) & (samp_G_approx <= 196.0)
         cys, cxs = np.where(dg_mask)
         n_cal = len(cys)
-        log(f"    [G] Refinement: {n_cal} interior DG calibration pixels")
+        log(f"    G refinement: {n_cal} interior DG pixels")
         if n_cal >= 50:
             cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2 for gy in cys], float)
             cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2 for gx in cxs], float)
             cal_v = np.array([float(img_rgb[(FRAME_THICK+gy)*scale+scale//2,
                                             (FRAME_THICK+gx)*scale+scale//2, 1])
                                for gy, gx in zip(cys, cxs)], float)
-            all_y = np.concatenate([border_y_g, cal_y])
-            all_x = np.concatenate([border_x_g, cal_x])
-            all_v = np.concatenate([border_v_g, cal_v])
-            dark_surf_G2 = _fit_surface_poly(all_y, all_x, all_v, H, W, degree=4)
+            dark_surf_G2 = _fit_surface_poly(
+                np.concatenate([border_y_g, cal_y]),
+                np.concatenate([border_x_g, cal_x]),
+                np.concatenate([border_v_g, cal_v]),
+                H, W, degree=4)
             span_G2 = np.maximum(white_surf_G - dark_surf_G2, 5.0)
             gain_G2 = (span_G2 / (255.0 - 148.0)).astype(np.float32)
             off_G2  = (dark_surf_G2 - gain_G2 * 148.0).astype(np.float32)
             corr_G  = np.clip((img_rgb[:, :, 1] - off_G2) / gain_G2, 0.0, 255.0).astype(np.float32)
 
     corrected_rgb[:, :, 1] = corr_G
-    log(f"    G corrected: camera-area mean="
-        f"{corr_G[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale, FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale].mean():.1f}")
 
-    # ── B channel: white-surface normalisation → 165 ──────────────────────────
-    # Target WH.B=165 (#FFFFA5 is yellowish).  A two-anchor correction has
-    # negative gain (WH.B=165 < DG.B=255) which is numerically unstable when the
-    # DG border and white frame are both near saturation (DG border B ≈ frame B).
-    # White-only normalisation is robust in all cases:
-    #   corrected_B = raw_B × 165 / white_surf_B
-    # This removes the blue frontlight tint so the frame appears warm yellow-white.
-    log("  Channel B: white-norm → 165  (removes blue frontlight tint)")
+    # ── Stage 1c: B channel — white-surface normalisation → 165 ───────────────
+    # Target WH.B = 165 (#FFFFA5 is warm yellow, not pure white).
+    # White-norm is more stable than two-anchor for B because after the warmth
+    # pre-processing the DG border B and the frame B are both near saturation,
+    # leaving almost no span for a reliable Coons correction.
+    log("  B: white-surface normalisation → 165")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 2)
     white_surf_B = fit_surface(wy, wx, wv, H, W, poly_degree)
     corr_B = np.clip(img_rgb[:, :, 2] * (165.0 / np.maximum(white_surf_B, 5.0)),
                      0.0, 255.0).astype(np.float32)
     corrected_rgb[:, :, 2] = corr_B
-    log(f"    B corrected: camera-area mean="
-        f"{corr_B[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale, FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale].mean():.1f}")
 
-    # Compute observed border R (for downstream adaptive k-means seeding)
+    # ── Stage 2: Global colour normalisation — frame → exactly #FFFFA5 ─────────
+    # After the per-channel spatial corrections the frame should be approximately
+    # (255, 255, 165), but polynomial fit residuals leave a small offset.
+    # Measuring the p85 of each frame-strip block and scaling globally makes the
+    # frame flat #FFFFA5 by construction, which the sample step can then use as
+    # an absolute colour reference.
+    _TARGET_FRAME = np.array([255.0, 255.0, 165.0])  # #FFFFA5
+    global_scales = np.ones(3, dtype=np.float32)
+    frame_p85 = np.zeros(3, dtype=np.float32)
+    for ch in range(3):
+        vals = []
+        for gy in range(INNER_TOP):
+            for gx in range(10, SCREEN_W - 10):
+                blk = corrected_rgb[gy*scale:(gy+1)*scale, gx*scale:(gx+1)*scale, ch]
+                if blk.size > 0:
+                    vals.append(float(np.percentile(blk, 85)))
+        if vals:
+            arr = np.array(vals)
+            med = float(np.median(arr))
+            arr = arr[arr > 0.5 * med]  # reject outliers (dark dashes)
+            frame_p85[ch] = float(np.median(arr)) if arr.size else med
+        if frame_p85[ch] > 10.0:
+            global_scales[ch] = _TARGET_FRAME[ch] / frame_p85[ch]
+            corrected_rgb[:, :, ch] = np.clip(
+                corrected_rgb[:, :, ch] * global_scales[ch], 0, 255)
+
+    log(f"  Frame p85 before norm: R={frame_p85[0]:.0f} G={frame_p85[1]:.0f} B={frame_p85[2]:.0f}")
+    log(f"  Global scales: R={global_scales[0]:.4f} G={global_scales[1]:.4f} B={global_scales[2]:.4f}")
+
+    # Observed border R (for downstream k-means seeding)
     obs_border_R = float(np.median(
         [_gb_block_sample_ch_color(img_rgb, gy, gx_b, scale, 0)
          for gy in range(INNER_TOP, INNER_BOT + 1)
@@ -571,15 +574,43 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     out_bgr = cv2.cvtColor(np.clip(corrected_rgb, 0, 255).astype(np.uint8),
                             cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(output_path), out_bgr)
-    log(f"  Saved → {output_path}  (colour BGR, R white-norm→255, G Coons+poly→255/148, B white-norm→165)",
-        always=True)
+    log(f"  Saved → {output_path}  (colour, frame normalised to #FFFFA5)", always=True)
 
-    # Write sidecar JSON with frame/border R for downstream adaptive k-means seeding
+    # Verify: sample the camera area and check inner border
+    cam_rgb = corrected_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
+                            FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale, :]
+    log(f"  Camera area mean: R={cam_rgb[:,:,0].mean():.1f} G={cam_rgb[:,:,1].mean():.1f} B={cam_rgb[:,:,2].mean():.1f}")
+
+    # ── Debug images ─────────────────────────────────────────────────────────
+    if debug and debug_dir and stem:
+        # a: Side-by-side before/after (camera area only)
+        orig_cam = img_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
+                           FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale, :]
+        corr_cam = corrected_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
+                                 FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale, :]
+        side_bgr = cv2.cvtColor(
+            np.hstack([np.clip(orig_cam,0,255).astype(np.uint8),
+                       np.clip(corr_cam,0,255).astype(np.uint8)]),
+            cv2.COLOR_RGB2BGR)
+        save_debug(side_bgr, debug_dir, stem, "correct_color_a_before_after")
+        # b: White surface as false-colour heatmap (warm=high, cool=low) in BGR
+        ws_avg = (white_surf_R + white_surf_G + white_surf_B) / 3.0
+        ws_norm = np.clip((ws_avg - ws_avg.min()) / max(ws_avg.max() - ws_avg.min(), 1) * 255,
+                          0, 255).astype(np.uint8)
+        ws_heatmap = cv2.applyColorMap(ws_norm, cv2.COLORMAP_JET)
+        save_debug(ws_heatmap, debug_dir, stem, "correct_color_b_white_surf_heatmap")
+        # c: Full corrected image
+        save_debug(out_bgr, debug_dir, stem, "correct_color_c_full")
+
+    # Sidecar JSON
     import json as _json
     meta_path = _Path(output_path).with_suffix('.json')
-    _json.dump({"obs_frame_R": obs_frame_R, "obs_border_R": obs_border_R},
+    _json.dump({"obs_frame_R": obs_frame_R, "obs_border_R": obs_border_R,
+                "frame_p85_R": float(frame_p85[0]),
+                "frame_p85_G": float(frame_p85[1]),
+                "frame_p85_B": float(frame_p85[2])},
                open(str(meta_path), 'w'))
-    log(f"  Metadata → {meta_path}  (obs_frame_R={obs_frame_R:.0f} obs_border_R={obs_border_R:.0f})")
+    log(f"  Metadata → {meta_path}")
 
 
 def _fit_surface_poly(ys, xs, vals, H, W, degree=4):
@@ -635,8 +666,7 @@ def _collect_border_dark(gray, scale, dark_smooth):
 # ─────────────────────────────────────────────────────────────
 
 def process_file(input_path, output_path, scale=8, poly_degree=2,
-                 dark_smooth=13, refine_passes=1, color=False,
-                 warm_strength=1.0,
+                 dark_smooth=13, refine_passes=1, color=True,
                  debug=False, debug_dir=None):
     """
     Compute brightness-corrected output for a single warp-step image.
@@ -667,7 +697,6 @@ def process_file(input_path, output_path, scale=8, poly_degree=2,
         _process_file_color(input_path, output_path, scale=scale,
                             poly_degree=poly_degree, dark_smooth=dark_smooth,
                             refine_passes=refine_passes,
-                            warm_strength=warm_strength,
                             debug=debug, debug_dir=debug_dir)
         return
 

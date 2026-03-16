@@ -1,11 +1,9 @@
 
 ======================================================================
-PIPELINE RUN
+PIPELINE RUN  [colour]
   Input:      test-input/zelda-poster-1.jpg
   Output dir: ./test-output/zelda-poster-1
   scale=8  threshold=180  poly_degree=2  dark_smooth=13
-  sample_margin_h=None  sample_margin_v=None
-  sample_method=median  kmeans=True
 ======================================================================
 
 
@@ -19,311 +17,233 @@ PIPELINE RUN
   b — Initial perspective warp
   Initial warp → 1280×1152  (scale=8)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_b_initial_color.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_c_initial_gray.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_c_initial_color.png
   c — Refining alignment from inner border
-  Border edges: top=119(exp=120,err=-1), bot=1023(exp=1024,err=-1), left=119(exp=120,err=-1), right=1156(exp=1152,err=4)
+  Border edges: top=118(exp=120,err=-2), bot=1025(exp=1024,err=1), left=117(exp=120,err=-3), right=1157(exp=1152,err=5)
   After refinement: top=120(exp=120), bot=1024(exp=1024), left=120(exp=120), right=1152(exp=1152)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_d_refined_color.png
-  Saved → test-output\zelda-poster-1\zelda-poster-1_warp.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_e_final_gray.png
+  Border edges: top=120(exp=120,err=0), bot=1023(exp=1024,err=-1), left=120(exp=120,err=0), right=1151(exp=1152,err=-1)
+  After refinement: top=120(exp=120), bot=1024(exp=1024), left=120(exp=120), right=1152(exp=1152)
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_d_refined_color.png
+  d — Warmth (75%): R×1.055+19.9  G×0.987-2.2  B×0.944-24.4
+  Saved → test-output\zelda-poster-1\zelda-poster-1_warp.png  (colour BGR, warmth-corrected)
 
 ============================================================
-[correct] test-output\zelda-poster-1\zelda-poster-1_warp.png
-  Loaded 1280×1152 px (scale=8)
-  Collecting reference samples (white poly degree=2, dark smooth_k=13)…
-  White samples: 7379/7920 blocks kept  (median 207.6, range 156.0–243.0)
-  Dark  samples: 114×2 + 130×2 border pixels  (left range 118.5–156.5, right 136.0–153.0)
-  Fitting brightness surfaces…
-    (   0,   0): white=193.0  dark=129.1
-    (   0,1279): white=187.8  dark=143.1
-    (1151,   0): white=218.6  dark=154.8
-    (1151,1279): white=181.0  dark=141.2
-  Applying per-pixel affine correction (pass 1 — Coons patch dark surface)…
-  Dark  samples: 114×2 + 130×2 border pixels  (left range 118.5–156.5, right 136.0–153.0)
-  Refinement pass 1: 2090 interior dark-gray calibration pixels…
-    Dark surface refined — corner delta: (0,0): +7.4, (0,1279): -4.2, (1151,0): -20.5, (1151,1279): -25.2
-  Inner border (#525252 ref, target=82): before mean=141.2 (err=59.2), after mean=84.6 (err=2.6) (improved)
-  Saved → test-output\zelda-poster-1\zelda-poster-1_correct.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_a_gain_map.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_b_before_after.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_c_white_surface.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_d_dark_surface.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_e_full.png
+[correct/color] test-output\zelda-poster-1\zelda-poster-1_warp.png
+  Loaded 1280×1152 px (colour, scale=8)
+  R: white-surface normalisation → 255
+  G: Coons+poly → 255 / 148
+    G refinement: 7671 interior DG pixels
+  B: white-surface normalisation → 165
+  Frame p85 before norm: R=254 G=255 B=166
+  Global scales: R=1.0031 G=1.0014 B=0.9949
+  Saved → test-output\zelda-poster-1\zelda-poster-1_correct.png  (colour, frame normalised to #FFFFA5)
+  Camera area mean: R=177.0 G=134.9 B=144.2
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_a_before_after.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_b_white_surf_heatmap.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_c_full.png
+  Metadata → test-output\zelda-poster-1\zelda-poster-1_correct.json
 
 ============================================================
 [crop] test-output\zelda-poster-1\zelda-poster-1_correct.png
-  Loaded 1280×1152 px (scale=8, colour=False)
+  Loaded 1280×1152 px (scale=8, colour=True)
   Camera region: (128,128) → (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=84.0, white frame mean=187.5 (OK)
+  Validation: inner border mean=138.7, white frame mean=209.7 (OK)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_correct__crop_a_region.png
   Saved → test-output\zelda-poster-1\zelda-poster-1_crop.png  (1024×896 px)
 
 ============================================================
 [sample] test-output\zelda-poster-1\zelda-poster-1_crop.png
   Loaded 1024×896 px  (128×112 GB pixels at scale=8)
-  Block 8×8  margins h=2 v=1  sample region 4×6  method=median
-  Stats: min=0.0  max=255.0  mean=152.7
-  Saved → test-output\zelda-poster-1\zelda-poster-1_sample.png  (128×112 px)
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__sample_a_8x.png
+  Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
+  Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
+  Saved → test-output\zelda-poster-1\zelda-poster-1_sample.png  (colour, subpixel-aware, 128×112 px)
+  R: 23–255  G: 0–255  B: 60–171
 
 ============================================================
-[quantize] test-output\zelda-poster-1\zelda-poster-1_sample.png
-  Loaded 128×112 px — range 0–255
-  K-means centres: ['1.1', '80.7', '163.6', '243.8']
-  Cluster gaps:    ['79.6', '82.9', '80.2']
-  K-means thresholds: ['2.0', '123.0', '207.0']
-  Spatial smoothing applied.
-  Color   0:  1586 px  ( 11.1%)
-  Color  82:  3581 px  ( 25.0%)
-  Color 165:  4186 px  ( 29.2%)
-  Color 255:  4983 px  ( 34.8%)
-  Saved → test-output\zelda-poster-1\zelda-poster-1_gbcam.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_a_8x.png
+[quantize/color] test-output\zelda-poster-1\zelda-poster-1_sample.png
+  Loaded 128×112 colour sample image
+  R: 22–255  G: 0–255  B: 60–171
+  Nearest-RGB(B×0.5): BK(1567)≈(R64,G11,B108)  DG(3491)≈(R147,G125,B142)  LG(4297)≈(R229,G140,B127)  WH(4981)≈(R240,G240,B140)
+  Classification: nearest-RGB(B×0.5)
+  Saved → test-output\zelda-poster-1\zelda-poster-1_gbcam.png  (grayscale palette)
+  Saved → test-output\zelda-poster-1\zelda-poster-1_gbcam_rgb.png  (new RGB palette)
+  BK (#000000):  1567 px  ( 10.9%)
+  DG (#9494FF):  3491 px  ( 24.4%)
+  LG (#FF9494):  4297 px  ( 30.0%)
+  WH (#FFFFA5):  4981 px  ( 34.7%)
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_a_gray_8x.png
+    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_b_rgb_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14239  (99.32%)
-  Different    : 97   (0.68%)
+  Matching     : 14289  (99.67%)
+  Different    : 47   (0.33%)
 
 ──────────────────────────────────────────────────────────────────────
 COLOR DISTRIBUTION
 ──────────────────────────────────────────────────────────────────────
-  Color                               Result   Reference      Diff
-  black (#000000)                       1586        1572       +14
-  dark-gray (#525252)                   3581        3526       +55
-  light-gray (#A5A5A5)                  4186        4255       -69
-  white (#FFFFFF)                       4983        4983        +0
+  Color                     Result   Reference      Diff
+  BK  #000000                 1567        1572        -5
+  DG  #9494FF                 3491        3526       -35
+  LG  #FF9494                 4297        4255       +42
+  WH  #FFFFA5                 4981        4983        -2
 
 ──────────────────────────────────────────────────────────────────────
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ──────────────────────────────────────────────────────────────────────
-  Result \ Ref               0        82       165       255   TOTAL
-  black (#000000)        1572 ✓       14 ✗        0          0      1586
-  dark-gray (#525252)        0       3506 ✓       75 ✗        0      3581
-  light-gray (#A5A5A5)        0          6 ✗     4179 ✓        1 ✗    4186
-  white (#FFFFFF)           0          0          1 ✗     4982 ✓    4983
-                           1572       3526       4255       4983
+  Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
+  BK  #000000                    1567 v                0                  0                  0      1567
+  DG  #9494FF                       5 X             3486 v                0                  0      3491
+  LG  #FF9494                       0                 40 X             4255 v                2 X    4297
+  WH  #FFFFA5                       0                  0                  0               4981 v    4981
 
 ──────────────────────────────────────────────────────────────────────
-SPATIAL DISTRIBUTION OF ERRORS  (97 pixels)
+ERROR BREAKDOWN  (result -> reference)
 ──────────────────────────────────────────────────────────────────────
-  Row range  : 17–108  (top=0, bottom=111)
-  Col range  : 51–121  (left=0, right=127)
-  top (rows 0-55) / left (cols 0-63): 0 errors
-  top (rows 0-55) / right (cols 64-127): 19 errors
-  bottom (rows 56-111) / left (cols 0-63): 4 errors
-  bottom (rows 56-111) / right (cols 64-127): 74 errors
-
-  Errors per row (GB rows 0–111):
-    row  17:    1  █
-    row  38:    1  █
-    row  39:    1  █
-    row  40:    2  ██
-    row  41:    1  █
-    row  42:    1  █
-    row  43:    1  █
-    row  44:    1  █
-    row  45:    1  █
-    row  47:    1  █
-    row  48:    1  █
-    row  49:    1  █
-    row  50:    1  █
-    row  53:    2  ██
-    row  54:    3  ███
-    row  56:    4  ████
-    row  57:    1  █
-    row  58:    2  ██
-    row  59:    5  █████
-    row  60:    2  ██
-    row  62:    4  ████
-    row  63:    2  ██
-    row  64:    1  █
-    row  65:    1  █
-    row  66:    3  ███
-    row  67:    1  █
-    row  68:    7  ███████
-    row  69:    1  █
-    row  71:    2  ██
-    row  72:    4  ████
-    row  73:    2  ██
-    row  74:    3  ███
-    row  76:    2  ██
-    row  80:    5  █████
-    row  81:    1  █
-    row  82:    1  █
-    row  83:    3  ███
-    row  84:    3  ███
-    row  85:    1  █
-    row  88:    1  █
-    row  89:    1  █
-    row  90:    3  ███
-    row  91:    4  ████
-    row  92:    4  ████
-    row  94:    1  █
-    row  98:    1  █
-    row  99:    1  █
-    row 108:    1  █
-
-  Errors per column (GB cols 0–127):
-    col  51:    1  █
-    col  60:    1  █
-    col  62:    2  ██
-    col  69:    2  ██
-    col  71:    1  █
-    col  73:    1  █
-    col  75:    2  ██
-    col  77:    1  █
-    col  78:    1  █
-    col  79:    1  █
-    col  80:    2  ██
-    col  81:    2  ██
-    col  82:    6  ██████
-    col  83:    3  ███
-    col  84:    4  ████
-    col  85:    6  ██████
-    col  86:    4  ████
-    col  87:    1  █
-    col  88:    5  █████
-    col  90:    2  ██
-    col  91:    6  ██████
-    col  92:    5  █████
-    col  93:    6  ██████
-    col  94:    5  █████
-    col  95:    7  ███████
-    col  96:    4  ████
-    col  97:    3  ███
-    col  98:    5  █████
-    col  99:    1  █
-    col 101:    2  ██
-    col 102:    1  █
-    col 103:    1  █
-    col 104:    1  █
-    col 110:    1  █
-    col 121:    1  █
+  DG  #9494FF  ->  BK  #000000 : 5 px
+  LG  #FF9494  ->  DG  #9494FF : 40 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 2 px
 
 ──────────────────────────────────────────────────────────────────────
-FULL PIXEL ERROR LIST  (97 pixels, sorted by row then col)
+SPATIAL DISTRIBUTION OF ERRORS
 ──────────────────────────────────────────────────────────────────────
-   Row   Col                  Pipeline                 Reference  Error type
-    17    69      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    38    80      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    39    93       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40    88       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    40    94       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    41    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    42    98       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    43    99       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    44    84       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    45    85       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    47    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    48    93       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    49    85       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    50    86       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    53    91       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    53    97       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    54    90       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    54    92       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    54    98       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    56    84       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    56    85       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    56    90       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    56    96       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    57    91       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    58    91           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    58    92       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    59    79       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    59    81       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    59    85       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    59    93       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    59    97       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    60    94       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    60    98       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    62    82       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    62    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    62    96       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    62    98       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    63    91       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    63    97       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    64    86           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    65    95           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    66    77           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    66    94       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    66   101       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    67    92           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    68    51      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    68    82       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    68    88           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    68    93       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    68    94       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    68   103       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    68   104       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    69    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    71    83           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    71    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    72    82       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    72    88           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    72    92       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    72    98       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    73    75       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    73    95       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    74    84       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    74   101       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    74   110           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    76    96       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    76   102       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    80    71       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    80    80       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    80    82       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    80    88           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    80    92           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    81    81       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    82    82       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    83    85       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    83    91           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    83    93           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    84    85       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    84    86       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    84    96       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    85    60      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    88    62      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    89    69       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    90    78       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    90    82       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    90    86       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    91    62      light-gray (#A5A5A5)       dark-gray (#525252)  too light (off by 1 level)
-    91    83       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    91    87       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    91    91       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    92    84       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    92    88       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    92    93       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    92    94       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    94    75           black (#000000)       dark-gray (#525252)  too dark  (off by 1 level)
-    98    73       dark-gray (#525252)      light-gray (#A5A5A5)  too dark  (off by 1 level)
-    99   121      light-gray (#A5A5A5)           white (#FFFFFF)  too dark  (off by 1 level)
-   108    83           white (#FFFFFF)      light-gray (#A5A5A5)  too light (off by 1 level)
+  Errors per row (0–111):
+    row  31 :    1  #
+    row  34 :    1  #
+    row  35 :    1  #
+    row  41 :    1  #
+    row  45 :    1  #
+    row  46 :    1  #
+    row  54 :    1  #
+    row  55 :    1  #
+    row  56 :    4  ####
+    row  58 :    1  #
+    row  60 :    1  #
+    row  61 :    1  #
+    row  62 :    1  #
+    row  63 :    1  #
+    row  64 :    1  #
+    row  65 :    1  #
+    row  66 :    2  ##
+    row  68 :    2  ##
+    row  77 :    2  ##
+    row  80 :    1  #
+    row  82 :    2  ##
+    row  83 :    1  #
+    row  85 :    4  ####
+    row  87 :    1  #
+    row  88 :    2  ##
+    row  89 :    1  #
+    row  90 :    1  #
+    row  91 :    1  #
+    row  92 :    2  ##
+    row  93 :    1  #
+    row  96 :    1  #
+    row 102 :    1  #
+    row 103 :    1  #
+    row 104 :    1  #
+    row 110 :    1  #
+  Errors per column (0–127):
+    col   1 :    1  #
+    col   2 :    1  #
+    col   3 :    3  ###
+    col   5 :    2  ##
+    col   6 :    2  ##
+    col   7 :    4  ####
+    col  11 :    1  #
+    col  14 :    1  #
+    col  15 :    2  ##
+    col  46 :    1  #
+    col  51 :    1  #
+    col  54 :    1  #
+    col  60 :    1  #
+    col  62 :    5  #####
+    col  67 :    1  #
+    col  70 :    2  ##
+    col  74 :    4  ####
+    col  75 :    2  ##
+    col  76 :    2  ##
+    col  78 :    1  #
+    col  81 :    3  ###
+    col  82 :    2  ##
+    col  83 :    1  #
+    col  84 :    1  #
+    col  92 :    1  #
+    col  95 :    1  #
 
 ──────────────────────────────────────────────────────────────────────
-DIAGNOSTIC IMAGES  (saved to test-output\zelda-poster-1/)
+FULL PIXEL ERROR LIST  (47 errors, sorted by row then column)
 ──────────────────────────────────────────────────────────────────────
-  zelda-poster-1_diag_result_vs_reference.png   — pipeline result (left) vs reference (right)
-  zelda-poster-1_diag_error_map.png             — white=correct; blue=too-dark; red/orange=too-light
-  zelda-poster-1_diag_abs_diff.png              — absolute brightness difference (scaled)
-  zelda-poster-1_diag_level_diff.png            — level difference: mid-gray=correct, darker=result too dark, lighter=result too light
+   row   col              result           reference
+    31    74         LG  #FF9494         DG  #9494FF
+    34    15         LG  #FF9494         DG  #9494FF
+    35    74         LG  #FF9494         DG  #9494FF
+    41    84         LG  #FF9494         DG  #9494FF
+    45    82         LG  #FF9494         DG  #9494FF
+    46    83         LG  #FF9494         DG  #9494FF
+    54    81         LG  #FF9494         DG  #9494FF
+    55    82         LG  #FF9494         DG  #9494FF
+    56     7         LG  #FF9494         DG  #9494FF
+    56    74         LG  #FF9494         DG  #9494FF
+    56    81         LG  #FF9494         DG  #9494FF
+    56    92         LG  #FF9494         DG  #9494FF
+    58    81         LG  #FF9494         DG  #9494FF
+    60    95         LG  #FF9494         DG  #9494FF
+    61    76         LG  #FF9494         DG  #9494FF
+    62    75         LG  #FF9494         DG  #9494FF
+    63    76         LG  #FF9494         DG  #9494FF
+    64     7         DG  #9494FF         BK  #000000
+    65    78         LG  #FF9494         DG  #9494FF
+    66     5         DG  #9494FF         BK  #000000
+    66    75         LG  #FF9494         DG  #9494FF
+    68    51         LG  #FF9494         DG  #9494FF
+    68    67         LG  #FF9494         DG  #9494FF
+    77    70         LG  #FF9494         DG  #9494FF
+    77    74         LG  #FF9494         DG  #9494FF
+    80     7         DG  #9494FF         BK  #000000
+    82     2         LG  #FF9494         WH  #FFFFA5
+    82     3         LG  #FF9494         DG  #9494FF
+    83     6         LG  #FF9494         DG  #9494FF
+    85     6         LG  #FF9494         DG  #9494FF
+    85    46         LG  #FF9494         DG  #9494FF
+    85    60         LG  #FF9494         DG  #9494FF
+    85    70         LG  #FF9494         DG  #9494FF
+    87    62         LG  #FF9494         DG  #9494FF
+    88    11         DG  #9494FF         BK  #000000
+    88    62         LG  #FF9494         DG  #9494FF
+    89    14         DG  #9494FF         BK  #000000
+    90    54         LG  #FF9494         DG  #9494FF
+    91    62         LG  #FF9494         DG  #9494FF
+    92     5         LG  #FF9494         DG  #9494FF
+    92    62         LG  #FF9494         DG  #9494FF
+    93    62         LG  #FF9494         DG  #9494FF
+    96     7         LG  #FF9494         DG  #9494FF
+   102     3         LG  #FF9494         DG  #9494FF
+   103    15         LG  #FF9494         WH  #FFFFA5
+   104     3         LG  #FF9494         DG  #9494FF
+   110     1         LG  #FF9494         DG  #9494FF
+
+──────────────────────────────────────────────────────────────────────
+DIAGNOSTIC IMAGES  (in ./test-output/zelda-poster-1)
+──────────────────────────────────────────────────────────────────────
+  zelda-poster-1_diag_result.png     — pipeline output (colour palette)
+  zelda-poster-1_diag_reference.png  — reference image (colour palette)
+  zelda-poster-1_diag_side_by_side.png  — result (left) vs reference (right)
+  zelda-poster-1_diag_error_map.png  — white=correct, colours=error type
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14239  (99.32%)
-  Different    : 97   (0.68%)
-  Color                               Result   Reference      Diff
-  black (#000000)                       1586        1572       +14
-  dark-gray (#525252)                   3581        3526       +55
-  light-gray (#A5A5A5)                  4186        4255       -69
-  white (#FFFFFF)                       4983        4983        +0
+  Matching     : 14289  (99.67%)
+  Different    : 47   (0.33%)
+  BK  #000000                 1567        1572        -5
+  DG  #9494FF                 3491        3526       -35
+  LG  #FF9494                 4297        4255       +42
+  WH  #FFFFA5                 4981        4983        -2
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.

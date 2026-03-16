@@ -106,8 +106,7 @@ def _initial_warp(img, corners, scale, debug=False, debug_dir=None, stem=None):
     log(f"  Initial warp → {W}×{H}  (scale={scale})")
     if debug and debug_dir and stem:
         save_debug(warped, debug_dir, stem, "warp_b_initial_color")
-        save_debug(cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY),
-                   debug_dir, stem, "warp_c_initial_gray")
+        save_debug(warped, debug_dir, stem, "warp_c_initial_color")
     return warped
 
 
@@ -147,8 +146,17 @@ def _find_border_outer_edges(gray, scale):
 def refine_warp(warped, scale, debug=False, debug_dir=None, stem=None):
     """Micro-correct the warp so the inner border sits exactly on the pixel grid."""
     H, W = warped.shape[:2]
-    gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY) if warped.ndim == 3 else warped
-    top, bot, left, right = _find_border_outer_edges(gray, scale)
+    if warped.ndim == 3:
+        # For colour images, the R−B difference gives maximum contrast between:
+        #   frame  (#FFFFA5): R=255, B=165 → R−B = +90  (warm, positive)
+        #   border (#9494FF): R=148, B=255 → R−B = −107 (cool, negative)
+        # This is far better than grayscale (which gives frame≈245, border≈160).
+        rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB).astype(np.float32)
+        rb_diff = np.clip(rgb[:, :, 0] - rgb[:, :, 2] + 128, 0, 255).astype(np.uint8)
+        channel = rb_diff
+    else:
+        channel = warped
+    top, bot, left, right = _find_border_outer_edges(channel, scale)
     exp_top, exp_bot = INNER_TOP * scale, INNER_BOT * scale
     exp_left, exp_right = INNER_LEFT * scale, INNER_RIGHT * scale
     log(f"  Border edges: "
@@ -161,8 +169,12 @@ def refine_warp(warped, scale, debug=False, debug_dir=None, stem=None):
                       [exp_right, exp_bot], [exp_left, exp_bot]])
     M       = cv2.getPerspectiveTransform(src, dst)
     refined = cv2.warpPerspective(warped, M, (W, H), flags=cv2.INTER_LANCZOS4)
-    gray2 = cv2.cvtColor(refined, cv2.COLOR_BGR2GRAY) if refined.ndim == 3 else refined
-    t2, b2, l2, r2 = _find_border_outer_edges(gray2, scale)
+    if refined.ndim == 3:
+        rgb2 = cv2.cvtColor(refined, cv2.COLOR_BGR2RGB).astype(np.float32)
+        channel2 = np.clip(rgb2[:, :, 0] - rgb2[:, :, 2] + 128, 0, 255).astype(np.uint8)
+    else:
+        channel2 = refined
+    t2, b2, l2, r2 = _find_border_outer_edges(channel2, scale)
     log(f"  After refinement: top={t2}(exp={exp_top}), bot={b2}(exp={exp_bot}), "
         f"left={l2}(exp={exp_left}), right={r2}(exp={exp_right})")
     if debug and debug_dir and stem:
@@ -173,7 +185,7 @@ def refine_warp(warped, scale, debug=False, debug_dir=None, stem=None):
 
 
 def process_file(input_path, output_path, scale=8, thresh_val=180,
-                 color=False, debug=False, debug_dir=None):
+                 color=True, debug=False, debug_dir=None):
     """
     color : bool
         When True, save a colour (BGR) PNG instead of grayscale.
@@ -218,6 +230,7 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
         warmed = np.clip(warped.astype(np.float32) @ _W_MAT.T + _W_OFF,
                          0, 255).astype(np.uint8)
         warped = refine_warp(warmed, scale, debug, debug_dir, stem)
+
         log(f"  d — Warmth ({_WARMTH_STRENGTH:.0%}): "
             f"R×{_W_MAT[2,2]:.3f}{_W_OFF[2]:+.1f}  "
             f"G×{_W_MAT[1,1]:.3f}{_W_OFF[1]:+.1f}  "
@@ -230,7 +243,7 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
         cv2.imwrite(str(output_path), gray)
         log(f"  Saved → {output_path}", always=True)
         if debug and debug_dir and stem:
-            save_debug(gray, debug_dir, stem, "warp_e_final_gray")
+            save_debug(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR), debug_dir, stem, "warp_e_final_gray")
 
 
 def main():
@@ -260,10 +273,10 @@ def main():
     parser.add_argument("--debug", action="store_true",
                         help="Enable verbose logging and save diagnostic images: "
                              "warp_a_corners (detected corners overlaid on the "
-                             "photo), warp_b_initial_color and warp_c_initial_gray "
+                             "photo), warp_b_initial_color and warp_c_initial_color "
                              "(result after the first perspective transform), "
                              "warp_d_refined_color (after snapping to the inner "
-                             "border), warp_e_final_gray (the final grayscale "
+                             "border), warp_e_final_color (the final colour "
                              "output). All saved to <output-dir>/debug/.")
     args = parser.parse_args()
     set_verbose(args.debug)
