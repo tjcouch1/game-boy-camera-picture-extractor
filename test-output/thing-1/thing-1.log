@@ -11,7 +11,7 @@ PIPELINE RUN  [colour]
 [warp] test-input/thing-1.jpg
   Loaded 1299×1186 px
   a — Detecting screen corners
-  Contour: area=1393862  bbox=(13,20,1258×1135)  aspect=1.108 (expected≈1.111)
+  Contour: area=1393862  aspect=1.108 (expected≈1.111)  thresh=180  quad_score=0.0345
   Corners (TL TR BR BL): [[25, 21], [1269, 38], [1250, 1153], [17, 1150]]
     [debug] test-output\thing-1\debug\thing-1__warp_a_corners.png
   b — Initial perspective warp

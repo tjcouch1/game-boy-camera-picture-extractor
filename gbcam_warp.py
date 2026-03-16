@@ -53,40 +53,92 @@ def _order_corners(pts):
                      pts[np.argmax(s)], pts[np.argmax(diff)]], dtype=np.float32)
 
 
-def find_screen_corners(img, thresh_val=180, debug=False, debug_dir=None, stem=None):
-    """Locate the four corners of the white GB screen frame."""
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, thresh_val, 255, cv2.THRESH_BINARY)
-    kernel = np.ones((7, 7), np.uint8)
-    closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+def _score_quad(ordered, img_w, img_h, target_aspect=160/144):
+    """
+    Quality score for a detected 4-corner quad (lower = better).
+    Penalises: wrong aspect ratio, non-parallel opposite sides, clipped corners.
+    """
+    TL, TR, BR, BL = ordered
+    top   = float(np.linalg.norm(TR - TL))
+    bot   = float(np.linalg.norm(BR - BL))
+    left  = float(np.linalg.norm(BL - TL))
+    right = float(np.linalg.norm(BR - TR))
+    w_avg = (top + bot) / 2
+    h_avg = (left + right) / 2
+    if h_avg < 10:
+        return 1e9
+    aspect_err   = abs(w_avg / h_avg / target_aspect - 1.0)
+    parallel_err = (abs(top - bot) / max(w_avg, 1)
+                    + abs(left - right) / max(h_avg, 1))
+    margin = 5
+    clips = sum([TL[0] < margin, TL[1] < margin,
+                 TR[0] > img_w - margin, TR[1] < margin,
+                 BR[0] > img_w - margin, BR[1] > img_h - margin,
+                 BL[0] < margin, BL[1] > img_h - margin])
+    return aspect_err * 2.0 + parallel_err + clips * 0.1
 
-    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
+
+def find_screen_corners(img, thresh_val=180, debug=False, debug_dir=None, stem=None):
+    """
+    Locate the four corners of the white GB screen frame.
+
+    Tries thresholds from ``thresh_val`` down to 120 and picks the candidate
+    with the best quad-quality score (closest to the expected 160:144 aspect
+    ratio with parallel opposite sides).  This makes detection robust for
+    heavily blue-tinted photos where parts of the warm white frame are too dim
+    to clear the default threshold.
+    """
+    gray    = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_h, img_w = gray.shape
+    kernel  = np.ones((7, 7), np.uint8)
+    best    = None   # (score, corners, thresh, area, aspect)
+
+    for thresh in range(thresh_val, 114, -5):
+        _, binary  = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
+        closed     = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+        contours, _= cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            continue
+
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)
+        largest  = contours[0]
+        area     = cv2.contourArea(largest)
+        if area < 1000:
+            continue
+
+        hull  = cv2.convexHull(largest)
+        peri  = cv2.arcLength(hull, True)
+        quad  = None
+        for eps in [0.02, 0.03, 0.05, 0.01, 0.10]:
+            approx = cv2.approxPolyDP(hull, eps * peri, True).reshape(-1, 2)
+            if len(approx) == 4:
+                quad = approx
+                break
+        if quad is None:
+            x, y, w, h = cv2.boundingRect(largest)
+            quad = np.array([[x, y], [x+w, y], [x+w, y+h], [x, y+h]])
+
+        ordered = _order_corners(quad.astype(float))
+        score   = _score_quad(ordered, img_w, img_h)
+
+        if best is None or score < best[0]:
+            x, y, w, h = cv2.boundingRect(largest)
+            aspect = w / h if h else 0
+            best = (score, ordered, thresh, area, aspect)
+
+        # Good enough — stop early
+        if score < 0.05:
+            break
+
+    if best is None:
         raise RuntimeError("No bright contour found — try adjusting --threshold")
 
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    largest  = contours[0]
-    x, y, w, h = cv2.boundingRect(largest)
-    aspect   = w / h if h else 0
+    score, ordered, used_thresh, area, aspect = best
     expected = SCREEN_W / SCREEN_H
-    log(f"  Contour: area={cv2.contourArea(largest):.0f}  "
-        f"bbox=({x},{y},{w}×{h})  aspect={aspect:.3f} (expected≈{expected:.3f})")
-    if not (0.85 < aspect / expected < 1.15):
-        log("  WARNING: aspect ratio mismatch — detection may be unreliable")
-
-    hull  = cv2.convexHull(largest)
-    peri  = cv2.arcLength(hull, True)
-    corners = None
-    for eps in [0.02, 0.03, 0.05, 0.01, 0.10]:
-        approx = cv2.approxPolyDP(hull, eps * peri, True).reshape(-1, 2)
-        if len(approx) == 4:
-            corners = approx
-            break
-    if corners is None or len(corners) != 4:
-        log("  WARNING: could not fit 4-corner quad; using bounding box")
-        corners = np.array([[x, y], [x+w, y], [x+w, y+h], [x, y+h]])
-
-    ordered = _order_corners(corners.astype(float))
+    log(f"  Contour: area={area:.0f}  aspect={aspect:.3f} (expected≈{expected:.3f})"
+        f"  thresh={used_thresh}  quad_score={score:.4f}")
+    if score > 0.15:
+        log("  WARNING: quad quality is low — detection may be unreliable")
     log(f"  Corners (TL TR BR BL): {ordered.astype(int).tolist()}")
 
     if debug and debug_dir and stem:

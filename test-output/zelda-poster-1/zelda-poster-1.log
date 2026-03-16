@@ -11,7 +11,7 @@ PIPELINE RUN  [colour]
 [warp] test-input/zelda-poster-1.jpg
   Loaded 1297×1188 px
   a — Detecting screen corners
-  Contour: area=1401848  bbox=(13,20,1259×1136)  aspect=1.108 (expected≈1.111)
+  Contour: area=1401848  aspect=1.108 (expected≈1.111)  thresh=180  quad_score=0.0317
   Corners (TL TR BR BL): [[24, 20], [1270, 34], [1255, 1155], [17, 1152]]
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_a_corners.png
   b — Initial perspective warp
