@@ -36,9 +36,9 @@ PIPELINE RUN  [colour]
     G refinement: 7671 interior DG pixels
   B: white-surface normalisation → 165
   Frame p85 before norm: R=254 G=255 B=166
-  Global scales: R=1.0031 G=1.0014 B=0.9949
+  Global scales: R=1.0031 G=1.0009 B=0.9949
   Saved → test-output\zelda-poster-1\zelda-poster-1_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=177.0 G=134.9 B=144.2
+  Camera area mean: R=177.0 G=134.8 B=144.2
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_a_before_after.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_b_white_surf_heatmap.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_c_full.png
@@ -48,7 +48,7 @@ PIPELINE RUN  [colour]
 [crop] test-output\zelda-poster-1\zelda-poster-1_correct.png
   Loaded 1280×1152 px (scale=8, colour=True)
   Camera region: (128,128) → (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=138.7, white frame mean=209.7 (OK)
+  Validation: inner border mean=138.0, white frame mean=202.8 (OK)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_correct__crop_a_region.png
   Saved → test-output\zelda-poster-1\zelda-poster-1_crop.png  (1024×896 px)
 
@@ -64,14 +64,14 @@ PIPELINE RUN  [colour]
 [quantize/color] test-output\zelda-poster-1\zelda-poster-1_sample.png
   Loaded 128×112 colour sample image
   R: 22–255  G: 0–255  B: 60–171
-  Nearest-RGB(B×0.5): BK(1567)≈(R64,G11,B108)  DG(3491)≈(R147,G125,B142)  LG(4297)≈(R229,G140,B127)  WH(4981)≈(R240,G240,B140)
-  Classification: nearest-RGB(B×0.5)
+  Nearest-RGB(B×0.40): BK(1567)≈(R64,G11,B108)  DG(3528)≈(R147,G125,B142)  LG(4261)≈(R229,G140,B127)  WH(4980)≈(R240,G240,B140)
+  Classification: nearest-RGB(B×0.40)
   Saved → test-output\zelda-poster-1\zelda-poster-1_gbcam.png  (grayscale palette)
   Saved → test-output\zelda-poster-1\zelda-poster-1_gbcam_rgb.png  (new RGB palette)
   BK (#000000):  1567 px  ( 10.9%)
-  DG (#9494FF):  3491 px  ( 24.4%)
-  LG (#FF9494):  4297 px  ( 30.0%)
-  WH (#FFFFA5):  4981 px  ( 34.7%)
+  DG (#9494FF):  3528 px  ( 24.6%)
+  LG (#FF9494):  4261 px  ( 29.7%)
+  WH (#FFFFA5):  4980 px  ( 34.7%)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_a_gray_8x.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_b_rgb_8x.png
 
@@ -79,152 +79,92 @@ PIPELINE RUN  [colour]
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14289  (99.67%)
-  Different    : 47   (0.33%)
+  Matching     : 14319  (99.88%)
+  Different    : 17   (0.12%)
 
 ──────────────────────────────────────────────────────────────────────
 COLOR DISTRIBUTION
 ──────────────────────────────────────────────────────────────────────
   Color                     Result   Reference      Diff
   BK  #000000                 1567        1572        -5
-  DG  #9494FF                 3491        3526       -35
-  LG  #FF9494                 4297        4255       +42
-  WH  #FFFFA5                 4981        4983        -2
+  DG  #9494FF                 3528        3526        +2
+  LG  #FF9494                 4261        4255        +6
+  WH  #FFFFA5                 4980        4983        -3
 
 ──────────────────────────────────────────────────────────────────────
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ──────────────────────────────────────────────────────────────────────
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1567 v                0                  0                  0      1567
-  DG  #9494FF                       5 X             3486 v                0                  0      3491
-  LG  #FF9494                       0                 40 X             4255 v                2 X    4297
-  WH  #FFFFA5                       0                  0                  0               4981 v    4981
+  DG  #9494FF                       5 X             3520 v                3 X                0      3528
+  LG  #FF9494                       0                  6 X             4252 v                3 X    4261
+  WH  #FFFFA5                       0                  0                  0               4980 v    4980
 
 ──────────────────────────────────────────────────────────────────────
 ERROR BREAKDOWN  (result -> reference)
 ──────────────────────────────────────────────────────────────────────
   DG  #9494FF  ->  BK  #000000 : 5 px
-  LG  #FF9494  ->  DG  #9494FF : 40 px
-  LG  #FF9494  ->  WH  #FFFFA5 : 2 px
+  DG  #9494FF  ->  LG  #FF9494 : 3 px
+  LG  #FF9494  ->  DG  #9494FF : 6 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 3 px
 
 ──────────────────────────────────────────────────────────────────────
 SPATIAL DISTRIBUTION OF ERRORS
 ──────────────────────────────────────────────────────────────────────
   Errors per row (0–111):
-    row  31 :    1  #
-    row  34 :    1  #
-    row  35 :    1  #
-    row  41 :    1  #
-    row  45 :    1  #
-    row  46 :    1  #
-    row  54 :    1  #
+    row   0 :    1  #
+    row   6 :    1  #
     row  55 :    1  #
-    row  56 :    4  ####
-    row  58 :    1  #
-    row  60 :    1  #
-    row  61 :    1  #
-    row  62 :    1  #
-    row  63 :    1  #
+    row  56 :    1  #
     row  64 :    1  #
-    row  65 :    1  #
-    row  66 :    2  ##
-    row  68 :    2  ##
-    row  77 :    2  ##
+    row  66 :    1  #
+    row  68 :    1  #
     row  80 :    1  #
-    row  82 :    2  ##
-    row  83 :    1  #
-    row  85 :    4  ####
-    row  87 :    1  #
-    row  88 :    2  ##
+    row  82 :    1  #
+    row  88 :    1  #
     row  89 :    1  #
-    row  90 :    1  #
-    row  91 :    1  #
-    row  92 :    2  ##
-    row  93 :    1  #
-    row  96 :    1  #
+    row  92 :    1  #
+    row  96 :    2  ##
     row 102 :    1  #
     row 103 :    1  #
     row 104 :    1  #
-    row 110 :    1  #
   Errors per column (0–127):
-    col   1 :    1  #
     col   2 :    1  #
-    col   3 :    3  ###
-    col   5 :    2  ##
-    col   6 :    2  ##
-    col   7 :    4  ####
+    col   3 :    2  ##
+    col   5 :    1  #
+    col   7 :    3  ###
     col  11 :    1  #
     col  14 :    1  #
-    col  15 :    2  ##
-    col  46 :    1  #
+    col  15 :    1  #
+    col  20 :    1  #
     col  51 :    1  #
-    col  54 :    1  #
-    col  60 :    1  #
-    col  62 :    5  #####
-    col  67 :    1  #
-    col  70 :    2  ##
-    col  74 :    4  ####
-    col  75 :    2  ##
-    col  76 :    2  ##
-    col  78 :    1  #
-    col  81 :    3  ###
-    col  82 :    2  ##
-    col  83 :    1  #
-    col  84 :    1  #
-    col  92 :    1  #
-    col  95 :    1  #
+    col  62 :    1  #
+    col  82 :    1  #
+    col 123 :    1  #
+    col 125 :    1  #
+    col 126 :    1  #
 
 ──────────────────────────────────────────────────────────────────────
-FULL PIXEL ERROR LIST  (47 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (17 errors, sorted by row then column)
 ──────────────────────────────────────────────────────────────────────
    row   col              result           reference
-    31    74         LG  #FF9494         DG  #9494FF
-    34    15         LG  #FF9494         DG  #9494FF
-    35    74         LG  #FF9494         DG  #9494FF
-    41    84         LG  #FF9494         DG  #9494FF
-    45    82         LG  #FF9494         DG  #9494FF
-    46    83         LG  #FF9494         DG  #9494FF
-    54    81         LG  #FF9494         DG  #9494FF
+     0   123         DG  #9494FF         LG  #FF9494
+     6   125         DG  #9494FF         LG  #FF9494
     55    82         LG  #FF9494         DG  #9494FF
-    56     7         LG  #FF9494         DG  #9494FF
-    56    74         LG  #FF9494         DG  #9494FF
-    56    81         LG  #FF9494         DG  #9494FF
-    56    92         LG  #FF9494         DG  #9494FF
-    58    81         LG  #FF9494         DG  #9494FF
-    60    95         LG  #FF9494         DG  #9494FF
-    61    76         LG  #FF9494         DG  #9494FF
-    62    75         LG  #FF9494         DG  #9494FF
-    63    76         LG  #FF9494         DG  #9494FF
+    56    20         DG  #9494FF         LG  #FF9494
     64     7         DG  #9494FF         BK  #000000
-    65    78         LG  #FF9494         DG  #9494FF
     66     5         DG  #9494FF         BK  #000000
-    66    75         LG  #FF9494         DG  #9494FF
     68    51         LG  #FF9494         DG  #9494FF
-    68    67         LG  #FF9494         DG  #9494FF
-    77    70         LG  #FF9494         DG  #9494FF
-    77    74         LG  #FF9494         DG  #9494FF
     80     7         DG  #9494FF         BK  #000000
     82     2         LG  #FF9494         WH  #FFFFA5
-    82     3         LG  #FF9494         DG  #9494FF
-    83     6         LG  #FF9494         DG  #9494FF
-    85     6         LG  #FF9494         DG  #9494FF
-    85    46         LG  #FF9494         DG  #9494FF
-    85    60         LG  #FF9494         DG  #9494FF
-    85    70         LG  #FF9494         DG  #9494FF
-    87    62         LG  #FF9494         DG  #9494FF
     88    11         DG  #9494FF         BK  #000000
-    88    62         LG  #FF9494         DG  #9494FF
     89    14         DG  #9494FF         BK  #000000
-    90    54         LG  #FF9494         DG  #9494FF
-    91    62         LG  #FF9494         DG  #9494FF
-    92     5         LG  #FF9494         DG  #9494FF
     92    62         LG  #FF9494         DG  #9494FF
-    93    62         LG  #FF9494         DG  #9494FF
     96     7         LG  #FF9494         DG  #9494FF
+    96   126         LG  #FF9494         WH  #FFFFA5
    102     3         LG  #FF9494         DG  #9494FF
    103    15         LG  #FF9494         WH  #FFFFA5
    104     3         LG  #FF9494         DG  #9494FF
-   110     1         LG  #FF9494         DG  #9494FF
 
 ──────────────────────────────────────────────────────────────────────
 DIAGNOSTIC IMAGES  (in ./test-output/zelda-poster-1)
@@ -238,12 +178,12 @@ DIAGNOSTIC IMAGES  (in ./test-output/zelda-poster-1)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14289  (99.67%)
-  Different    : 47   (0.33%)
+  Matching     : 14319  (99.88%)
+  Different    : 17   (0.12%)
   BK  #000000                 1567        1572        -5
-  DG  #9494FF                 3491        3526       -35
-  LG  #FF9494                 4297        4255       +42
-  WH  #FFFFA5                 4981        4983        -2
+  DG  #9494FF                 3528        3526        +2
+  LG  #FF9494                 4261        4255        +6
+  WH  #FFFFA5                 4980        4983        -3
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.

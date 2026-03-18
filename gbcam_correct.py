@@ -514,6 +514,12 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
                 np.concatenate([border_x_g, cal_x]),
                 np.concatenate([border_v_g, cal_v]),
                 H, W, degree=4)
+            # Clamp: the refined surface must not go BELOW the initial Coons estimate.
+            # Interior DG calibration should only raise our knowledge of the dark floor,
+            # never lower it.  Without this, a degree-4 polynomial can overshoot downward
+            # in corner regions with sparse calibration, making bright pixels (LG/WH)
+            # appear to have anomalously high corrected G there.
+            dark_surf_G2 = np.maximum(dark_surf_G2, dark_surf_G)
             span_G2 = np.maximum(white_surf_G - dark_surf_G2, 5.0)
             gain_G2 = (span_G2 / (255.0 - 148.0)).astype(np.float32)
             off_G2  = (dark_surf_G2 - gain_G2 * 148.0).astype(np.float32)
