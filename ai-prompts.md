@@ -361,6 +361,10 @@ After correcting the light/dark spots on the image, you should be able to correc
 
 After doing all the color corrections, the image should be pretty easy to figure out each color. You need to group the pixels into the four colors based on which color they're closest to. Each pixel on the Game Boy Advance SP screen (which is a TN LCD display) has subpixel lights with blue on the left, green in the middle, and red on the right. You may notice various parts of the SP pixels are dark based on these sub-pixel colors. For example, a red pixel will be aligned more to the right side of the pixel, whereas a yellow pixel will be aligned more toward the middle of the pixel. You may need to account for the differing areas of color showing per pixel based on this pattern to find the right color for that pixel.
 
+## Try HSL with down palette
+
+There are still many very obviously wrong pixels for example in `zelda-poster-1`. Forget about the test -2 images; focus on the -1 images. Keep improving. It's better to avoid using color smoothing because that uses approximations rather than the actual colors in the image. Have you tried using HSL-based color detection? The hues of the non-black pixels may be obviously close to one of the three possible source hues (or their hues may be clustered closely to one another in a distinguishable way), and the black pixels will likely be significantly darker than the other pixels.
+
 # Prompt Plan -> Act Frame 02 Grayscale Cropped Refined
 
 ```
