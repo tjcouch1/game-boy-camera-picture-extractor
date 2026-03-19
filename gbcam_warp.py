@@ -255,7 +255,7 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
     #   R_out = 1.073·R_in + 26.5,  G = 0.983·G_in − 2.9,  B = 0.925·B_in − 32.6
     # Applied at 75 % strength — calibrated to maximise accuracy across both
     # well-exposed and heavily blue-tinted shots.
-    _WARMTH_STRENGTH = 0.75
+    _WARMTH_STRENGTH = 0.0  # Disabled - preserves B channel for better correction
     _W_MAT_FULL = np.array([           # full-strength (BGR rows)
         [0.925, 0.0,   0.0  ],         # B_out = 0.925·B_in
         [0.0,   0.983, 0.0  ],         # G_out = 0.983·G_in
