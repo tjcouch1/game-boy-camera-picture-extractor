@@ -5,7 +5,9 @@
       "Bash(ls:*)",
       "Bash(.venv/Scripts/python:*)",
       "Bash(.venv/Scripts/python.exe:*)",
-      "Bash(C:\\\\Users\\\\tj_co\\\\source\\\\repos-p\\\\game-boy-camera-picture-extractor\\\\.venv\\\\Scripts\\\\python.exe:*)"
+      "Bash(C:\\\\Users\\\\tj_co\\\\source\\\\repos-p\\\\game-boy-camera-picture-extractor\\\\.venv\\\\Scripts\\\\python.exe:*)",
+      "Bash(.venv\\\\Scripts\\\\python.exe:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

@@ -164,14 +164,15 @@ def _classify_color(samples_rgb, init_centers=None):
     """
     Classify 128×112 corrected samples into the four palette colours.
 
-    Uses nearest-neighbor in RG plane only (ignoring B channel). The B channel
-    is unreliable after correction and contributes little useful information.
+    Uses adaptive k-means clustering in RG plane, then intelligently maps
+    clusters to BK/DG/LG/WH based on cluster properties (mean R, G values).
+    This adapts to whatever the correction produced, making it more robust.
 
     After correction and subpixel-aware sampling, the typical clusters are:
-        BK  #000000   ~(R= 98, G= 17)
-        DG  #9494FF   ~(R=165, G=120)
-        LG  #FF9494   ~(R=236, G=141)
-        WH  #FFFFA5   ~(R=243, G=235)
+        BK  #000000   ~(R= 98, G= 17)  — lowest R+G
+        DG  #9494FF   ~(R=165, G=120)  — mid R+G, higher G than R
+        LG  #FF9494   ~(R=236, G=141)  — mid-high R+G, higher R than G
+        WH  #FFFFA5   ~(R=243, G=235)  — highest R+G
 
     These form well-separated clusters in the RG plane.
 
@@ -185,26 +186,75 @@ def _classify_color(samples_rgb, init_centers=None):
     labels : (112, 128) uint8  — palette index 0=BK 1=DG 2=LG 3=WH
     method : str  — classification method description
     """
-    # Use only R and G channels
     flat_rg = samples_rgb[:, :, :2].reshape(-1, 2).astype(np.float32)  # (N, 2)
-    targets_rg = COLOR_PALETTE_RGB[:, :2].astype(np.float32)           # (4, 2)
-
-    # Euclidean distance in RG space
-    dists = np.sum((flat_rg[:, None, :] - targets_rg[None, :, :])**2, axis=-1)  # (N, 4)
-    labels_flat = np.argmin(dists, axis=1)
-
-    # Log cluster means for diagnostics
     flat = samples_rgb.reshape(-1, 3)
-    counts = np.bincount(labels_flat, minlength=4)
-    names  = ['BK', 'DG', 'LG', 'WH']
-    center_info = []
-    for i, (name, cnt) in enumerate(zip(names, counts)):
-        if cnt > 0:
-            m = flat[labels_flat == i].mean(axis=0)
-            center_info.append(f"{name}({cnt})~(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
-    log(f"  Nearest-RG (B ignored): " + "  ".join(center_info))
 
-    return labels_flat.reshape(112, 128).astype(np.uint8), "nearest-RG"
+    # Try adaptive k-means clustering first
+    try:
+        from sklearn.cluster import KMeans
+
+        # K-means in RG space to find actual 4 clusters
+        kmeans = KMeans(n_clusters=4, random_state=42, n_init=10, max_iter=300)
+        cluster_labels = kmeans.fit_predict(flat_rg)
+        centers_rg = kmeans.cluster_centers_  # (4, 2) — R, G for each cluster
+
+        # Map clusters to palette colors using optimal assignment
+        # Compute distance from each cluster center to each target color
+        targets_rg = COLOR_PALETTE_RGB[:, :2].astype(np.float32)  # (4, 2)
+
+        # Distance matrix: cluster i to target j
+        dist_matrix = np.zeros((4, 4))
+        for i in range(4):
+            for j in range(4):
+                dist_matrix[i, j] = np.linalg.norm(centers_rg[i] - targets_rg[j])
+
+        # Use Hungarian algorithm (optimal assignment) to find best mapping
+        # Try all 24 permutations (4!) and find the one with minimum total distance
+        from itertools import permutations
+        best_perm = None
+        best_cost = float('inf')
+
+        for perm in permutations(range(4)):
+            cost = sum(dist_matrix[i, perm[i]] for i in range(4))
+            if cost < best_cost:
+                best_cost = cost
+                best_perm = perm
+
+        # best_perm[i] = palette_index for cluster i
+        cluster_to_palette = np.array(best_perm, dtype=int)
+
+        # Remap cluster labels to palette indices
+        labels_flat = cluster_to_palette[cluster_labels]
+
+        # Log diagnostics
+        counts = np.bincount(labels_flat, minlength=4)
+        names = ['BK', 'DG', 'LG', 'WH']
+        center_info = []
+        for i, (name, cnt) in enumerate(zip(names, counts)):
+            if cnt > 0:
+                m = flat[labels_flat == i].mean(axis=0)
+                center_info.append(f"{name}({cnt})~(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
+        log(f"  Adaptive k-means RG: " + "  ".join(center_info))
+
+        return labels_flat.reshape(112, 128).astype(np.uint8), "adaptive-kmeans-RG"
+
+    except (ImportError, Exception) as e:
+        # Fallback to fixed nearest-neighbor if k-means fails
+        log(f"  K-means failed ({e}), using fixed nearest-RG")
+        targets_rg = COLOR_PALETTE_RGB[:, :2].astype(np.float32)
+        dists = np.sum((flat_rg[:, None, :] - targets_rg[None, :, :])**2, axis=-1)
+        labels_flat = np.argmin(dists, axis=1)
+
+        counts = np.bincount(labels_flat, minlength=4)
+        names = ['BK', 'DG', 'LG', 'WH']
+        center_info = []
+        for i, (name, cnt) in enumerate(zip(names, counts)):
+            if cnt > 0:
+                m = flat[labels_flat == i].mean(axis=0)
+                center_info.append(f"{name}({cnt})~(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
+        log(f"  Nearest-RG (B ignored): " + "  ".join(center_info))
+
+        return labels_flat.reshape(112, 128).astype(np.uint8), "nearest-RG"
 
 
 def _process_file_color(input_path, output_path, smooth=True,

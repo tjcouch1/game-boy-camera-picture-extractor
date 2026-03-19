@@ -464,13 +464,80 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
 
     corrected_rgb = np.zeros((H, W, 3), dtype=np.float32)
 
-    # ── Stage 1a: R channel — white-surface normalisation -> 255 ───────────────
-    log("  R: white-surface normalisation -> 255")
+    # ── Stage 1a: R channel — Coons + polynomial, two anchors -> 255 / 148 ─────
+    # IMPROVED: Add dark anchor (DG border) to R channel, just like G channel.
+    # This gives R channel proper dynamic range calibration.
+    # Target: WH.R=255, DG.R=148
+    log("  R: Coons+poly -> 255 / 148")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 0)
     white_surf_R = fit_surface(wy, wx, wv, H, W, poly_degree)
     obs_frame_R  = float(np.median(wv))
-    corr_R = np.clip(img_rgb[:, :, 0] * (255.0 / np.maximum(white_surf_R, 5.0)),
-                     0.0, 255.0).astype(np.float32)
+
+    # Collect dark samples from DG inner border
+    left_r  = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_LEFT,  scale, 0)
+                         for gy in range(INNER_TOP, INNER_BOT + 1)])
+    right_r = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_RIGHT, scale, 0)
+                         for gy in range(INNER_TOP, INNER_BOT + 1)])
+    top_r   = np.array([_gb_block_sample_ch_color(img_rgb, INNER_TOP, gx, scale, 0)
+                         for gx in range(INNER_LEFT, INNER_RIGHT + 1)])
+    bot_r   = np.array([_gb_block_sample_ch_color(img_rgb, INNER_BOT, gx, scale, 0)
+                         for gx in range(INNER_LEFT, INNER_RIGHT + 1)])
+    dark_surf_R = build_dark_surface(left_r, right_r, top_r, bot_r, H, W, scale, dark_smooth)
+
+    # Two-anchor affine correction: DG.R=148, WH.R=255
+    span_R = np.maximum(white_surf_R - dark_surf_R, 5.0)
+    gain_R = (span_R / (255.0 - 148.0)).astype(np.float32)
+    off_R  = (dark_surf_R - gain_R * 148.0).astype(np.float32)
+    corr_R = np.clip((img_rgb[:, :, 0] - off_R) / gain_R, 0.0, 255.0).astype(np.float32)
+
+    # Refinement pass for R channel (same approach as G channel)
+    if refine_passes > 0:
+        border_y_r, border_x_r, border_v_r = _collect_border_dark_color(
+            img_rgb, scale, dark_smooth, 0)  # ch=0 for R
+        samp_R_approx = _quick_sample_color(
+            np.stack([corr_R, corr_R], axis=-1), scale)[:, :, 0]  # Just need R
+        # DG pixels have corrected R in [100, 196]
+        edge_margin = 3
+        dg_mask = (samp_R_approx >= 100.0) & (samp_R_approx <= 196.0)
+        cys, cxs = np.where(dg_mask)
+        valid = ((cys >= edge_margin) & (cys < CAM_H - edge_margin) &
+                (cxs >= edge_margin) & (cxs < CAM_W - edge_margin))
+        cys, cxs = cys[valid], cxs[valid]
+        n_cal = len(cys)
+        log(f"    R refinement: {n_cal} interior DG pixels")
+        if n_cal >= 50:
+            cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2 for gy in cys], float)
+            cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2 for gx in cxs], float)
+            cal_v = np.array([float(img_rgb[(FRAME_THICK+gy)*scale+scale//2,
+                                            (FRAME_THICK+gx)*scale+scale//2, 0])
+                               for gy, gx in zip(cys, cxs)], float)
+            dark_surf_R2 = _fit_surface_poly(
+                np.concatenate([border_y_r, cal_y]),
+                np.concatenate([border_x_r, cal_x]),
+                np.concatenate([border_v_r, cal_v]),
+                H, W, degree=3)
+            dark_surf_R2 = np.maximum(dark_surf_R2, dark_surf_R)
+            # Blend near edges
+            blend_margin = 4 * scale
+            y_cam_start, y_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_H) * scale
+            x_cam_start, x_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_W) * scale
+            for y in range(H):
+                for x in range(W):
+                    if y_cam_start <= y < y_cam_end and x_cam_start <= x < x_cam_end:
+                        y_rel = y - y_cam_start
+                        x_rel = x - x_cam_start
+                        cam_h = y_cam_end - y_cam_start
+                        cam_w = x_cam_end - x_cam_start
+                        dist_to_edge = min(y_rel, cam_h - 1 - y_rel, x_rel, cam_w - 1 - x_rel)
+                        if dist_to_edge < blend_margin:
+                            blend_factor = dist_to_edge / blend_margin
+                            dark_surf_R2[y, x] = ((1 - blend_factor) * dark_surf_R[y, x] +
+                                                   blend_factor * dark_surf_R2[y, x])
+            span_R2 = np.maximum(white_surf_R - dark_surf_R2, 5.0)
+            gain_R2 = (span_R2 / (255.0 - 148.0)).astype(np.float32)
+            off_R2  = (dark_surf_R2 - gain_R2 * 148.0).astype(np.float32)
+            corr_R  = np.clip((img_rgb[:, :, 0] - off_R2) / gain_R2, 0.0, 255.0).astype(np.float32)
+
     corrected_rgb[:, :, 0] = corr_R
 
     # ── Stage 1b: G channel — Coons + polynomial, two anchors -> 255 / 148 ─────
