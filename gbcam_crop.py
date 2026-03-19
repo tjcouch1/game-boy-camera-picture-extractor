@@ -65,7 +65,7 @@ def process_file(input_path, output_path, scale=8,
 
     y1, x1 = FRAME_THICK * scale, FRAME_THICK * scale
     y2, x2 = y1 + CAM_H * scale, x1 + CAM_W * scale
-    log(f"  Camera region: ({x1},{y1}) → ({x2},{y2})  "
+    log(f"  Camera region: ({x1},{y1}) -> ({x2},{y2})  "
         f"= {x2-x1}×{y2-y1} px  ({CAM_W}×{CAM_H} GB pixels)")
 
     # Validate: the inner border band just outside the crop should be darker
@@ -93,7 +93,7 @@ def process_file(input_path, output_path, scale=8,
         save_debug(dbg, debug_dir, stem, "crop_a_region")
 
     cv2.imwrite(str(output_path), crop)
-    log(f"  Saved → {output_path}  ({crop.shape[1]}×{crop.shape[0]} px)", always=True)
+    log(f"  Saved -> {output_path}  ({crop.shape[1]}×{crop.shape[0]} px)", always=True)
 
 
 def main():

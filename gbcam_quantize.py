@@ -6,10 +6,10 @@ Takes the 128×112 per-pixel brightness samples from the sample step and
 produces the final 128×112 Game Boy Camera image by mapping each sample to
 the nearest of the four original palette colors:
 
-    #000000  →  0    (black)
-    #525252  →  82   (dark gray)
-    #A5A5A5  →  165  (light gray)
-    #FFFFFF  →  255  (white)
+    #000000  ->  0    (black)
+    #525252  ->  82   (dark gray)
+    #A5A5A5  ->  165  (light gray)
+    #FFFFFF  ->  255  (white)
 
 This step also handles color correction: the adaptive threshold calibration
 automatically accounts for the washed-out, uneven lighting of the GBA SP
@@ -109,10 +109,10 @@ def _classify_color(samples_rgb, init_centers=None):
 
     After correction and subpixel-aware sampling, the expected positions are:
 
-        BK  #000000   R=  0  G=  0  B=  0   → weighted (  0,  0,   0)
-        DG  #9494FF   R=148  G=148  B=255   → weighted (148,148,127.5)
-        LG  #FF9494   R=255  G=148  B=148   → weighted (255,148, 74.0)
-        WH  #FFFFA5   R=255  G=255  B=165   → weighted (255,255, 82.5)
+        BK  #000000   R=  0  G=  0  B=  0   -> weighted (  0,  0,   0)
+        DG  #9494FF   R=148  G=148  B=255   -> weighted (148,148,127.5)
+        LG  #FF9494   R=255  G=148  B=148   -> weighted (255,148, 74.0)
+        WH  #FFFFA5   R=255  G=255  B=165   -> weighted (255,255, 82.5)
 
     Parameters
     ----------
@@ -142,7 +142,7 @@ def _classify_color(samples_rgb, init_centers=None):
     for i, (name, cnt) in enumerate(zip(names, counts)):
         if cnt > 0:
             m = flat[labels_flat == i].mean(axis=0)
-            center_info.append(f"{name}({cnt})≈(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
+            center_info.append(f"{name}({cnt})~(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
     log("  Nearest-RGB(B×0.40): " + "  ".join(center_info))
 
     return labels_flat.reshape(112, 128).astype(np.uint8), "nearest-RGB(B×0.40)"
@@ -192,17 +192,17 @@ def _process_file_color(input_path, output_path, smooth=True,
     labels, method = _classify_color(samples_rgb)
     log(f"  Classification: {method}")
 
-    # ── Spatial smoothing — WH → LG correction ───────────────────────────────
+    # ── Spatial smoothing — WH -> LG correction ───────────────────────────────
     # The G-channel correction sometimes overcorrects LG pixels (target G=148) to
-    # G≈205–215 because LG content pixels are brighter than the DG inner border used
+    # G~205–215 because LG content pixels are brighter than the DG inner border used
     # as the dark anchor.  When this happens, an LG pixel can look like WH in the
     # corrected sample space and get misclassified.  The three sample-level gates
     # below distinguish these cases without introducing false positives:
     #
-    #   R < 240  — true WH has R≈250+ after correction; overcorrected LG has R≈210–239
+    #   R < 240  — true WH has R~250+ after correction; overcorrected LG has R~210–239
     #   B < 160  — LG.B target=148; WH.B target=165. Overcorrected LG stays near 148;
     #              true WH has B≥160 even when slightly undercorrected.
-    #   G < 215  — overcorrected LG lands around G≈205–214; true WH has G≈215–255.
+    #   G < 215  — overcorrected LG lands around G~205–214; true WH has G~215–255.
     #
     # Neighbourhood gate: ≥4 of the 8 surrounding pixels are darker than WH (BK/DG/LG).
     #
@@ -232,7 +232,7 @@ def _process_file_color(input_path, output_path, smooth=True,
                 changed_wh_lg += 1
 
     if changed_wh_lg:
-        log(f"  Spatial smooth WH→LG: {changed_wh_lg} pixels corrected")
+        log(f"  Spatial smooth WH->LG: {changed_wh_lg} pixels corrected")
 
     # Build output images
     GRAY_VALS = np.array([0, 82, 165, 255], dtype=np.uint8)
@@ -241,7 +241,7 @@ def _process_file_color(input_path, output_path, smooth=True,
 
     # Save grayscale output
     Image.fromarray(out_gray, "L").save(str(output_path))
-    log(f"  Saved → {output_path}  (grayscale palette)", always=True)
+    log(f"  Saved -> {output_path}  (grayscale palette)", always=True)
 
     # Save colour output alongside (stem_gbcam_rgb.png)
     out_path = _Path(output_path)
@@ -249,7 +249,7 @@ def _process_file_color(input_path, output_path, smooth=True,
         strip_step_suffix(out_path.stem) + STEP_SUFFIX["quantize"] + "_rgb.png")
     out_bgr = cv2.cvtColor(out_rgb, cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(rgb_path), out_bgr)
-    log(f"  Saved → {rgb_path}  (new RGB palette)", always=True)
+    log(f"  Saved -> {rgb_path}  (new RGB palette)", always=True)
 
     # Color distribution
     for i, (gv, name, hex_) in enumerate([
@@ -331,12 +331,12 @@ def spatial_smooth(q, samples, medians=None, zerocounts=None):
     and comparing sample brightness against the expected range for the current
     and neighbouring colours.  Only safe, high-confidence moves are made:
 
-      DG → LG  if ≥3 of 4 neighbours are pure white  AND  sample ≥ 95
-      BK → DG  if ≥3 of 4 neighbours are LG or white  AND  sample ≥ 42
-      BK → DG  if ≥2 of 4 neighbours are LG or white  AND  sample ≥ 48
-      LG → DG  if ≥3 of 4 neighbours are DG or black  AND  sample < 127
-      LG → DG  if ≥2 of 4 neighbours are DG or black  AND  sample < 125  AND  median < 123
-      DG → BK  if block has ≥12 zero sub-pixels, OR ≥8 zeros AND sample ≤ 57
+      DG -> LG  if ≥3 of 4 neighbours are pure white  AND  sample ≥ 95
+      BK -> DG  if ≥3 of 4 neighbours are LG or white  AND  sample ≥ 42
+      BK -> DG  if ≥2 of 4 neighbours are LG or white  AND  sample ≥ 48
+      LG -> DG  if ≥3 of 4 neighbours are DG or black  AND  sample < 127
+      LG -> DG  if ≥2 of 4 neighbours are DG or black  AND  sample < 125  AND  median < 123
+      DG -> BK  if block has ≥12 zero sub-pixels, OR ≥8 zeros AND sample ≤ 57
 
     The final two rules require the auxiliary median and zero-count images
     produced by the sample step.  If they are not provided the rules are
@@ -370,11 +370,11 @@ def spatial_smooth(q, samples, medians=None, zerocounts=None):
             dg  = sum(v == 82  for v in nbv)
             bk  = sum(v == 0   for v in nbv)
 
-            # DG → LG : island of DG floating in white
+            # DG -> LG : island of DG floating in white
             if q[r, c] == 82 and sv >= 95 and wh >= 3:
                 q2[r, c] = 165
 
-            # BK → DG : isolated black pixel in a light neighbourhood
+            # BK -> DG : isolated black pixel in a light neighbourhood
             # Suppressed when the block has many true-zero sub-pixels: those are
             # genuinely dark cells, not accidentally-dark DG, and should stay BK.
             _zc = int(zerocounts[r, c]) if have_aux else 0
@@ -383,18 +383,18 @@ def spatial_smooth(q, samples, medians=None, zerocounts=None):
             elif q[r, c] == 0 and _zc < 8 and sv >= 48 and lg >= 2:
                 q2[r, c] = 82
 
-            # LG → DG : isolated light pixel in a dark neighbourhood (neighbour rule)
+            # LG -> DG : isolated light pixel in a dark neighbourhood (neighbour rule)
             # Threshold raised to 127 to capture sv=125–126 edge cases safely.
             if q[r, c] == 165 and sv < 127 and dg + bk >= 3:
                 q2[r, c] = 82
 
-            # LG → DG : dark-neighbourhood override with median confirmation
+            # LG -> DG : dark-neighbourhood override with median confirmation
             # Requires auxiliary stats from the sample step.
             if have_aux and q[r, c] == 165 and sv < 125 and dg + bk >= 2:
                 if int(medians[r, c]) < 123:
                     q2[r, c] = 82
 
-            # DG → BK : block is mostly dark sub-pixels (boundary bleed-over)
+            # DG -> BK : block is mostly dark sub-pixels (boundary bleed-over)
             # Fires when the raw block contains many exactly-zero sub-pixels,
             # indicating the GB screen backlight was truly off for most of the cell.
             # Requires auxiliary stats from the sample step.

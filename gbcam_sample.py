@@ -98,10 +98,10 @@ def process_file(input_path, output_path, scale=8,
     ----------
     h_margin : int or None
         Pixels to skip on each horizontal (left/right) side of each block.
-        None → use auto formula: h=max(2,scale//4), v=max(1,scale//5).
+        None -> use auto formula: h=max(2,scale//4), v=max(1,scale//5).
     v_margin : int or None
         Pixels to skip on each vertical (top/bottom) side.
-        None → use auto formula: h=max(2,scale//4), v=max(1,scale//5).
+        None -> use auto formula: h=max(2,scale//4), v=max(1,scale//5).
     method : str
         Aggregation method name (see module docstring).
     """
@@ -176,11 +176,11 @@ def process_file(input_path, output_path, scale=8,
     inner_end   = scale - 1           # skip right edge gap (exclusive)
     inner_w     = inner_end - inner_start   # 6 at scale=8
     b_lo = inner_start                               # col 1
-    b_hi = inner_start + inner_w // 3               # col 3 (exclusive) → 1,2
+    b_hi = inner_start + inner_w // 3               # col 3 (exclusive) -> 1,2
     g_lo = inner_start + inner_w // 3               # col 3
-    g_hi = inner_start + 2 * (inner_w // 3)         # col 5 (exclusive) → 3,4
+    g_hi = inner_start + 2 * (inner_w // 3)         # col 5 (exclusive) -> 3,4
     r_lo = inner_start + 2 * (inner_w // 3)         # col 5
-    r_hi = inner_end                                 # col 7 (exclusive) → 5,6
+    r_hi = inner_end                                 # col 7 (exclusive) -> 5,6
 
     log(f"  Subpixel cols (scale={scale}): "
         f"B=[{b_lo},{b_hi})  G=[{g_lo},{g_hi})  R=[{r_lo},{r_hi})")
@@ -212,7 +212,7 @@ def process_file(input_path, output_path, scale=8,
         np.clip(np.stack([samp_r, samp_g, samp_b], axis=-1), 0, 255).astype(np.uint8),
         cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(output_path), out_bgr)
-    log(f"  Saved → {output_path}  (colour, subpixel-aware, 128×112 px)", always=True)
+    log(f"  Saved -> {output_path}  (colour, subpixel-aware, 128×112 px)", always=True)
     log(f"  R: {samp_r.min():.0f}–{samp_r.max():.0f}  "
         f"G: {samp_g.min():.0f}–{samp_g.max():.0f}  "
         f"B: {samp_b.min():.0f}–{samp_b.max():.0f}")

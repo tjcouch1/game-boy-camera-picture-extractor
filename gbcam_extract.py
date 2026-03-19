@@ -58,7 +58,7 @@ def _build_help():
             "and pixel-gap/bleeding artifacts — this pipeline corrects all of them."
         ),
         "",
-        "PIPELINE STEPS  (run in order: warp → crop → sample → quantize)",
+        "PIPELINE STEPS  (run in order: warp -> crop -> sample -> quantize)",
         rule(),
     ]
 
@@ -535,7 +535,7 @@ def main():
                   file=sys.stderr)
         sys.exit(1)
 
-    active_steps = " → ".join(STEP_ORDER[start_idx : end_idx + 1])
+    active_steps = " -> ".join(STEP_ORDER[start_idx : end_idx + 1])
     print(f"Pipeline: {active_steps}  |  scale={args.scale}  |  "
           f"{len(input_files)} input file(s)")
 

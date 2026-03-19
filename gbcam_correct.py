@@ -429,9 +429,9 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
        every pixel against it.  The G channel additionally uses the inner
        #9494FF border as a second (dark) anchor via a Coons bilinear patch
        with an optional refinement pass using interior DG pixels.
-         R: white-surface normalisation → target 255  (#FFFFA5.R)
-         G: Coons + polynomial, two anchors  → target 255 / 148
-         B: white-surface normalisation → target 165  (#FFFFA5.B)
+         R: white-surface normalisation -> target 255  (#FFFFA5.R)
+         G: Coons + polynomial, two anchors  -> target 255 / 148
+         B: white-surface normalisation -> target 165  (#FFFFA5.B)
 
     2. Global colour normalisation
        Measures the mean of the 85th-percentile block samples across all four
@@ -464,8 +464,8 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
 
     corrected_rgb = np.zeros((H, W, 3), dtype=np.float32)
 
-    # ── Stage 1a: R channel — white-surface normalisation → 255 ───────────────
-    log("  R: white-surface normalisation → 255")
+    # ── Stage 1a: R channel — white-surface normalisation -> 255 ───────────────
+    log("  R: white-surface normalisation -> 255")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 0)
     white_surf_R = fit_surface(wy, wx, wv, H, W, poly_degree)
     obs_frame_R  = float(np.median(wv))
@@ -473,8 +473,8 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
                      0.0, 255.0).astype(np.float32)
     corrected_rgb[:, :, 0] = corr_R
 
-    # ── Stage 1b: G channel — Coons + polynomial, two anchors → 255 / 148 ─────
-    log("  G: Coons+poly → 255 / 148")
+    # ── Stage 1b: G channel — Coons + polynomial, two anchors -> 255 / 148 ─────
+    log("  G: Coons+poly -> 255 / 148")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 1)
     white_surf_G = fit_surface(wy, wx, wv, H, W, poly_degree)
     left_g  = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_LEFT,  scale, 1)
@@ -496,11 +496,17 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
             img_rgb, scale, dark_smooth, 1)
         samp_G_approx = _quick_sample_color(
             np.stack([corr_R, corr_G], axis=-1), scale)[:, :, 1]
-        # DG pixels have corrected G in [100, 196] — the range between BK (≈0) and WH (≈255).
-        # LG pixels also land in this range (LG.G ≈ 148) but their contamination of the
+        # DG pixels have corrected G in [100, 196] — the range between BK (~0) and WH (~255).
+        # LG pixels also land in this range (LG.G ~ 148) but their contamination of the
         # calibration surface is smaller than the benefit of the refinement pass.
+        # Exclude pixels within 3 GB pixels of the camera area edge to avoid edge artifacts
+        edge_margin = 3
         dg_mask = (samp_G_approx >= 100.0) & (samp_G_approx <= 196.0)
         cys, cxs = np.where(dg_mask)
+        # Filter out pixels near edges
+        valid = ((cys >= edge_margin) & (cys < CAM_H - edge_margin) &
+                 (cxs >= edge_margin) & (cxs < CAM_W - edge_margin))
+        cys, cxs = cys[valid], cxs[valid]
         n_cal = len(cys)
         log(f"    G refinement: {n_cal} interior DG pixels")
         if n_cal >= 50:
@@ -513,13 +519,31 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
                 np.concatenate([border_y_g, cal_y]),
                 np.concatenate([border_x_g, cal_x]),
                 np.concatenate([border_v_g, cal_v]),
-                H, W, degree=4)
+                H, W, degree=3)
             # Clamp: the refined surface must not go BELOW the initial Coons estimate.
             # Interior DG calibration should only raise our knowledge of the dark floor,
             # never lower it.  Without this, a degree-4 polynomial can overshoot downward
             # in corner regions with sparse calibration, making bright pixels (LG/WH)
             # appear to have anomalously high corrected G there.
             dark_surf_G2 = np.maximum(dark_surf_G2, dark_surf_G)
+            # Near camera edges, blend toward the Coons estimate to reduce polynomial edge artifacts
+            blend_margin = 4 * scale  # 4 GB pixels worth of edge blending
+            y_cam_start, y_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_H) * scale
+            x_cam_start, x_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_W) * scale
+            for y in range(H):
+                for x in range(W):
+                    if y_cam_start <= y < y_cam_end and x_cam_start <= x < x_cam_end:
+                        y_rel = y - y_cam_start
+                        x_rel = x - x_cam_start
+                        cam_h = y_cam_end - y_cam_start
+                        cam_w = x_cam_end - x_cam_start
+                        # Distance from nearest camera edge
+                        dist_to_edge = min(y_rel, cam_h - 1 - y_rel, x_rel, cam_w - 1 - x_rel)
+                        if dist_to_edge < blend_margin:
+                            # Blend from Coons (at edge) to refined (at blend_margin)
+                            blend_factor = dist_to_edge / blend_margin
+                            dark_surf_G2[y, x] = ((1 - blend_factor) * dark_surf_G[y, x] +
+                                                   blend_factor * dark_surf_G2[y, x])
             span_G2 = np.maximum(white_surf_G - dark_surf_G2, 5.0)
             gain_G2 = (span_G2 / (255.0 - 148.0)).astype(np.float32)
             off_G2  = (dark_surf_G2 - gain_G2 * 148.0).astype(np.float32)
@@ -527,19 +551,19 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
 
     corrected_rgb[:, :, 1] = corr_G
 
-    # ── Stage 1c: B channel — white-surface normalisation → 165 ───────────────
+    # ── Stage 1c: B channel — white-surface normalisation -> 165 ───────────────
     # Target WH.B = 165 (#FFFFA5 is warm yellow, not pure white).
     # White-norm is more stable than two-anchor for B because after the warmth
     # pre-processing the DG border B and the frame B are both near saturation,
     # leaving almost no span for a reliable Coons correction.
-    log("  B: white-surface normalisation → 165")
+    log("  B: white-surface normalisation -> 165")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 2)
     white_surf_B = fit_surface(wy, wx, wv, H, W, poly_degree)
     corr_B = np.clip(img_rgb[:, :, 2] * (165.0 / np.maximum(white_surf_B, 5.0)),
                      0.0, 255.0).astype(np.float32)
     corrected_rgb[:, :, 2] = corr_B
 
-    # ── Stage 2: Global colour normalisation — frame → exactly #FFFFA5 ─────────
+    # ── Stage 2: Global colour normalisation — frame -> exactly #FFFFA5 ─────────
     # After the per-channel spatial corrections the frame should be approximately
     # (255, 255, 165), but polynomial fit residuals leave a small offset.
     # Measuring the p85 of each frame-strip block and scaling globally makes the
@@ -580,7 +604,7 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     out_bgr = cv2.cvtColor(np.clip(corrected_rgb, 0, 255).astype(np.uint8),
                             cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(output_path), out_bgr)
-    log(f"  Saved → {output_path}  (colour, frame normalised to #FFFFA5)", always=True)
+    log(f"  Saved -> {output_path}  (colour, frame normalised to #FFFFA5)", always=True)
 
     # Verify: sample the camera area and check inner border
     cam_rgb = corrected_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
@@ -616,7 +640,7 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
                 "frame_p85_G": float(frame_p85[1]),
                 "frame_p85_B": float(frame_p85[2])},
                open(str(meta_path), 'w'))
-    log(f"  Metadata → {meta_path}")
+    log(f"  Metadata -> {meta_path}")
 
 
 def _fit_surface_poly(ys, xs, vals, H, W, degree=4):

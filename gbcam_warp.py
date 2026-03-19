@@ -135,7 +135,7 @@ def find_screen_corners(img, thresh_val=180, debug=False, debug_dir=None, stem=N
 
     score, ordered, used_thresh, area, aspect = best
     expected = SCREEN_W / SCREEN_H
-    log(f"  Contour: area={area:.0f}  aspect={aspect:.3f} (expected≈{expected:.3f})"
+    log(f"  Contour: area={area:.0f}  aspect={aspect:.3f} (expected~{expected:.3f})"
         f"  thresh={used_thresh}  quad_score={score:.4f}")
     if score > 0.15:
         log("  WARNING: quad quality is low — detection may be unreliable")
@@ -155,7 +155,7 @@ def _initial_warp(img, corners, scale, debug=False, debug_dir=None, stem=None):
     dst  = np.array([[0, 0], [W-1, 0], [W-1, H-1], [0, H-1]], dtype=np.float32)
     M    = cv2.getPerspectiveTransform(corners, dst)
     warped = cv2.warpPerspective(img, M, (W, H), flags=cv2.INTER_LANCZOS4)
-    log(f"  Initial warp → {W}×{H}  (scale={scale})")
+    log(f"  Initial warp -> {W}×{H}  (scale={scale})")
     if debug and debug_dir and stem:
         save_debug(warped, debug_dir, stem, "warp_b_initial_color")
         save_debug(warped, debug_dir, stem, "warp_c_initial_color")
@@ -199,8 +199,8 @@ def refine_warp(warped, scale, debug=False, debug_dir=None, stem=None):
     """Micro-correct the warp so the inner border sits exactly on the pixel grid."""
     H, W = warped.shape[:2]
     # The R−B difference gives maximum contrast between:
-    #   frame  (#FFFFA5): R=255, B=165 → R−B = +90  (warm, positive)
-    #   border (#9494FF): R=148, B=255 → R−B = −107 (cool, negative)
+    #   frame  (#FFFFA5): R=255, B=165 -> R−B = +90  (warm, positive)
+    #   border (#9494FF): R=148, B=255 -> R−B = −107 (cool, negative)
     rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB).astype(np.float32)
     rb_diff = np.clip(rgb[:, :, 0] - rgb[:, :, 2] + 128, 0, 255).astype(np.uint8)
     top, bot, left, right = _find_border_outer_edges(rb_diff, scale)
@@ -265,9 +265,8 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
     _W_MAT = (np.eye(3, dtype=np.float32)
               + _WARMTH_STRENGTH * (_W_MAT_FULL - np.eye(3, dtype=np.float32)))
     _W_OFF = _W_OFF_FULL * _WARMTH_STRENGTH
-    warmed = np.clip(warped.astype(np.float32) @ _W_MAT.T + _W_OFF,
+    warped = np.clip(warped.astype(np.float32) @ _W_MAT.T + _W_OFF,
                      0, 255).astype(np.uint8)
-    warped = refine_warp(warmed, scale, debug, debug_dir, stem)
 
     log(f"  d — Warmth ({_WARMTH_STRENGTH:.0%}): "
         f"R×{_W_MAT[2,2]:.3f}{_W_OFF[2]:+.1f}  "
@@ -275,7 +274,7 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
         f"B×{_W_MAT[0,0]:.3f}{_W_OFF[0]:+.1f}")
 
     cv2.imwrite(str(output_path), warped)
-    log(f"  Saved → {output_path}  (colour BGR, warmth-corrected)", always=True)
+    log(f"  Saved -> {output_path}  (colour BGR, warmth-corrected)", always=True)
 
 
 def main():

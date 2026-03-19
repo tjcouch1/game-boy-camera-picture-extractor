@@ -32,7 +32,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# ── Palette ───────────────────────────────────────────────────────────────────
+# -- Palette -------------------------------------------------------------------
 # The pipeline outputs _gbcam.png as grayscale using the original 4-level palette
 # (0=BK, 82=DG, 165=LG, 255=WH) regardless of colour mode.  Comparison always
 # works in this grayscale space.
@@ -53,9 +53,9 @@ BGR_PALETTE = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Run pipeline
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
                  dark_smooth=13, debug=True):
@@ -111,9 +111,9 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
     return p("_gbcam")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Comparison and diagnostics
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 def quantize_to_palette(img):
     """Snap every pixel to the nearest GB palette value."""
@@ -175,20 +175,20 @@ def compare(result, reference, output_dir, stem):
     print(f"  Matching     : {matches}  ({100*matches/total:.2f}%)")
     print(f"  Different    : {wrongs}   ({100*wrongs/total:.2f}%)")
 
-    # ── Per-color distribution ────────────────────────────────
-    print(f"\n{'─'*70}")
+    # -- Per-color distribution --------------------------------
+    print(f"\n{'-'*70}")
     print(f"COLOR DISTRIBUTION")
-    print(f"{'─'*70}")
+    print(f"{'-'*70}")
     print(f"  {'Color':<22}  {'Result':>8}  {'Reference':>10}  {'Diff':>8}")
     for v in GB_COLORS:
         r_cnt = int((result    == v).sum())
         g_cnt = int((reference == v).sum())
         print(f"  {COLOR_NAMES[v]:<22}  {r_cnt:>8}  {g_cnt:>10}  {r_cnt-g_cnt:>+8}")
 
-    # ── Confusion matrix ─────────────────────────────────────
-    print(f"\n{'─'*70}")
+    # -- Confusion matrix -------------------------------------
+    print(f"\n{'-'*70}")
     print(f"CONFUSION MATRIX  (rows = pipeline result, cols = reference)")
-    print(f"{'─'*70}")
+    print(f"{'-'*70}")
     hdr = f"  {'Result / Ref':<18}" + "".join(f"  {COLOR_NAMES[v]:>16}" for v in GB_COLORS) + "   TOTAL"
     print(hdr)
     for rv in GB_COLORS:
@@ -202,11 +202,11 @@ def compare(result, reference, output_dir, stem):
         row += f"  {total_r:>6}"
         print(row)
 
-    # ── Error breakdown ───────────────────────────────────────
+    # -- Error breakdown ---------------------------------------
     if wrongs > 0:
-        print(f"\n{'─'*70}")
+        print(f"\n{'-'*70}")
         print(f"ERROR BREAKDOWN  (result -> reference)")
-        print(f"{'─'*70}")
+        print(f"{'-'*70}")
         for rv in GB_COLORS:
             for cv in GB_COLORS:
                 if rv == cv:
@@ -215,15 +215,15 @@ def compare(result, reference, output_dir, stem):
                 if cnt:
                     print(f"  {COLOR_NAMES[rv]}  ->  {COLOR_NAMES[cv]} : {cnt} px")
 
-    # ── Spatial distribution of errors ───────────────────────
+    # -- Spatial distribution of errors -----------------------
     if wrongs > 0:
         err_mask = (result != reference)
         err_rows = err_mask.sum(axis=1)   # errors per row    (length 112)
         err_cols = err_mask.sum(axis=0)   # errors per column (length 128)
 
-        print(f"\n{'─'*70}")
+        print(f"\n{'-'*70}")
         print(f"SPATIAL DISTRIBUTION OF ERRORS")
-        print(f"{'─'*70}")
+        print(f"{'-'*70}")
         print(f"  Errors per row (0–111):")
         for r in range(112):
             if err_rows[r]:
@@ -235,11 +235,11 @@ def compare(result, reference, output_dir, stem):
                 bar = "#" * min(int(err_cols[c]), 50)
                 print(f"    col {c:3d} : {err_cols[c]:4d}  {bar}")
 
-    # ── Full pixel error list ─────────────────────────────────
+    # -- Full pixel error list ---------------------------------
     if wrongs > 0:
-        print(f"\n{'─'*70}")
+        print(f"\n{'-'*70}")
         print(f"FULL PIXEL ERROR LIST  ({wrongs} errors, sorted by row then column)")
-        print(f"{'─'*70}")
+        print(f"{'-'*70}")
         print(f"  {'row':>4}  {'col':>4}  {'result':>18}  {'reference':>18}")
         err_ys, err_xs = np.where(result != reference)
         order = np.lexsort((err_xs, err_ys))
@@ -247,10 +247,10 @@ def compare(result, reference, output_dir, stem):
             r, c = int(err_ys[idx]), int(err_xs[idx])
             print(f"  {r:>4}  {c:>4}  {COLOR_NAMES[int(result[r,c])]:>18}  {COLOR_NAMES[int(reference[r,c])]:>18}")
 
-    # ── Diagnostic images ─────────────────────────────────────
-    print(f"\n{'─'*70}")
+    # -- Diagnostic images -------------------------------------
+    print(f"\n{'-'*70}")
     print(f"DIAGNOSTIC IMAGES  (in {output_dir})")
-    print(f"{'─'*70}")
+    print(f"{'-'*70}")
 
     result_bgr    = render_palette(result)
     reference_bgr = render_palette(reference)
@@ -286,7 +286,7 @@ def compare(result, reference, output_dir, stem):
     cv2.imwrite(str(out / f"{stem}_diag_error_map.png"), upscale(err_bgr))
     print(f"  {stem}_diag_error_map.png  — white=correct, colours=error type")
 
-    # ── Reprint summary ───────────────────────────────────────
+    # -- Reprint summary ---------------------------------------
     print(f"\n{'='*70}")
     print(f"COMPARISON SUMMARY (reprint)")
     print(f"{'='*70}")
@@ -301,9 +301,9 @@ def compare(result, reference, output_dir, stem):
     return wrongs == 0
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Stdout tee (terminal + log file)
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 class _Tee:
     def __init__(self, log_path):
@@ -325,9 +325,9 @@ class _Tee:
         return getattr(self._terminal, name)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Main
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
