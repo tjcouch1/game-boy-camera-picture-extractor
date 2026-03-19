@@ -506,6 +506,16 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
         n_cal = len(cys)
         log(f"    R refinement: {n_cal} interior DG pixels")
         if n_cal >= 50:
+            # Debug: print sample cal_v vs dark_surf_R at DG positions
+            sample_idxs = np.arange(0, min(n_cal, 20))
+            for i in sample_idxs[:5]:
+                gy, gx = cys[i], cxs[i]
+                py = (FRAME_THICK + gy) * scale + scale // 2
+                px = (FRAME_THICK + gx) * scale + scale // 2
+                raw_v = float(img_rgb[py, px, 0])
+                coons_v = float(dark_surf_R[py, px])
+                corr_v = float(corr_R[py, px])
+                log(f"      DG[{gy},{gx}]: raw={raw_v:.1f} coons={coons_v:.1f} corr={corr_v:.1f}")
             cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2 for gy in cys], float)
             cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2 for gx in cxs], float)
             cal_v = np.array([float(img_rgb[(FRAME_THICK+gy)*scale+scale//2,

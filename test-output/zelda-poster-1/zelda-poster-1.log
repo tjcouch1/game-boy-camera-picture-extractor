@@ -30,6 +30,11 @@ PIPELINE RUN
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
     R refinement: 4137 interior DG pixels
+      DG[4,3]: raw=126.0 coons=97.1 corr=181.3
+      DG[6,19]: raw=32.0 coons=88.6 corr=90.7
+      DG[6,21]: raw=93.0 coons=88.4 corr=152.7
+      DG[7,19]: raw=47.0 coons=88.5 corr=106.2
+      DG[7,21]: raw=109.0 coons=88.2 corr=168.8
   G: Coons+poly -> 255 / 148
     G refinement: 7050 interior DG pixels
   B: white-surface normalisation -> 165 (no global scaling)
