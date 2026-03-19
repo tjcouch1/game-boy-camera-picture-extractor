@@ -22,21 +22,21 @@ PIPELINE RUN
   Border edges: top=118(exp=120,err=-2), bot=1024(exp=1024,err=0), left=116(exp=120,err=-4), right=1155(exp=1152,err=3)
   After refinement: top=120(exp=120), bot=1024(exp=1024), left=120(exp=120), right=1152(exp=1152)
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2__warp_d_refined_color.png
-  d — Warmth (25%): R×1.018+6.6  G×0.996-0.7  B×0.981-8.1
+  d — Warmth (0%): R×1.000+0.0  G×1.000-0.0  B×1.000-0.0
   Saved -> test-output\zelda-poster-2\zelda-poster-2_warp.png  (colour BGR, warmth-corrected)
 
 ============================================================
 [correct/color] test-output\zelda-poster-2\zelda-poster-2_warp.png
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
-    R refinement: 6631 interior DG pixels
+    R refinement: 6771 interior DG pixels
   G: Coons+poly -> 255 / 148
-    G refinement: 8072 interior DG pixels
+    G refinement: 8076 interior DG pixels
   B: white-surface normalisation -> 165 (no global scaling)
   Frame p85 before norm: R=255 G=255 B=165
   Global scales: R=1.0000 G=1.0000 B=1.0000
   Saved -> test-output\zelda-poster-2\zelda-poster-2_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=168.5 G=152.3 B=141.4
+  Camera area mean: R=167.9 G=152.3 B=142.3
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_warp__correct_color_a_before_after.png
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_warp__correct_color_b_white_surf_heatmap.png
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_warp__correct_color_c_full.png
@@ -46,7 +46,7 @@ PIPELINE RUN
 [crop] test-output\zelda-poster-2\zelda-poster-2_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=137.0, white frame mean=194.8 (OK)
+  Validation: inner border mean=136.5, white frame mean=194.7 (OK)
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_correct__crop_a_region.png
   Saved -> test-output\zelda-poster-2\zelda-poster-2_crop.png  (1024×896 px)
 
@@ -56,20 +56,20 @@ PIPELINE RUN
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
   Saved -> test-output\zelda-poster-2\zelda-poster-2_sample.png  (colour, subpixel-aware, 128×112 px)
-  R: 0–255  G: 0–255  B: 58–183
+  R: 0–255  G: 0–255  B: 62–182
 
 ============================================================
 [quantize/color] test-output\zelda-poster-2\zelda-poster-2_sample.png
   Loaded 128×112 colour sample image
-  R: 0–255  G: 0–255  B: 57–183
-  Adaptive k-means RG: BK(1569)~(R41,G34,B112)  DG(3531)~(R140,G144,B152)  LG(4044)~(R218,G118,B118)  WH(5192)~(R246,G214,B118)
+  R: 0–255  G: 0–255  B: 62–182
+  Adaptive k-means RG: BK(1569)~(R46,G34,B114)  DG(3537)~(R140,G144,B152)  LG(4050)~(R214,G119,B120)  WH(5180)~(R246,G214,B119)
   Classification: adaptive-kmeans-RG
   Saved -> test-output\zelda-poster-2\zelda-poster-2_gbcam.png  (grayscale palette)
   Saved -> test-output\zelda-poster-2\zelda-poster-2_gbcam_rgb.png  (new RGB palette)
   BK (#000000):  1569 px  ( 10.9%)
-  DG (#9494FF):  3531 px  ( 24.6%)
-  LG (#FF9494):  4044 px  ( 28.2%)
-  WH (#FFFFA5):  5192 px  ( 36.2%)
+  DG (#9494FF):  3537 px  ( 24.7%)
+  LG (#FF9494):  4050 px  ( 28.3%)
+  WH (#FFFFA5):  5180 px  ( 36.1%)
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_sample__quantize_color_a_gray_8x.png
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_sample__quantize_color_b_rgb_8x.png
 
@@ -77,99 +77,99 @@ PIPELINE RUN
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 13688  (95.48%)
-  Different    : 648   (4.52%)
+  Matching     : 13744  (95.87%)
+  Different    : 592   (4.13%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1569        1572        -3
-  DG  #9494FF                 3531        3526        +5
-  LG  #FF9494                 4044        4255      -211
-  WH  #FFFFA5                 5192        4983      +209
+  DG  #9494FF                 3537        3526       +11
+  LG  #FF9494                 4050        4255      -205
+  WH  #FFFFA5                 5180        4983      +197
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1569 v                0                  0                  0      1569
-  DG  #9494FF                       3 X             3498 v               30 X                0      3531
-  LG  #FF9494                       0                 28 X             3827 v              189 X    4044
-  WH  #FFFFA5                       0                  0                398 X             4794 v    5192
+  DG  #9494FF                       3 X             3505 v               29 X                0      3537
+  LG  #FF9494                       0                 21 X             3858 v              171 X    4050
+  WH  #FFFFA5                       0                  0                368 X             4812 v    5180
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
   DG  #9494FF  ->  BK  #000000 : 3 px
-  DG  #9494FF  ->  LG  #FF9494 : 30 px
-  LG  #FF9494  ->  DG  #9494FF : 28 px
-  LG  #FF9494  ->  WH  #FFFFA5 : 189 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 398 px
+  DG  #9494FF  ->  LG  #FF9494 : 29 px
+  LG  #FF9494  ->  DG  #9494FF : 21 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 171 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 368 px
 
 ----------------------------------------------------------------------
 SPATIAL DISTRIBUTION OF ERRORS
 ----------------------------------------------------------------------
   Errors per row (0–111):
-    row   0 :   15  ###############
+    row   0 :   11  ###########
     row   1 :   17  #################
     row   2 :   17  #################
     row   3 :   15  ###############
     row   4 :   11  ###########
     row   5 :   10  ##########
-    row   6 :   12  ############
+    row   6 :   11  ###########
     row   7 :    9  #########
-    row   8 :    8  ########
-    row   9 :   10  ##########
-    row  10 :    7  #######
-    row  11 :    6  ######
-    row  12 :    7  #######
+    row   8 :    7  #######
+    row   9 :    9  #########
+    row  10 :    5  #####
+    row  11 :    5  #####
+    row  12 :    6  ######
     row  13 :    4  ####
-    row  14 :    3  ###
-    row  15 :    6  ######
-    row  16 :    8  ########
+    row  14 :    1  #
+    row  15 :    5  #####
+    row  16 :    6  ######
     row  17 :    4  ####
     row  18 :    4  ####
     row  19 :    4  ####
     row  20 :    5  #####
-    row  21 :    4  ####
-    row  22 :    5  #####
+    row  21 :    3  ###
+    row  22 :    4  ####
     row  23 :    6  ######
-    row  24 :    6  ######
-    row  25 :    4  ####
+    row  24 :    5  #####
+    row  25 :    3  ###
     row  26 :    4  ####
-    row  27 :    3  ###
-    row  28 :    5  #####
+    row  27 :    2  ##
+    row  28 :    3  ###
     row  29 :    4  ####
     row  30 :    3  ###
     row  31 :    7  #######
-    row  32 :    5  #####
-    row  33 :    5  #####
-    row  34 :    6  ######
-    row  35 :    7  #######
-    row  36 :    7  #######
+    row  32 :    4  ####
+    row  33 :    4  ####
+    row  34 :    4  ####
+    row  35 :    5  #####
+    row  36 :    6  ######
     row  37 :    5  #####
     row  38 :    5  #####
-    row  39 :    3  ###
+    row  39 :    2  ##
     row  40 :    3  ###
     row  41 :    6  ######
     row  42 :    3  ###
-    row  43 :    9  #########
+    row  43 :    8  ########
     row  44 :    3  ###
     row  45 :    9  #########
     row  46 :    1  #
-    row  47 :   10  ##########
+    row  47 :    9  #########
     row  48 :    4  ####
-    row  49 :    4  ####
-    row  50 :    5  #####
+    row  49 :    3  ###
+    row  50 :    4  ####
     row  51 :    3  ###
-    row  52 :    3  ###
+    row  52 :    2  ##
     row  53 :    3  ###
-    row  54 :    5  #####
+    row  54 :    3  ###
     row  55 :    3  ###
     row  56 :    4  ####
-    row  57 :    4  ####
-    row  58 :    2  ##
+    row  57 :    3  ###
+    row  58 :    1  #
     row  59 :    4  ####
     row  60 :    3  ###
     row  61 :    3  ###
@@ -186,70 +186,68 @@ SPATIAL DISTRIBUTION OF ERRORS
     row  73 :    3  ###
     row  74 :    2  ##
     row  75 :    2  ##
-    row  76 :    5  #####
+    row  76 :    3  ###
     row  77 :    5  #####
     row  78 :    3  ###
     row  79 :    3  ###
     row  80 :    5  #####
     row  81 :    4  ####
-    row  82 :    6  ######
+    row  82 :    5  #####
     row  83 :    4  ####
     row  84 :    6  ######
-    row  85 :    4  ####
+    row  85 :    3  ###
     row  86 :    7  #######
     row  87 :    4  ####
     row  88 :    6  ######
     row  89 :    3  ###
     row  90 :    5  #####
-    row  91 :    2  ##
+    row  91 :    1  #
     row  92 :    4  ####
     row  93 :    5  #####
     row  94 :    6  ######
     row  95 :    7  #######
-    row  96 :   11  ###########
+    row  96 :    8  ########
     row  97 :    3  ###
     row  98 :    9  #########
     row  99 :    5  #####
-    row 100 :    8  ########
-    row 101 :   11  ###########
+    row 100 :    7  #######
+    row 101 :    8  ########
     row 102 :    8  ########
     row 103 :    6  ######
     row 104 :    9  #########
-    row 105 :    9  #########
-    row 106 :   10  ##########
-    row 107 :   12  ############
+    row 105 :    8  ########
+    row 106 :    8  ########
+    row 107 :   11  ###########
     row 108 :   11  ###########
     row 109 :   13  #############
     row 110 :   16  ################
     row 111 :    7  #######
   Errors per column (0–127):
-    col   0 :   19  ###################
-    col   1 :   11  ###########
-    col   2 :    3  ###
-    col   3 :   13  #############
+    col   0 :   20  ####################
+    col   1 :    8  ########
+    col   2 :    2  ##
+    col   3 :   11  ###########
     col   4 :   15  ###############
     col   5 :   11  ###########
-    col   6 :   15  ###############
-    col   7 :   21  #####################
-    col   8 :    9  #########
-    col   9 :   12  ############
-    col  10 :    8  ########
+    col   6 :   13  #############
+    col   7 :   20  ####################
+    col   8 :   10  ##########
+    col   9 :   10  ##########
+    col  10 :    5  #####
     col  11 :    5  #####
     col  12 :    7  #######
-    col  13 :    6  ######
-    col  14 :    8  ########
-    col  15 :    6  ######
+    col  13 :    5  #####
+    col  14 :    7  #######
+    col  15 :    5  #####
     col  16 :   10  ##########
     col  17 :    7  #######
-    col  18 :   10  ##########
-    col  19 :    7  #######
-    col  20 :    6  ######
-    col  21 :    4  ####
+    col  18 :   11  ###########
+    col  19 :    5  #####
+    col  20 :    4  ####
+    col  21 :    3  ###
     col  22 :    1  #
-    col  23 :    4  ####
-    col  24 :    1  #
+    col  23 :    3  ###
     col  25 :    1  #
-    col  26 :    1  #
     col  27 :    1  #
     col  28 :    2  ##
     col  32 :    1  #
@@ -262,55 +260,50 @@ SPATIAL DISTRIBUTION OF ERRORS
     col  78 :    1  #
     col  84 :    1  #
     col  85 :    1  #
-    col  87 :    1  #
-    col  89 :    3  ###
+    col  89 :    2  ##
     col  91 :    1  #
-    col  93 :    4  ####
+    col  93 :    3  ###
     col  94 :    1  #
     col  95 :    3  ###
     col  96 :    1  #
     col  97 :    1  #
     col  98 :    3  ###
-    col  99 :    7  #######
+    col  99 :    6  ######
     col 100 :    4  ####
-    col 101 :    5  #####
+    col 101 :    4  ####
     col 102 :    5  #####
-    col 103 :    5  #####
+    col 103 :    3  ###
     col 104 :    3  ###
     col 105 :    4  ####
     col 106 :    7  #######
-    col 107 :    5  #####
+    col 107 :    4  ####
     col 108 :    6  ######
-    col 109 :    9  #########
-    col 110 :   13  #############
-    col 111 :   10  ##########
-    col 112 :   10  ##########
-    col 113 :    8  ########
-    col 114 :   12  ############
-    col 115 :    7  #######
-    col 116 :   12  ############
-    col 117 :   12  ############
-    col 118 :   17  #################
+    col 109 :    8  ########
+    col 110 :   12  ############
+    col 111 :    9  #########
+    col 112 :    9  #########
+    col 113 :    7  #######
+    col 114 :   11  ###########
+    col 115 :    5  #####
+    col 116 :    9  #########
+    col 117 :   10  ##########
+    col 118 :   15  ###############
     col 119 :    7  #######
-    col 120 :   13  #############
-    col 121 :   14  ##############
-    col 122 :   22  ######################
-    col 123 :   13  #############
+    col 120 :   12  ############
+    col 121 :   12  ############
+    col 122 :   21  #####################
+    col 123 :    9  #########
     col 124 :   19  ###################
-    col 125 :   39  #######################################
-    col 126 :   51  ##################################################
+    col 125 :   37  #####################################
+    col 126 :   50  ##################################################
     col 127 :   55  ##################################################
 
 ----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (592 errors, sorted by row then column)
 ----------------------------------------------------------------------
    row   col              result           reference
-     0    89         DG  #9494FF         LG  #FF9494
-     0    93         DG  #9494FF         LG  #FF9494
      0    95         DG  #9494FF         LG  #FF9494
-     0    99         DG  #9494FF         LG  #FF9494
      0   101         DG  #9494FF         LG  #FF9494
-     0   103         DG  #9494FF         LG  #FF9494
      0   109         DG  #9494FF         LG  #FF9494
      0   111         DG  #9494FF         LG  #FF9494
      0   113         DG  #9494FF         LG  #FF9494
@@ -396,7 +389,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
      6    97         WH  #FFFFA5         LG  #FF9494
      6    99         WH  #FFFFA5         LG  #FF9494
      6   101         WH  #FFFFA5         LG  #FF9494
-     6   103         WH  #FFFFA5         LG  #FF9494
      6   105         WH  #FFFFA5         LG  #FF9494
      6   107         WH  #FFFFA5         LG  #FF9494
      6   109         WH  #FFFFA5         LG  #FF9494
@@ -414,7 +406,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
      8     4         LG  #FF9494         WH  #FFFFA5
      8    93         WH  #FFFFA5         LG  #FF9494
      8    99         WH  #FFFFA5         LG  #FF9494
-     8   101         WH  #FFFFA5         LG  #FF9494
      8   105         WH  #FFFFA5         LG  #FF9494
      8   107         WH  #FFFFA5         LG  #FF9494
      8   109         WH  #FFFFA5         LG  #FF9494
@@ -425,24 +416,19 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
      9   102         WH  #FFFFA5         LG  #FF9494
      9   106         WH  #FFFFA5         LG  #FF9494
      9   110         WH  #FFFFA5         LG  #FF9494
-     9   112         WH  #FFFFA5         LG  #FF9494
      9   114         WH  #FFFFA5         LG  #FF9494
      9   126         WH  #FFFFA5         LG  #FF9494
      9   127         WH  #FFFFA5         LG  #FF9494
-    10     2         LG  #FF9494         WH  #FFFFA5
-    10    87         WH  #FFFFA5         LG  #FF9494
     10    99         WH  #FFFFA5         LG  #FF9494
     10   109         WH  #FFFFA5         LG  #FF9494
     10   111         WH  #FFFFA5         LG  #FF9494
     10   113         WH  #FFFFA5         LG  #FF9494
     10   127         WH  #FFFFA5         LG  #FF9494
-    11     7         LG  #FF9494         WH  #FFFFA5
     11    18         LG  #FF9494         DG  #9494FF
     11   100         WH  #FFFFA5         LG  #FF9494
     11   104         WH  #FFFFA5         LG  #FF9494
     11   124         WH  #FFFFA5         LG  #FF9494
     11   126         WH  #FFFFA5         LG  #FF9494
-    12     3         LG  #FF9494         DG  #9494FF
     12     4         LG  #FF9494         WH  #FFFFA5
     12    99         WH  #FFFFA5         LG  #FF9494
     12   105         WH  #FFFFA5         LG  #FF9494
@@ -453,20 +439,15 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     13    11         LG  #FF9494         WH  #FFFFA5
     13    17         LG  #FF9494         WH  #FFFFA5
     13   126         WH  #FFFFA5         LG  #FF9494
-    14   109         WH  #FFFFA5         LG  #FF9494
-    14   125         WH  #FFFFA5         LG  #FF9494
     14   127         WH  #FFFFA5         LG  #FF9494
     15     7         LG  #FF9494         WH  #FFFFA5
     15    62         DG  #9494FF         BK  #000000
     15   108         WH  #FFFFA5         LG  #FF9494
     15   110         WH  #FFFFA5         LG  #FF9494
-    15   114         WH  #FFFFA5         LG  #FF9494
     15   126         WH  #FFFFA5         LG  #FF9494
     16     4         LG  #FF9494         WH  #FFFFA5
-    16   107         WH  #FFFFA5         LG  #FF9494
     16   111         WH  #FFFFA5         LG  #FF9494
     16   113         WH  #FFFFA5         LG  #FF9494
-    16   115         WH  #FFFFA5         LG  #FF9494
     16   117         WH  #FFFFA5         LG  #FF9494
     16   119         WH  #FFFFA5         LG  #FF9494
     16   127         WH  #FFFFA5         LG  #FF9494
@@ -489,11 +470,9 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     20   127         WH  #FFFFA5         LG  #FF9494
     21     7         LG  #FF9494         WH  #FFFFA5
     21    84         DG  #9494FF         BK  #000000
-    21   110         WH  #FFFFA5         LG  #FF9494
     21   126         WH  #FFFFA5         LG  #FF9494
     22     0         DG  #9494FF         LG  #FF9494
     22    58         DG  #9494FF         LG  #FF9494
-    22   111         WH  #FFFFA5         LG  #FF9494
     22   125         WH  #FFFFA5         LG  #FF9494
     22   127         WH  #FFFFA5         LG  #FF9494
     23   110         WH  #FFFFA5         LG  #FF9494
@@ -503,12 +482,10 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     23   118         WH  #FFFFA5         LG  #FF9494
     23   126         WH  #FFFFA5         LG  #FF9494
     24     4         LG  #FF9494         WH  #FFFFA5
-    24     6         LG  #FF9494         WH  #FFFFA5
     24    40         DG  #9494FF         LG  #FF9494
     24    98         WH  #FFFFA5         LG  #FF9494
     24   117         WH  #FFFFA5         LG  #FF9494
     24   127         WH  #FFFFA5         LG  #FF9494
-    25    15         LG  #FF9494         WH  #FFFFA5
     25   110         WH  #FFFFA5         LG  #FF9494
     25   120         WH  #FFFFA5         LG  #FF9494
     25   126         WH  #FFFFA5         LG  #FF9494
@@ -517,11 +494,8 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     26   125         WH  #FFFFA5         LG  #FF9494
     26   127         WH  #FFFFA5         LG  #FF9494
     27     7         LG  #FF9494         WH  #FFFFA5
-    27   118         WH  #FFFFA5         LG  #FF9494
     27   126         WH  #FFFFA5         LG  #FF9494
-    28     1         LG  #FF9494         DG  #9494FF
     28    60         DG  #9494FF         LG  #FF9494
-    28   113         WH  #FFFFA5         LG  #FF9494
     28   117         WH  #FFFFA5         LG  #FF9494
     28   127         WH  #FFFFA5         LG  #FF9494
     29     7         LG  #FF9494         WH  #FFFFA5
@@ -540,32 +514,25 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     31   126         WH  #FFFFA5         LG  #FF9494
     32    27         LG  #FF9494         DG  #9494FF
     32   115         WH  #FFFFA5         LG  #FF9494
-    32   117         WH  #FFFFA5         LG  #FF9494
     32   125         WH  #FFFFA5         LG  #FF9494
     32   127         WH  #FFFFA5         LG  #FF9494
-    33     1         LG  #FF9494         WH  #FFFFA5
     33     3         LG  #FF9494         WH  #FFFFA5
     33   118         WH  #FFFFA5         LG  #FF9494
     33   124         WH  #FFFFA5         LG  #FF9494
     33   126         WH  #FFFFA5         LG  #FF9494
     34     4         LG  #FF9494         WH  #FFFFA5
-    34    14         LG  #FF9494         WH  #FFFFA5
     34    50         DG  #9494FF         LG  #FF9494
     34   117         WH  #FFFFA5         LG  #FF9494
-    34   125         WH  #FFFFA5         LG  #FF9494
     34   127         WH  #FFFFA5         LG  #FF9494
     35     1         LG  #FF9494         WH  #FFFFA5
-    35     3         LG  #FF9494         WH  #FFFFA5
-    35   116         WH  #FFFFA5         LG  #FF9494
     35   120         WH  #FFFFA5         LG  #FF9494
     35   122         WH  #FFFFA5         LG  #FF9494
     35   124         WH  #FFFFA5         LG  #FF9494
     35   126         WH  #FFFFA5         LG  #FF9494
-    36     6         LG  #FF9494         WH  #FFFFA5
+    36    18         DG  #9494FF         LG  #FF9494
     36    39         LG  #FF9494         DG  #9494FF
     36   119         WH  #FFFFA5         LG  #FF9494
     36   121         WH  #FFFFA5         LG  #FF9494
-    36   123         WH  #FFFFA5         LG  #FF9494
     36   125         WH  #FFFFA5         LG  #FF9494
     36   127         WH  #FFFFA5         LG  #FF9494
     37     3         LG  #FF9494         WH  #FFFFA5
@@ -575,11 +542,10 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     37   126         WH  #FFFFA5         LG  #FF9494
     38     6         LG  #FF9494         WH  #FFFFA5
     38    14         LG  #FF9494         WH  #FFFFA5
-    38   123         WH  #FFFFA5         LG  #FF9494
+    38    18         DG  #9494FF         LG  #FF9494
     38   125         WH  #FFFFA5         LG  #FF9494
     38   127         WH  #FFFFA5         LG  #FF9494
     39   112         WH  #FFFFA5         LG  #FF9494
-    39   116         WH  #FFFFA5         LG  #FF9494
     39   126         WH  #FFFFA5         LG  #FF9494
     40     4         LG  #FF9494         WH  #FFFFA5
     40   125         WH  #FFFFA5         LG  #FF9494
@@ -597,7 +563,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     43     3         LG  #FF9494         WH  #FFFFA5
     43     5         LG  #FF9494         WH  #FFFFA5
     43     7         LG  #FF9494         WH  #FFFFA5
-    43     9         LG  #FF9494         WH  #FFFFA5
     43    13         LG  #FF9494         WH  #FFFFA5
     43   120         WH  #FFFFA5         LG  #FF9494
     43   122         WH  #FFFFA5         LG  #FF9494
@@ -620,7 +585,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     47     7         LG  #FF9494         WH  #FFFFA5
     47     9         LG  #FF9494         WH  #FFFFA5
     47    13         LG  #FF9494         WH  #FFFFA5
-    47   116         WH  #FFFFA5         LG  #FF9494
     47   120         WH  #FFFFA5         LG  #FF9494
     47   122         WH  #FFFFA5         LG  #FF9494
     47   124         WH  #FFFFA5         LG  #FF9494
@@ -630,10 +594,8 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     48   113         WH  #FFFFA5         LG  #FF9494
     48   127         WH  #FFFFA5         LG  #FF9494
     49     9         LG  #FF9494         WH  #FFFFA5
-    49    13         LG  #FF9494         WH  #FFFFA5
     49   122         WH  #FFFFA5         LG  #FF9494
     49   126         WH  #FFFFA5         LG  #FF9494
-    50     1         LG  #FF9494         DG  #9494FF
     50    28         LG  #FF9494         DG  #9494FF
     50   121         WH  #FFFFA5         LG  #FF9494
     50   125         WH  #FFFFA5         LG  #FF9494
@@ -641,29 +603,24 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     51   116         WH  #FFFFA5         LG  #FF9494
     51   124         WH  #FFFFA5         LG  #FF9494
     51   126         WH  #FFFFA5         LG  #FF9494
-    52   121         WH  #FFFFA5         LG  #FF9494
     52   125         WH  #FFFFA5         LG  #FF9494
     52   127         WH  #FFFFA5         LG  #FF9494
     53   118         WH  #FFFFA5         LG  #FF9494
     53   124         WH  #FFFFA5         LG  #FF9494
     53   126         WH  #FFFFA5         LG  #FF9494
-    54     9         LG  #FF9494         DG  #9494FF
-    54    10         LG  #FF9494         WH  #FFFFA5
     54   117         WH  #FFFFA5         LG  #FF9494
     54   125         WH  #FFFFA5         LG  #FF9494
     54   127         WH  #FFFFA5         LG  #FF9494
     55   120         WH  #FFFFA5         LG  #FF9494
     55   124         WH  #FFFFA5         LG  #FF9494
     55   126         WH  #FFFFA5         LG  #FF9494
+    56     0         LG  #FF9494         WH  #FFFFA5
     56    20         DG  #9494FF         LG  #FF9494
-    56   121         WH  #FFFFA5         LG  #FF9494
     56   125         WH  #FFFFA5         LG  #FF9494
     56   127         WH  #FFFFA5         LG  #FF9494
-    57    10         LG  #FF9494         DG  #9494FF
     57   114         WH  #FFFFA5         LG  #FF9494
     57   124         WH  #FFFFA5         LG  #FF9494
     57   126         WH  #FFFFA5         LG  #FF9494
-    58   123         WH  #FFFFA5         LG  #FF9494
     58   125         WH  #FFFFA5         LG  #FF9494
     59     1         DG  #9494FF         LG  #FF9494
     59   118         WH  #FFFFA5         LG  #FF9494
@@ -689,7 +646,7 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     67   120         WH  #FFFFA5         LG  #FF9494
     68     0         DG  #9494FF         LG  #FF9494
     68     2         DG  #9494FF         LG  #FF9494
-    68   123         WH  #FFFFA5         LG  #FF9494
+    68     8         DG  #9494FF         LG  #FF9494
     68   125         WH  #FFFFA5         LG  #FF9494
     68   127         WH  #FFFFA5         LG  #FF9494
     69    40         LG  #FF9494         DG  #9494FF
@@ -712,8 +669,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     75   116         WH  #FFFFA5         LG  #FF9494
     75   124         WH  #FFFFA5         LG  #FF9494
     76     0         LG  #FF9494         WH  #FFFFA5
-    76    26         LG  #FF9494         DG  #9494FF
-    76   117         WH  #FFFFA5         LG  #FF9494
     76   125         WH  #FFFFA5         LG  #FF9494
     76   127         WH  #FFFFA5         LG  #FF9494
     77    11         LG  #FF9494         WH  #FFFFA5
@@ -739,7 +694,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     82     0         LG  #FF9494         WH  #FFFFA5
     82     2         LG  #FF9494         WH  #FFFFA5
     82     8         LG  #FF9494         WH  #FFFFA5
-    82    10         LG  #FF9494         WH  #FFFFA5
     82   119         WH  #FFFFA5         LG  #FF9494
     82   127         WH  #FFFFA5         LG  #FF9494
     83     9         LG  #FF9494         WH  #FFFFA5
@@ -754,7 +708,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     84   127         WH  #FFFFA5         LG  #FF9494
     85     9         LG  #FF9494         WH  #FFFFA5
     85   118         WH  #FFFFA5         LG  #FF9494
-    85   122         WH  #FFFFA5         LG  #FF9494
     85   126         WH  #FFFFA5         LG  #FF9494
     86     0         LG  #FF9494         WH  #FFFFA5
     86     9         LG  #FF9494         WH  #FFFFA5
@@ -781,7 +734,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     90    11         LG  #FF9494         WH  #FFFFA5
     90    12         LG  #FF9494         WH  #FFFFA5
     90   127         WH  #FFFFA5         LG  #FF9494
-    91   120         WH  #FFFFA5         LG  #FF9494
     91   126         WH  #FFFFA5         LG  #FF9494
     92     0         LG  #FF9494         WH  #FFFFA5
     92     5         LG  #FF9494         DG  #9494FF
@@ -810,9 +762,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
     96     6         LG  #FF9494         WH  #FFFFA5
     96    14         LG  #FF9494         WH  #FFFFA5
     96    16         LG  #FF9494         WH  #FFFFA5
-    96    19         LG  #FF9494         DG  #9494FF
-    96    20         LG  #FF9494         WH  #FFFFA5
-    96    21         LG  #FF9494         WH  #FFFFA5
     96   121         WH  #FFFFA5         LG  #FF9494
     96   125         WH  #FFFFA5         LG  #FF9494
     96   127         WH  #FFFFA5         LG  #FF9494
@@ -837,7 +786,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
    100     4         LG  #FF9494         WH  #FFFFA5
    100     6         LG  #FF9494         WH  #FFFFA5
    100    16         LG  #FF9494         WH  #FFFFA5
-   100    18         LG  #FF9494         WH  #FFFFA5
    100   121         WH  #FFFFA5         LG  #FF9494
    100   123         WH  #FFFFA5         LG  #FF9494
    100   127         WH  #FFFFA5         LG  #FF9494
@@ -849,9 +797,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
    101    19         LG  #FF9494         WH  #FFFFA5
    101    20         LG  #FF9494         WH  #FFFFA5
    101    21         LG  #FF9494         WH  #FFFFA5
-   101    23         LG  #FF9494         WH  #FFFFA5
-   101    24         LG  #FF9494         WH  #FFFFA5
-   101   126         WH  #FFFFA5         LG  #FF9494
    102     0         LG  #FF9494         WH  #FFFFA5
    102     4         LG  #FF9494         WH  #FFFFA5
    102     6         LG  #FF9494         WH  #FFFFA5
@@ -881,16 +826,13 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
    105    18         LG  #FF9494         WH  #FFFFA5
    105    19         LG  #FF9494         WH  #FFFFA5
    105    23         LG  #FF9494         WH  #FFFFA5
-   105   118         WH  #FFFFA5         LG  #FF9494
    105   122         WH  #FFFFA5         LG  #FF9494
    105   126         WH  #FFFFA5         LG  #FF9494
    106     4         LG  #FF9494         WH  #FFFFA5
    106     6         LG  #FF9494         WH  #FFFFA5
    106    15         LG  #FF9494         DG  #9494FF
    106    16         LG  #FF9494         WH  #FFFFA5
-   106    19         LG  #FF9494         WH  #FFFFA5
    106    21         LG  #FF9494         WH  #FFFFA5
-   106   115         WH  #FFFFA5         LG  #FF9494
    106   119         WH  #FFFFA5         LG  #FF9494
    106   125         WH  #FFFFA5         LG  #FF9494
    106   127         WH  #FFFFA5         LG  #FF9494
@@ -899,7 +841,6 @@ FULL PIXEL ERROR LIST  (648 errors, sorted by row then column)
    107    16         LG  #FF9494         WH  #FFFFA5
    107    17         LG  #FF9494         WH  #FFFFA5
    107    18         LG  #FF9494         WH  #FFFFA5
-   107    20         LG  #FF9494         WH  #FFFFA5
    107    23         LG  #FF9494         WH  #FFFFA5
    107   116         WH  #FFFFA5         LG  #FF9494
    107   117         WH  #FFFFA5         LG  #FF9494
@@ -966,12 +907,12 @@ DIAGNOSTIC IMAGES  (in test-output\zelda-poster-2)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 13688  (95.48%)
-  Different    : 648   (4.52%)
+  Matching     : 13744  (95.87%)
+  Different    : 592   (4.13%)
   BK  #000000                 1569        1572        -3
-  DG  #9494FF                 3531        3526        +5
-  LG  #FF9494                 4044        4255      -211
-  WH  #FFFFA5                 5192        4983      +209
+  DG  #9494FF                 3537        3526       +11
+  LG  #FF9494                 4050        4255      -205
+  WH  #FFFFA5                 5180        4983      +197
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.

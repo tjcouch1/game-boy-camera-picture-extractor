@@ -193,8 +193,16 @@ def _classify_color(samples_rgb, init_centers=None):
     try:
         from sklearn.cluster import KMeans
 
-        # K-means in RG space to find actual 4 clusters
-        kmeans = KMeans(n_clusters=4, random_state=42, n_init=10, max_iter=300)
+        # K-means in RG space with smart initialization
+        # Initialize near expected palette colors for faster, more stable convergence
+        init_centers = np.array([
+            [80, 20],    # BK: low R, very low G
+            [148, 148],  # DG: balanced mid-range
+            [240, 148],  # LG: high R, mid G
+            [250, 250],  # WH: high R, high G
+        ], dtype=np.float32)
+
+        kmeans = KMeans(n_clusters=4, init=init_centers, n_init=1, max_iter=300, random_state=42)
         cluster_labels = kmeans.fit_predict(flat_rg)
         centers_rg = kmeans.cluster_centers_  # (4, 2) — R, G for each cluster
 
