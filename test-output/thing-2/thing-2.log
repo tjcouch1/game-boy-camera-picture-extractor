@@ -1,6 +1,6 @@
 
 ======================================================================
-PIPELINE RUN  [colour]
+PIPELINE RUN
   Input:      test-input\thing-2.jpg
   Output dir: test-output\thing-2
   scale=8  threshold=180  poly_degree=2  dark_smooth=13
@@ -46,7 +46,7 @@ PIPELINE RUN  [colour]
 
 ============================================================
 [crop] test-output\thing-2\thing-2_correct.png
-  Loaded 1280×1152 px (scale=8, colour=True)
+  Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) → (1152,1024)  = 1024×896 px  (128×112 GB pixels)
   Validation: inner border mean=160.3, white frame mean=218.7 (OK)
     [debug] test-output\thing-2\debug\thing-2_correct__crop_a_region.png

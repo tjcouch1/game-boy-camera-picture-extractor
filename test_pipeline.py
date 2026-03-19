@@ -18,7 +18,6 @@ Usage:
     --scale N               Pipeline scale (default: 8)
     --threshold T           Warp threshold (default: 180)
     --poly-degree N         Correct polynomial degree (default: 2)
-    --grayscale             Use the legacy grayscale pipeline instead of colour
 
 Exit code:
     0  — all pixels match
@@ -59,7 +58,7 @@ BGR_PALETTE = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
-                 dark_smooth=13, color=True, debug=True):
+                 dark_smooth=13, debug=True):
     """Run the full pipeline and return the path to the _gbcam.png output."""
     sys.path.insert(0, str(Path(__file__).parent))
     from gbcam_common import strip_step_suffix, set_verbose
@@ -78,9 +77,8 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
     def p(suffix):
         return str(out / (stem + suffix + ".png"))
 
-    mode = "colour" if color else "grayscale (legacy)"
     print(f"\n{'='*70}")
-    print(f"PIPELINE RUN  [{mode}]")
+    print(f"PIPELINE RUN")
     print(f"  Input:      {input_path}")
     print(f"  Output dir: {output_dir}")
     print(f"  scale={scale}  threshold={thresh_val}  poly_degree={poly_degree}"
@@ -90,25 +88,25 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
     step_warp.process_file(
         input_path, p("_warp"),
         scale=scale, thresh_val=thresh_val,
-        color=color, debug=debug, debug_dir=dbg)
+        debug=debug, debug_dir=dbg)
 
     step_correct.process_file(
         p("_warp"), p("_correct"),
         scale=scale, poly_degree=poly_degree,
         dark_smooth=dark_smooth,
-        color=color, debug=debug, debug_dir=dbg)
+        debug=debug, debug_dir=dbg)
 
     step_crop.process_file(
         p("_correct"), p("_crop"),
-        scale=scale, color=color, debug=debug, debug_dir=dbg)
+        scale=scale, debug=debug, debug_dir=dbg)
 
     step_sample.process_file(
         p("_crop"), p("_sample"),
-        scale=scale, color=color, debug=debug, debug_dir=dbg)
+        scale=scale, debug=debug, debug_dir=dbg)
 
     step_quantize.process_file(
         p("_sample"), p("_gbcam"),
-        color=color, debug=debug, debug_dir=dbg)
+        debug=debug, debug_dir=dbg)
 
     return p("_gbcam")
 
@@ -359,12 +357,6 @@ def main():
     parser.add_argument("--dark-smooth", type=int, default=13,
                         help="Smoothing kernel size for dark surface (default: 13).")
 
-    # Mode
-    parser.add_argument("--grayscale", action="store_true",
-                        help="Use the legacy grayscale pipeline. Colour mode is the default.")
-    parser.add_argument("--color", action="store_true",
-                        help="(no-op — colour mode is the default; kept for compatibility)")
-
     args = parser.parse_args()
 
     from gbcam_common import strip_step_suffix
@@ -382,8 +374,6 @@ def main():
         print(f"ERROR: reference image not found: {args.reference}", file=sys.stderr)
         sys.exit(1)
 
-    color = not args.grayscale   # colour is the default
-
     try:
         gbcam_path = run_pipeline(
             input_path  = args.input,
@@ -392,7 +382,6 @@ def main():
             thresh_val  = args.threshold,
             poly_degree = args.poly_degree,
             dark_smooth = args.dark_smooth,
-            color       = color,
             debug       = True,
         )
     except Exception as e:

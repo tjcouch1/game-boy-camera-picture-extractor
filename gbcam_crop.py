@@ -42,18 +42,15 @@ from gbcam_common import (
 SUFFIX = STEP_SUFFIX["crop"]
 
 
-def process_file(input_path, output_path, scale=8, color=True,
+def process_file(input_path, output_path, scale=8,
                  debug=False, debug_dir=None):
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
     log(f"[crop] {input_path}", always=True)
 
-    # Detect colour vs grayscale input transparently
-    raw = cv2.imread(str(input_path))   # always load colour first
+    raw = cv2.imread(str(input_path))
     if raw is None:
         raise RuntimeError(f"Cannot read image: {input_path}")
-    is_color = (raw.ndim == 3 and raw.shape[2] == 3 and
-                not np.all(raw[:,:,0] == raw[:,:,1]))   # true colour (R≠G channels)
 
     # Use grayscale for geometry / validation; preserve colour for the crop output
     gray = cv2.cvtColor(raw, cv2.COLOR_BGR2GRAY)
@@ -64,7 +61,7 @@ def process_file(input_path, output_path, scale=8, color=True,
             f"Unexpected input size {gray.shape[1]}×{gray.shape[0]}; "
             f"expected {expected_w}×{expected_h}. "
             f"Did you pass a correct-step (or warp-step) output with the correct --scale?")
-    log(f"  Loaded {gray.shape[1]}×{gray.shape[0]} px (scale={scale}, colour={is_color})")
+    log(f"  Loaded {gray.shape[1]}×{gray.shape[0]} px (scale={scale})")
 
     y1, x1 = FRAME_THICK * scale, FRAME_THICK * scale
     y2, x2 = y1 + CAM_H * scale, x1 + CAM_W * scale
@@ -89,7 +86,7 @@ def process_file(input_path, output_path, scale=8, color=True,
     crop = raw[y1:y2, x1:x2]   # BGR or grayscale-as-BGR, same slice either way
 
     if debug and debug_dir and stem:
-        dbg = raw.copy() if is_color else cv2.cvtColor(gray.copy(), cv2.COLOR_GRAY2BGR)
+        dbg = raw.copy()
         cv2.rectangle(dbg, (x1, y1), (x2, y2), (0, 200, 0), 3)
         cv2.rectangle(dbg, (x1 - scale, y1 - scale),
                       (x2 + scale, y2 + scale), (0, 100, 255), scale)

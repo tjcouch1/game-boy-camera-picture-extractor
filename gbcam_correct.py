@@ -672,173 +672,12 @@ def _collect_border_dark(gray, scale, dark_smooth):
 # ─────────────────────────────────────────────────────────────
 
 def process_file(input_path, output_path, scale=8, poly_degree=2,
-                 dark_smooth=13, refine_passes=1, color=True,
+                 dark_smooth=13, refine_passes=1,
                  debug=False, debug_dir=None):
-    """
-    Compute brightness-corrected output for a single warp-step image.
-
-    Parameters
-    ----------
-    input_path : str or Path
-        Path to the <stem>_warp.png from the warp step.
-    output_path : str or Path
-        Destination for the corrected image.
-    scale : int
-        Pixels per GB pixel; must match the warp step.
-    poly_degree : int
-        Degree of the bivariate polynomial used for the white reference surface.
-    dark_smooth : int
-        Smoothing window (GB pixels) applied to each inner-border curve before
-        building the initial Coons patch dark surface.
-    refine_passes : int
-        Number of refinement passes after the initial Coons correction.
-        Each pass collects confident dark-gray interior pixels from the previous
-        corrected image, uses their warp-centre brightness as additional calibration
-        points, and re-fits the dark surface with a degree-4 polynomial over the
-        combined border + interior dataset.
-        Default: 1 (one refinement pass after initial Coons patch).
-        Set to 0 to disable and use only the Coons patch.
-    """
-    if color:
-        _process_file_color(input_path, output_path, scale=scale,
-                            poly_degree=poly_degree, dark_smooth=dark_smooth,
-                            refine_passes=refine_passes,
-                            debug=debug, debug_dir=debug_dir)
-        return
-
-    stem = Path(input_path).stem
-    log(f"\n{'='*60}", always=True)
-    log(f"[correct] {input_path}", always=True)
-
-    gray = cv2.imread(str(input_path), cv2.IMREAD_GRAYSCALE)
-    if gray is None:
-        raise RuntimeError(f"Cannot read image: {input_path}")
-
-    expected_w, expected_h = SCREEN_W * scale, SCREEN_H * scale
-    if gray.shape != (expected_h, expected_w):
-        raise RuntimeError(
-            f"Unexpected input size {gray.shape[1]}×{gray.shape[0]}; "
-            f"expected {expected_w}×{expected_h}. "
-            f"Did you pass a warp-step output with the correct --scale?")
-    H, W = gray.shape
-    log(f"  Loaded {W}×{H} px (scale={scale})")
-
-    log(f"  Collecting reference samples (white poly degree={poly_degree}, dark smooth_k={dark_smooth})…")
-    wy, wx, wv             = collect_white_samples(gray, scale)
-    left, right, top, bot  = collect_dark_samples(gray, scale)
-
-    log("  Fitting brightness surfaces…")
-    white_surf = fit_surface(wy, wx, wv, H, W, poly_degree)
-    dark_surf  = build_dark_surface(left, right, top, bot, H, W, scale, dark_smooth)
-
-    # Log corner values of each surface for sanity
-    corners = [(0, 0), (0, W-1), (H-1, 0), (H-1, W-1)]
-    for r, c in corners:
-        log(f"    ({r:4d},{c:4d}): white={white_surf[r,c]:.1f}  dark={dark_surf[r,c]:.1f}")
-
-    def _apply_correction(ds):
-        span   = np.maximum(white_surf - ds, 5.0)
-        gain   = (span / (_TRUE_WHITE - _TRUE_DARK)).astype(np.float32)
-        offset = (ds - gain * _TRUE_DARK).astype(np.float32)
-        return np.clip(np.round((gray.astype(np.float32) - offset) / gain),
-                       0, 255).astype(np.uint8)
-
-    log("  Applying per-pixel affine correction (pass 1 — Coons patch dark surface)…")
-    corrected = _apply_correction(dark_surf)
-
-    # ── Iterative refinement passes ──────────────────────────────
-    if refine_passes > 0:
-        border_y, border_x, border_v = _collect_border_dark(gray, scale, dark_smooth)
-        for pass_n in range(1, refine_passes + 1):
-            # Lightweight inline sample of the current corrected image
-            sample_approx = _quick_sample(corrected, scale, h_margin=2, v_margin=1)
-
-            # Collect confident dark-gray interior pixels as additional calibration.
-            # These pixels have sample value in [60, 110] — well above the noise floor
-            # (~4) and the black/dg boundary (~40) yet below the dg/lg boundary (~120).
-            # Their warp-centre brightness directly measures dark_surf at that location.
-            _DG_SMIN, _DG_SMAX = 60, 110
-            # Rough classify: below midpoint → black, in DG band → candidate
-            rough_thresh = 42.0
-            dg_mask = (sample_approx >= _DG_SMIN) & (sample_approx <= _DG_SMAX)
-            cys, cxs = np.where(dg_mask)
-            n_cal = len(cys)
-            log(f"  Refinement pass {pass_n}: {n_cal} interior dark-gray calibration pixels…")
-
-            if n_cal < 50:
-                log(f"    Too few calibration pixels — skipping further refinement.")
-                break
-
-            cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2
-                               for gy, gx in zip(cys, cxs)], dtype=float)
-            cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2
-                               for gy, gx in zip(cys, cxs)], dtype=float)
-            cal_v = np.array([float(gray[(FRAME_THICK + gy) * scale + scale // 2,
-                                         (FRAME_THICK + gx) * scale + scale // 2])
-                               for gy, gx in zip(cys, cxs)], dtype=float)
-
-            # Fit degree-4 polynomial to border + interior calibration
-            all_y = np.concatenate([border_y, cal_y])
-            all_x = np.concatenate([border_x, cal_x])
-            all_v = np.concatenate([border_v, cal_v])
-            dark_surf_ref = _fit_surface_poly(all_y, all_x, all_v, H, W, degree=4)
-            log(f"    Dark surface refined — corner delta: "
-                + ", ".join(f"({r},{c}): {dark_surf_ref[r,c]-dark_surf[r,c]:+.1f}"
-                            for r, c in corners))
-            dark_surf = dark_surf_ref
-            corrected = _apply_correction(dark_surf)
-
-    # Validation: inner border mean after correction should be near 82
-    cam_y1 = FRAME_THICK * scale;  cam_y2 = (FRAME_THICK + CAM_H) * scale
-    cam_x1 = FRAME_THICK * scale;  cam_x2 = (FRAME_THICK + CAM_W) * scale
-    lc1, lc2 = INNER_LEFT * scale, (INNER_LEFT + 1) * scale
-    rc1, rc2 = INNER_RIGHT * scale, (INNER_RIGHT + 1) * scale
-    tc1, tc2 = INNER_TOP * scale, (INNER_TOP + 1) * scale
-    bc1, bc2 = INNER_BOT * scale, (INNER_BOT + 1) * scale
-
-    orig_bdr = np.concatenate([
-        gray[cam_y1:cam_y2, lc1:lc2].ravel().astype(float),
-        gray[cam_y1:cam_y2, rc1:rc2].ravel().astype(float),
-        gray[tc1:tc2, cam_x1:cam_x2].ravel().astype(float),
-        gray[bc1:bc2, cam_x1:cam_x2].ravel().astype(float),
-    ])
-    corr_bdr = np.concatenate([
-        corrected[cam_y1:cam_y2, lc1:lc2].ravel().astype(float),
-        corrected[cam_y1:cam_y2, rc1:rc2].ravel().astype(float),
-        corrected[tc1:tc2, cam_x1:cam_x2].ravel().astype(float),
-        corrected[bc1:bc2, cam_x1:cam_x2].ravel().astype(float),
-    ])
-    log(f"  Inner border (#525252 ref, target=82): "
-        f"before mean={orig_bdr.mean():.1f} (err={orig_bdr.mean()-82:.1f}), "
-        f"after mean={corr_bdr.mean():.1f} (err={corr_bdr.mean()-82:.1f}) "
-        f"({'improved' if abs(corr_bdr.mean()-82) < abs(orig_bdr.mean()-82) else 'check'})")
-
-    cv2.imwrite(str(output_path), corrected)
-    log(f"  Saved → {output_path}", always=True)
-
-    if debug and debug_dir and stem:
-        # Gain map: recompute for visualisation only
-        _span = np.maximum(white_surf - dark_surf, 5.0)
-        _gain = (_span / (_TRUE_WHITE - _TRUE_DARK)).astype(np.float32)
-        g_min, g_max = _gain.min(), _gain.max()
-        gain_vis = ((_gain - g_min) / max(g_max - g_min, 1e-6) * 255).astype(np.uint8)
-        save_debug(gain_vis, debug_dir, stem, "correct_a_gain_map")
-
-        # Side-by-side camera area: original left, corrected right
-        orig_cam = gray[cam_y1:cam_y2, cam_x1:cam_x2]
-        corr_cam = corrected[cam_y1:cam_y2, cam_x1:cam_x2]
-        save_debug(np.hstack([orig_cam, corr_cam]), debug_dir, stem, "correct_b_before_after")
-
-        # White surface visualised
-        ws_vis = np.clip(white_surf, 0, 255).astype(np.uint8)
-        save_debug(ws_vis, debug_dir, stem, "correct_c_white_surface")
-
-        # Dark surface visualised
-        ds_vis = np.clip(dark_surf, 0, 255).astype(np.uint8)
-        save_debug(ds_vis, debug_dir, stem, "correct_d_dark_surface")
-
-        # Full corrected image
-        save_debug(corrected, debug_dir, stem, "correct_e_full")
+    _process_file_color(input_path, output_path, scale=scale,
+                        poly_degree=poly_degree, dark_smooth=dark_smooth,
+                        refine_passes=refine_passes,
+                        debug=debug, debug_dir=debug_dir)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -880,9 +719,9 @@ def main():
                              "polynomial. Default: 1 (one pass). Set to 0 for Coons-only.")
     parser.add_argument("--debug", action="store_true",
                         help="Enable verbose logging and save diagnostic images: "
-                             "correct_a_gain_map, correct_b_before_after, "
-                             "correct_c_white_surface, correct_d_dark_surface, "
-                             "correct_e_full. All saved to <output-dir>/debug/.")
+                             "correct_color_a_before_after, "
+                             "correct_color_b_white_surf_heatmap, "
+                             "correct_color_c_full. All saved to <output-dir>/debug/.")
     args = parser.parse_args()
 
     set_verbose(args.debug)

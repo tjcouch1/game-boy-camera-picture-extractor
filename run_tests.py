@@ -6,8 +6,6 @@ import re
 import subprocess
 import sys
 import glob
-from datetime import datetime
-
 TEST_INPUT_DIR = "test-input"
 TEST_OUTPUT_DIR = "test-output"
 REFERENCE_SUFFIX = "-output-corrected.png"
@@ -50,7 +48,7 @@ def parse_test_log(log_path):
 def write_summary(gbcam_exit, test_results):
     lines = []
     lines.append("=" * 60)
-    lines.append(f"TEST SUMMARY  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append("TEST SUMMARY")
     lines.append("=" * 60)
     lines.append("")
 

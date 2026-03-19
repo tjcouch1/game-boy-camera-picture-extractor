@@ -1,6 +1,6 @@
 
 ======================================================================
-PIPELINE RUN  [colour]
+PIPELINE RUN
   Input:      test-input\zelda-poster-3.jpg
   Output dir: test-output\zelda-poster-3
   scale=8  threshold=180  poly_degree=2  dark_smooth=13
@@ -46,7 +46,7 @@ PIPELINE RUN  [colour]
 
 ============================================================
 [crop] test-output\zelda-poster-3\zelda-poster-3_correct.png
-  Loaded 1280×1152 px (scale=8, colour=True)
+  Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) → (1152,1024)  = 1024×896 px  (128×112 GB pixels)
   Validation: inner border mean=151.5, white frame mean=197.2 (OK)
     [debug] test-output\zelda-poster-3\debug\zelda-poster-3_correct__crop_a_region.png

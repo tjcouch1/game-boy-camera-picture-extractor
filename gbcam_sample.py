@@ -90,7 +90,7 @@ def _parse_method(method_str):
 
 def process_file(input_path, output_path, scale=8,
                  h_margin=None, v_margin=None, method="mean",
-                 color=True, debug=False, debug_dir=None):
+                 debug=False, debug_dir=None):
     """
     Sample one brightness value per GB pixel from a crop-step output.
 
@@ -109,8 +109,6 @@ def process_file(input_path, output_path, scale=8,
     log(f"\n{'='*60}", always=True)
     log(f"[sample] {input_path}", always=True)
 
-    # Load image — colour mode loads BGR; grayscale mode loads single-channel.
-    # Either way, check dimensions against expected size.
     _raw = cv2.imread(str(input_path), cv2.IMREAD_UNCHANGED)
     if _raw is None:
         raise RuntimeError(f"Cannot read image: {input_path}")
@@ -123,9 +121,6 @@ def process_file(input_path, output_path, scale=8,
             f"expected {expected_w}×{expected_h}. "
             f"Did you pass a crop-step output with the correct --scale?")
     log(f"  Loaded {_w}×{_h} px  ({CAM_W}×{CAM_H} GB pixels at scale={scale})")
-
-    # Grayscale version used only by the non-colour path below
-    gray = cv2.cvtColor(_raw, cv2.COLOR_BGR2GRAY) if _raw.ndim == 3 else _raw
 
     # Resolve margins
     # Auto horizontal margin = 2 (excludes inter-column pixel gaps more aggressively)
@@ -152,120 +147,75 @@ def process_file(input_path, output_path, scale=8,
 
     aggregate = _parse_method(method)
 
-    if color:
-        # ── Colour mode — subpixel-aware sampling ────────────────────────────
-        # The GBA SP TN LCD has BGR stripe subpixels: Blue on the LEFT,
-        # Green in the MIDDLE, Red on the RIGHT within each screen pixel.
-        # Sampling the B channel only from the left columns, G from the middle,
-        # and R from the right avoids cross-channel contamination and gives
-        # values that represent each subpixel's actual colour intensity.
-        #
-        # Layout at scale=8 (8 camera pixels per screen pixel):
-        #   col 0: left pixel gap (excluded)
-        #   cols 1–2: B subpixel
-        #   cols 3–4: G subpixel
-        #   cols 5–6: R subpixel
-        #   col 7: right pixel gap (excluded)
-        #
-        # For arbitrary scale S the inner 6/8 of each block is used:
-        #   inner range [1, S−1)  with width = S − 2
-        #   B: inner cols [0, w/3)
-        #   G: inner cols [w/3, 2*w/3)
-        #   R: inner cols [2*w/3, w)
-        bgr_in = cv2.imread(str(input_path))
-        if bgr_in is None:
-            raise RuntimeError(f"Cannot read image: {input_path}")
-        img_rgb = cv2.cvtColor(bgr_in, cv2.COLOR_BGR2RGB).astype(np.float32)
+    # ── Subpixel-aware sampling ───────────────────────────────────────────
+    # The GBA SP TN LCD has BGR stripe subpixels: Blue on the LEFT,
+    # Green in the MIDDLE, Red on the RIGHT within each screen pixel.
+    # Sampling the B channel only from the left columns, G from the middle,
+    # and R from the right avoids cross-channel contamination and gives
+    # values that represent each subpixel's actual colour intensity.
+    #
+    # Layout at scale=8 (8 camera pixels per screen pixel):
+    #   col 0: left pixel gap (excluded)
+    #   cols 1–2: B subpixel
+    #   cols 3–4: G subpixel
+    #   cols 5–6: R subpixel
+    #   col 7: right pixel gap (excluded)
+    #
+    # For arbitrary scale S the inner 6/8 of each block is used:
+    #   inner range [1, S−1)  with width = S − 2
+    #   B: inner cols [0, w/3)
+    #   G: inner cols [w/3, 2*w/3)
+    #   R: inner cols [2*w/3, w)
+    bgr_in = cv2.imread(str(input_path))
+    if bgr_in is None:
+        raise RuntimeError(f"Cannot read image: {input_path}")
+    img_rgb = cv2.cvtColor(bgr_in, cv2.COLOR_BGR2RGB).astype(np.float32)
 
-        # Subpixel column offsets relative to block start
-        inner_start = 1                    # skip left edge gap
-        inner_end   = scale - 1           # skip right edge gap (exclusive)
-        inner_w     = inner_end - inner_start   # 6 at scale=8
-        b_lo = inner_start                               # col 1
-        b_hi = inner_start + inner_w // 3               # col 3 (exclusive) → 1,2
-        g_lo = inner_start + inner_w // 3               # col 3
-        g_hi = inner_start + 2 * (inner_w // 3)         # col 5 (exclusive) → 3,4
-        r_lo = inner_start + 2 * (inner_w // 3)         # col 5
-        r_hi = inner_end                                 # col 7 (exclusive) → 5,6
+    # Subpixel column offsets relative to block start
+    inner_start = 1                    # skip left edge gap
+    inner_end   = scale - 1           # skip right edge gap (exclusive)
+    inner_w     = inner_end - inner_start   # 6 at scale=8
+    b_lo = inner_start                               # col 1
+    b_hi = inner_start + inner_w // 3               # col 3 (exclusive) → 1,2
+    g_lo = inner_start + inner_w // 3               # col 3
+    g_hi = inner_start + 2 * (inner_w // 3)         # col 5 (exclusive) → 3,4
+    r_lo = inner_start + 2 * (inner_w // 3)         # col 5
+    r_hi = inner_end                                 # col 7 (exclusive) → 5,6
 
-        log(f"  Subpixel cols (scale={scale}): "
-            f"B=[{b_lo},{b_hi})  G=[{g_lo},{g_hi})  R=[{r_lo},{r_hi})")
+    log(f"  Subpixel cols (scale={scale}): "
+        f"B=[{b_lo},{b_hi})  G=[{g_lo},{g_hi})  R=[{r_lo},{r_hi})")
 
-        samp_r = np.empty((CAM_H, CAM_W), dtype=np.float32)
-        samp_g = np.empty((CAM_H, CAM_W), dtype=np.float32)
-        samp_b = np.empty((CAM_H, CAM_W), dtype=np.float32)
-        # (No median/zero-count tracking needed: not saved in colour mode)
+    samp_r = np.empty((CAM_H, CAM_W), dtype=np.float32)
+    samp_g = np.empty((CAM_H, CAM_W), dtype=np.float32)
+    samp_b = np.empty((CAM_H, CAM_W), dtype=np.float32)
 
-        for gy in range(CAM_H):
-            y1 = gy * scale + vm;  y2 = (gy + 1) * scale - vm
-            if y2 <= y1:          # fallback if vm too large
-                y1 = gy * scale;  y2 = (gy + 1) * scale
-            for gx in range(CAM_W):
-                x0 = gx * scale    # block left edge in crop image
-
-                # Each channel sampled from its own subpixel column range
-                blk_b = img_rgb[y1:y2, x0 + b_lo : x0 + b_hi, 2]   # B channel, B cols
-                blk_g = img_rgb[y1:y2, x0 + g_lo : x0 + g_hi, 1]   # G channel, G cols
-                blk_r = img_rgb[y1:y2, x0 + r_lo : x0 + r_hi, 0]   # R channel, R cols
-
-                samp_b[gy, gx] = float(blk_b.mean()) if blk_b.size else 0.0
-                samp_g[gy, gx] = float(blk_g.mean()) if blk_g.size else 0.0
-                samp_r[gy, gx] = float(blk_r.mean()) if blk_r.size else 0.0
-
-
-
-        output_path = Path(output_path)
-
-        # Save colour sample as BGR PNG
-        out_bgr = cv2.cvtColor(
-            np.clip(np.stack([samp_r, samp_g, samp_b], axis=-1), 0, 255).astype(np.uint8),
-            cv2.COLOR_RGB2BGR)
-        cv2.imwrite(str(output_path), out_bgr)
-        log(f"  Saved → {output_path}  (colour, subpixel-aware, 128×112 px)", always=True)
-        log(f"  R: {samp_r.min():.0f}–{samp_r.max():.0f}  "
-            f"G: {samp_g.min():.0f}–{samp_g.max():.0f}  "
-            f"B: {samp_b.min():.0f}–{samp_b.max():.0f}")
-
-        # No auxiliary greyscale stat files in colour mode — nearest-colour
-        # classification in the quantize step does not need them.
-        return
-
-    # ── Grayscale mode (original) ─────────────────────────────────
-    samples    = np.empty((CAM_H, CAM_W), dtype=np.float32)
-    medians    = np.empty((CAM_H, CAM_W), dtype=np.float32)
-    zerocounts = np.zeros((CAM_H, CAM_W), dtype=np.uint8)
     for gy in range(CAM_H):
+        y1 = gy * scale + vm;  y2 = (gy + 1) * scale - vm
+        if y2 <= y1:          # fallback if vm too large
+            y1 = gy * scale;  y2 = (gy + 1) * scale
         for gx in range(CAM_W):
-            y1 = gy * scale + vm;  y2 = (gy + 1) * scale - vm
-            x1 = gx * scale + hm;  x2 = (gx + 1) * scale - hm
-            block = gray[y1:y2, x1:x2]
-            if block.size > 0:
-                flat = block.ravel().astype(float)
-            else:
-                # Fallback if margins are too large
-                flat = gray[gy*scale:(gy+1)*scale, gx*scale:(gx+1)*scale].ravel().astype(float)
-            samples[gy, gx]    = aggregate(flat)
-            medians[gy, gx]    = float(np.median(flat))
-            zerocounts[gy, gx] = int((flat == 0).sum())
+            x0 = gx * scale    # block left edge in crop image
 
-    log(f"  Stats: min={samples.min():.1f}  max={samples.max():.1f}  "
-        f"mean={samples.mean():.1f}")
+            # Each channel sampled from its own subpixel column range
+            blk_b = img_rgb[y1:y2, x0 + b_lo : x0 + b_hi, 2]   # B channel, B cols
+            blk_g = img_rgb[y1:y2, x0 + g_lo : x0 + g_hi, 1]   # G channel, G cols
+            blk_r = img_rgb[y1:y2, x0 + r_lo : x0 + r_hi, 0]   # R channel, R cols
+
+            samp_b[gy, gx] = float(blk_b.mean()) if blk_b.size else 0.0
+            samp_g[gy, gx] = float(blk_g.mean()) if blk_g.size else 0.0
+            samp_r[gy, gx] = float(blk_r.mean()) if blk_r.size else 0.0
 
     output_path = Path(output_path)
-    output_arr = np.clip(np.round(samples), 0, 255).astype(np.uint8)
-    cv2.imwrite(str(output_path), output_arr)
-    log(f"  Saved → {output_path}  (128×112 px)", always=True)
 
-    # Save auxiliary stat images consumed by the quantize step.
-    stem = output_path.stem
-    med_path = output_path.parent / (stem + "_med" + output_path.suffix)
-    zc_path  = output_path.parent / (stem + "_zc"  + output_path.suffix)
-    cv2.imwrite(str(med_path), np.clip(np.round(medians), 0, 255).astype(np.uint8))
-    cv2.imwrite(str(zc_path),  zerocounts)
-
-    if debug and debug_dir and stem:
-        big = np.repeat(np.repeat(output_arr, 8, axis=0), 8, axis=1)
-        save_debug(big, debug_dir, stem, "sample_a_8x")
+    # Save colour sample as BGR PNG
+    out_bgr = cv2.cvtColor(
+        np.clip(np.stack([samp_r, samp_g, samp_b], axis=-1), 0, 255).astype(np.uint8),
+        cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(output_path), out_bgr)
+    log(f"  Saved → {output_path}  (colour, subpixel-aware, 128×112 px)", always=True)
+    log(f"  R: {samp_r.min():.0f}–{samp_r.max():.0f}  "
+        f"G: {samp_g.min():.0f}–{samp_g.max():.0f}  "
+        f"B: {samp_b.min():.0f}–{samp_b.max():.0f}")
 
 
 def main():

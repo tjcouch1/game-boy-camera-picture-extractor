@@ -407,74 +407,9 @@ def spatial_smooth(q, samples, medians=None, zerocounts=None):
 
 
 def process_file(input_path, output_path, use_kmeans=True, scale=8,
-                 smooth=True, color=True, debug=False, debug_dir=None):
-    if color:
-        _process_file_color(input_path, output_path, smooth=smooth,
-                            debug=debug, debug_dir=debug_dir)
-        return
-
-    stem = Path(input_path).stem
-    log(f"\n{'='*60}", always=True)
-    log(f"[quantize] {input_path}", always=True)
-
-    raw = cv2.imread(str(input_path), cv2.IMREAD_GRAYSCALE)
-    if raw is None:
-        raise RuntimeError(f"Cannot read image: {input_path}")
-    if raw.shape != (CAM_H, CAM_W):
-        raise RuntimeError(f"Unexpected size {raw.shape[1]}×{raw.shape[0]}; "
-                           f"expected {CAM_W}×{CAM_H}.")
-    samples = raw.astype(np.float32)
-    log(f"  Loaded {raw.shape[1]}×{raw.shape[0]} px — "
-        f"range {samples.min():.0f}–{samples.max():.0f}")
-
-    thresholds = None
-
-    if use_kmeans:
-        try:
-            thresholds = _thresholds_kmeans(samples)
-        except Exception as e:
-            log(f"  K-means failed ({e})")
-
-    if thresholds is None:
-        base = strip_step_suffix(Path(input_path).stem)
-        # Prefer the correct-step output (better-normalized) if available
-        for ref_suffix in (STEP_SUFFIX["correct"], STEP_SUFFIX["warp"]):
-            ref_path = Path(input_path).parent / (base + ref_suffix + ".png")
-            if ref_path.exists():
-                try:
-                    thresholds = _thresholds_frame(str(ref_path), scale)
-                    break
-                except Exception as e:
-                    log(f"  Frame calib from {ref_path.name} failed ({e})")
-        if thresholds is None:
-            log(f"  No warp/correct reference found; skipping frame calib")
-
-    if thresholds is None:
-        log("  Falling back to min-max calibration")
-        thresholds = _thresholds_minmax(samples)
-
-    output_arr = quantize(samples, thresholds)
-
-    if smooth:
-        # Load auxiliary per-pixel stats produced by the sample step, if present.
-        ip = Path(input_path)
-        med_path = ip.parent / (ip.stem + "_med" + ip.suffix)
-        zc_path  = ip.parent / (ip.stem + "_zc"  + ip.suffix)
-        medians    = cv2.imread(str(med_path), cv2.IMREAD_GRAYSCALE) if med_path.exists() else None
-        zerocounts = cv2.imread(str(zc_path),  cv2.IMREAD_GRAYSCALE) if zc_path.exists()  else None
-        output_arr = spatial_smooth(output_arr, raw, medians, zerocounts)
-        log("  Spatial smoothing applied.")
-
-    unique, counts = np.unique(output_arr, return_counts=True)
-    for u, c in zip(unique, counts):
-        log(f"  Color {u:3d}: {c:5d} px  ({100*c/output_arr.size:5.1f}%)")
-
-    Image.fromarray(output_arr, "L").save(str(output_path))
-    log(f"  Saved → {output_path}", always=True)
-
-    if debug and debug_dir and stem:
-        big = np.repeat(np.repeat(output_arr, 8, axis=0), 8, axis=1)
-        save_debug(big, debug_dir, stem, "quantize_a_8x")
+                 smooth=True, debug=False, debug_dir=None):
+    _process_file_color(input_path, output_path, smooth=smooth,
+                        debug=debug, debug_dir=debug_dir)
 
 
 def main():
@@ -529,8 +464,8 @@ def main():
     for f in files:
         out = make_output_path(f, args.output_dir, SUFFIX)
         try:
-            process_file(f, out, not args.no_kmeans, args.scale,
-                         not args.no_smooth, args.debug, debug_dir)
+            process_file(f, out, smooth=not args.no_smooth,
+                         debug=args.debug, debug_dir=debug_dir)
         except Exception as e:
             print(f"ERROR — {f}: {e}", file=sys.stderr)
             if args.debug: traceback.print_exc()

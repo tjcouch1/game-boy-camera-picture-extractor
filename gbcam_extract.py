@@ -219,7 +219,6 @@ def run_pipeline(input_files, output_dir,
                  poly_degree=2, dark_smooth=13, refine_passes=1,
                  sample_margin_h=None, sample_margin_v=None, sample_method="mean",
                  use_kmeans=True, smooth=True,
-                 color=True,
                  clean_steps=False,
                  debug=False, debug_dir=None):
     """
@@ -257,7 +256,6 @@ def run_pipeline(input_files, output_dir,
                     step_warp.process_file(
                         current_file, out_path,
                         scale=scale, thresh_val=thresh_val,
-                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "correct":
@@ -267,7 +265,6 @@ def run_pipeline(input_files, output_dir,
                         scale=scale, poly_degree=poly_degree,
                         dark_smooth=dark_smooth,
                         refine_passes=refine_passes,
-                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "crop":
@@ -284,7 +281,6 @@ def run_pipeline(input_files, output_dir,
                         scale=scale,
                         h_margin=sample_margin_h, v_margin=sample_margin_v,
                         method=sample_method,
-                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 elif step_name == "quantize":
@@ -293,19 +289,12 @@ def run_pipeline(input_files, output_dir,
                         in_path, out_path,
                         use_kmeans=use_kmeans, scale=scale,
                         smooth=smooth,
-                        color=color,
                         debug=debug, debug_dir=debug_dir)
 
                 if not is_final:
                     intermediates.append(out_path)
                     if step_name == "correct":
                         intermediates.append(str(Path(out_path).with_suffix(".json")))
-                    if step_name == "sample" and not color:
-                        # In grayscale mode the sample step also writes auxiliary
-                        # _med and _zc stat images for the spatial smoother.
-                        sp = Path(out_path)
-                        intermediates.append(str(sp.parent / (sp.stem + "_med" + sp.suffix)))
-                        intermediates.append(str(sp.parent / (sp.stem + "_zc"  + sp.suffix)))
                 current_file = out_path
 
         except Exception as exc:
@@ -503,17 +492,6 @@ def main():
              "installed, or if k-means is producing poor clusters for a "
              "particular image.")
 
-    parser.add_argument(
-        "--grayscale", action="store_true",
-        help="Use the legacy greyscale pipeline for photos taken with the "
-             "original 4-shade greyscale palette (#000000/#525252/#A5A5A5/#FFFFFF). "
-             "By default the pipeline now expects the new colour palette "
-             "(#FFFFA5/#FF9494/#9494FF/#000000) and works entirely in colour. "
-             "Pass --grayscale to revert to the original greyscale behaviour.")
-    parser.add_argument(
-        "--color", action="store_true",
-        help="(deprecated — colour mode is now the default; this flag is a no-op)")
-
     # ── Housekeeping ─────────────────────────────────────────
     parser.add_argument(
         "--clean-steps", action="store_true",
@@ -583,7 +561,6 @@ def main():
         sample_method   = args.sample_method,
         use_kmeans      = not args.no_kmeans,
         smooth          = not getattr(args, 'no_smooth', False),
-        color           = not getattr(args, 'grayscale', False),
         clean_steps     = args.clean_steps,
         debug           = args.debug,
         debug_dir       = debug_dir,
