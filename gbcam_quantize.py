@@ -96,23 +96,84 @@ COLOR_PALETTE_RGB = np.array([
 _COLOR_TARGETS_RG = COLOR_PALETTE_RGB[:, :2].astype(np.float32)  # shape (4, 2)
 
 
+def rgb_to_hsl(rgb):
+    """
+    Convert RGB (0-255) to HSL (H: 0-360°, S: 0-100%, L: 0-100%)
+
+    Parameters:
+        rgb: ndarray of shape (H, W, 3) with values 0-255
+
+    Returns:
+        hsl: ndarray of shape (H, W, 3) with H in [0,360], S,L in [0,100]
+    """
+    # Normalize RGB to [0, 1]
+    rgb_norm = rgb / 255.0
+    r, g, b = rgb_norm[:, :, 0], rgb_norm[:, :, 1], rgb_norm[:, :, 2]
+
+    # Calculate max, min, delta for each pixel
+    max_val = np.maximum(np.maximum(r, g), b)
+    min_val = np.minimum(np.minimum(r, g), b)
+    delta = max_val - min_val
+
+    # Initialize HSL arrays
+    h = np.zeros_like(r)
+    s = np.zeros_like(r)
+    l = (max_val + min_val) / 2.0
+
+    # Calculate saturation (avoid division by zero)
+    mask_s = delta != 0
+    s[mask_s] = np.where(
+        l[mask_s] > 0.5,
+        delta[mask_s] / (2.0 - max_val[mask_s] - min_val[mask_s]),
+        delta[mask_s] / (max_val[mask_s] + min_val[mask_s])
+    )
+
+    # Calculate hue (only where delta != 0)
+    mask_r = (max_val == r) & mask_s
+    mask_g = (max_val == g) & mask_s
+    mask_b = (max_val == b) & mask_s
+
+    h[mask_r] = 60.0 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6.0)
+    h[mask_g] = 60.0 * ((b[mask_g] - r[mask_g]) / delta[mask_g] + 2.0)
+    h[mask_b] = 60.0 * ((r[mask_b] - g[mask_b]) / delta[mask_b] + 4.0)
+
+    # Ensure hue is in [0, 360)
+    h = np.where(h < 0, h + 360.0, h)
+
+    # Convert S and L to percentages
+    s = s * 100.0
+    l = l * 100.0
+
+    return np.stack([h, s, l], axis=-1)
+
+
+def hue_distance(h1, h2):
+    """
+    Calculate angular distance between two hues (0-360°).
+    Accounts for circular wraparound (0° = 360°).
+
+    Examples:
+        hue_distance(10, 350) = 20  (not 340)
+        hue_distance(60, 240) = 180
+    """
+    d = np.abs(h1 - h2)
+    return np.minimum(d, 360.0 - d)
+
+
 def _classify_color(samples_rgb, init_centers=None):
     """
     Classify 128×112 corrected samples into the four palette colours.
 
-    Uses **R, G, and B×0.40** (B down-weighted) for nearest-neighbour distance in
-    3-D space.  B contributes at half weight because its absolute level is less
-    reliable after the frontlight correction, but it still provides crucial
-    tiebreaking between DG (B=255, high blue) and LG (B=148, lower blue) for
-    pixels where R is ambiguous — particularly LG pixels near the left edge of
-    the frame where the R correction slightly undershoots.
+    Uses nearest-neighbor in RG plane only (ignoring B channel). The B channel
+    is unreliable after correction and contributes little useful information.
 
-    After correction and subpixel-aware sampling, the expected positions are:
+    After correction and subpixel-aware sampling, the typical clusters are:
+        BK  #000000   ~(R= 98, G= 17)
+        DG  #9494FF   ~(R=165, G=120)
+        LG  #FF9494   ~(R=236, G=141)
+        WH  #FFFFA5   ~(R=243, G=235)
 
-        BK  #000000   R=  0  G=  0  B=  0   -> weighted (  0,  0,   0)
-        DG  #9494FF   R=148  G=148  B=255   -> weighted (148,148,127.5)
-        LG  #FF9494   R=255  G=148  B=148   -> weighted (255,148, 74.0)
-        WH  #FFFFA5   R=255  G=255  B=165   -> weighted (255,255, 82.5)
+    These form well-separated clusters in the RG plane.
 
     Parameters
     ----------
@@ -122,20 +183,18 @@ def _classify_color(samples_rgb, init_centers=None):
     Returns
     -------
     labels : (112, 128) uint8  — palette index 0=BK 1=DG 2=LG 3=WH
-    method : str  — always "nearest-RGB(B×0.40)"
+    method : str  — classification method description
     """
-    _B_WEIGHT = 0.40
-    flat = samples_rgb.reshape(-1, 3).astype(np.float32)        # (N, 3)
-    flat_w = np.column_stack([flat[:, :2], flat[:, 2] * _B_WEIGHT])  # (N, 3) with B scaled
+    # Use only R and G channels
+    flat_rg = samples_rgb[:, :, :2].reshape(-1, 2).astype(np.float32)  # (N, 2)
+    targets_rg = COLOR_PALETTE_RGB[:, :2].astype(np.float32)           # (4, 2)
 
-    targets = COLOR_PALETTE_RGB.astype(np.float32)
-    targets_w = np.column_stack([targets[:, :2], targets[:, 2] * _B_WEIGHT])  # (4, 3)
-
-    # Euclidean distance in B-weighted RGB space
-    dists = np.sum((flat_w[:, None, :] - targets_w[None, :, :])**2, axis=-1)  # (N, 4)
+    # Euclidean distance in RG space
+    dists = np.sum((flat_rg[:, None, :] - targets_rg[None, :, :])**2, axis=-1)  # (N, 4)
     labels_flat = np.argmin(dists, axis=1)
 
     # Log cluster means for diagnostics
+    flat = samples_rgb.reshape(-1, 3)
     counts = np.bincount(labels_flat, minlength=4)
     names  = ['BK', 'DG', 'LG', 'WH']
     center_info = []
@@ -143,9 +202,9 @@ def _classify_color(samples_rgb, init_centers=None):
         if cnt > 0:
             m = flat[labels_flat == i].mean(axis=0)
             center_info.append(f"{name}({cnt})~(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
-    log("  Nearest-RGB(B×0.40): " + "  ".join(center_info))
+    log(f"  Nearest-RG (B ignored): " + "  ".join(center_info))
 
-    return labels_flat.reshape(112, 128).astype(np.uint8), "nearest-RGB(B×0.40)"
+    return labels_flat.reshape(112, 128).astype(np.uint8), "nearest-RG"
 
 
 def _process_file_color(input_path, output_path, smooth=True,
@@ -188,51 +247,9 @@ def _process_file_color(input_path, output_path, smooth=True,
         f"G: {samples_rgb[:,:,1].min():.0f}–{samples_rgb[:,:,1].max():.0f}  "
         f"B: {samples_rgb[:,:,2].min():.0f}–{samples_rgb[:,:,2].max():.0f}")
 
-    # Nearest-colour classification: Euclidean distance in 3-D RGB space.
+    # HSL-based classification: uses hue distances to separate colors
     labels, method = _classify_color(samples_rgb)
     log(f"  Classification: {method}")
-
-    # ── Spatial smoothing — WH -> LG correction ───────────────────────────────
-    # The G-channel correction sometimes overcorrects LG pixels (target G=148) to
-    # G~205–215 because LG content pixels are brighter than the DG inner border used
-    # as the dark anchor.  When this happens, an LG pixel can look like WH in the
-    # corrected sample space and get misclassified.  The three sample-level gates
-    # below distinguish these cases without introducing false positives:
-    #
-    #   R < 240  — true WH has R~250+ after correction; overcorrected LG has R~210–239
-    #   B < 160  — LG.B target=148; WH.B target=165. Overcorrected LG stays near 148;
-    #              true WH has B≥160 even when slightly undercorrected.
-    #   G < 215  — overcorrected LG lands around G~205–214; true WH has G~215–255.
-    #
-    # Neighbourhood gate: ≥4 of the 8 surrounding pixels are darker than WH (BK/DG/LG).
-    #
-    # Validated on all four test images: fixes 57–207 real errors, zero false positives
-    # on the -1 images and minimal net benefit on the -2 images.
-    R = samples_rgb[:, :, 0]
-    G = samples_rgb[:, :, 1]
-    B = samples_rgb[:, :, 2]
-
-    changed_wh_lg = 0
-    for r in range(CAM_H):
-        for c in range(CAM_W):
-            if labels[r, c] != 3:                 # 3 = WH
-                continue
-            if R[r, c] >= 240 or B[r, c] >= 160 or G[r, c] >= 215:
-                continue                            # sample gates: keep as WH
-            dark_nbrs = 0
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    if dr == 0 and dc == 0:
-                        continue
-                    nr, nc = r + dr, c + dc
-                    if 0 <= nr < CAM_H and 0 <= nc < CAM_W and labels[nr, nc] < 3:
-                        dark_nbrs += 1
-            if dark_nbrs >= 4:
-                labels[r, c] = 2                   # 2 = LG
-                changed_wh_lg += 1
-
-    if changed_wh_lg:
-        log(f"  Spatial smooth WH->LG: {changed_wh_lg} pixels corrected")
 
     # Build output images
     GRAY_VALS = np.array([0, 82, 165, 255], dtype=np.uint8)

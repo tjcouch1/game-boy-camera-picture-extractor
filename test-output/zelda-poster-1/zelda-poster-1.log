@@ -61,15 +61,14 @@ PIPELINE RUN
 [quantize/color] test-output\zelda-poster-1\zelda-poster-1_sample.png
   Loaded 128×112 colour sample image
   R: 22–255  G: 0–255  B: 55–172
-  Nearest-RGB(B×0.40): BK(1569)~(R60,G4,B105)  DG(3646)~(R144,G127,B143)  LG(4151)~(R227,G149,B130)  WH(4970)~(R229,G240,B147)
-  Classification: nearest-RGB(B×0.40)
-  Spatial smooth WH->LG: 1 pixels corrected
+  Nearest-RG (B ignored): BK(1569)~(R60,G4,B105)  DG(4121)~(R150,G132,B143)  LG(3680)~(R231,G146,B128)  WH(4966)~(R229,G240,B147)
+  Classification: nearest-RG
   Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam.png  (grayscale palette)
   Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam_rgb.png  (new RGB palette)
   BK (#000000):  1569 px  ( 10.9%)
-  DG (#9494FF):  3646 px  ( 25.4%)
-  LG (#FF9494):  4152 px  ( 29.0%)
-  WH (#FFFFA5):  4969 px  ( 34.7%)
+  DG (#9494FF):  4121 px  ( 28.7%)
+  LG (#FF9494):  3680 px  ( 25.7%)
+  WH (#FFFFA5):  4966 px  ( 34.6%)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_a_gray_8x.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_b_rgb_8x.png
 
@@ -77,341 +76,832 @@ PIPELINE RUN
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14142  (98.65%)
-  Different    : 194   (1.35%)
+  Matching     : 13680  (95.42%)
+  Different    : 656   (4.58%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1569        1572        -3
-  DG  #9494FF                 3646        3526      +120
-  LG  #FF9494                 4152        4255      -103
-  WH  #FFFFA5                 4969        4983       -14
+  DG  #9494FF                 4121        3526      +595
+  LG  #FF9494                 3680        4255      -575
+  WH  #FFFFA5                 4966        4983       -17
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1569 v                0                  0                  0      1569
-  DG  #9494FF                       3 X             3521 v              122 X                0      3646
-  LG  #FF9494                       0                  5 X             4108 v               39 X    4152
-  WH  #FFFFA5                       0                  0                 25 X             4944 v    4969
+  DG  #9494FF                       3 X             3526 v              590 X                2 X    4121
+  LG  #FF9494                       0                  0               3642 v               38 X    3680
+  WH  #FFFFA5                       0                  0                 23 X             4943 v    4966
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
   DG  #9494FF  ->  BK  #000000 : 3 px
-  DG  #9494FF  ->  LG  #FF9494 : 122 px
-  LG  #FF9494  ->  DG  #9494FF : 5 px
-  LG  #FF9494  ->  WH  #FFFFA5 : 39 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 25 px
+  DG  #9494FF  ->  LG  #FF9494 : 590 px
+  DG  #9494FF  ->  WH  #FFFFA5 : 2 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 38 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 23 px
 
 ----------------------------------------------------------------------
 SPATIAL DISTRIBUTION OF ERRORS
 ----------------------------------------------------------------------
   Errors per row (0–111):
-    row   0 :    4  ####
-    row   1 :    7  #######
-    row   2 :    5  #####
-    row   3 :    5  #####
-    row   4 :    5  #####
-    row   5 :    5  #####
-    row   6 :    8  ########
-    row   7 :    4  ####
-    row   8 :    6  ######
-    row   9 :    3  ###
-    row  10 :    5  #####
-    row  11 :    5  #####
-    row  12 :    7  #######
-    row  13 :    4  ####
-    row  14 :    6  ######
-    row  15 :    3  ###
-    row  16 :    3  ###
-    row  17 :    4  ####
-    row  18 :    3  ###
-    row  19 :    6  ######
-    row  20 :    5  #####
-    row  21 :    4  ####
-    row  22 :    5  #####
-    row  23 :    2  ##
-    row  24 :    4  ####
-    row  25 :    1  #
-    row  26 :    2  ##
-    row  27 :    1  #
-    row  28 :    4  ####
-    row  29 :    1  #
-    row  30 :    7  #######
-    row  32 :    1  #
-    row  33 :    2  ##
-    row  34 :    4  ####
-    row  36 :    2  ##
-    row  38 :    3  ###
-    row  40 :    2  ##
-    row  41 :    1  #
-    row  42 :    2  ##
-    row  46 :    2  ##
-    row  48 :    1  #
-    row  50 :    2  ##
-    row  52 :    1  #
-    row  54 :    2  ##
-    row  56 :    1  #
-    row  58 :    1  #
-    row  60 :    2  ##
-    row  62 :    1  #
-    row  64 :    1  #
-    row  68 :    2  ##
-    row  72 :    1  #
-    row  76 :    1  #
+    row   0 :   23  #######################
+    row   1 :   15  ###############
+    row   2 :   19  ###################
+    row   3 :   21  #####################
+    row   4 :   19  ###################
+    row   5 :   15  ###############
+    row   6 :   17  #################
+    row   7 :   14  ##############
+    row   8 :   17  #################
+    row   9 :   14  ##############
+    row  10 :   14  ##############
+    row  11 :   12  ############
+    row  12 :   14  ##############
+    row  13 :   10  ##########
+    row  14 :   16  ################
+    row  15 :   11  ###########
+    row  16 :   15  ###############
+    row  17 :    9  #########
+    row  18 :   16  ################
+    row  19 :   12  ############
+    row  20 :   14  ##############
+    row  21 :   10  ##########
+    row  22 :   15  ###############
+    row  23 :    9  #########
+    row  24 :   13  #############
+    row  25 :    9  #########
+    row  26 :   13  #############
+    row  27 :    9  #########
+    row  28 :   14  ##############
+    row  29 :    8  ########
+    row  30 :   13  #############
+    row  31 :    9  #########
+    row  32 :   12  ############
+    row  33 :    5  #####
+    row  34 :   10  ##########
+    row  35 :    4  ####
+    row  36 :   10  ##########
+    row  37 :    6  ######
+    row  38 :   10  ##########
+    row  39 :    5  #####
+    row  40 :   10  ##########
+    row  41 :    3  ###
+    row  42 :   10  ##########
+    row  43 :    4  ####
+    row  44 :    8  ########
+    row  45 :    2  ##
+    row  46 :    6  ######
+    row  47 :    4  ####
+    row  48 :    5  #####
+    row  50 :    8  ########
+    row  51 :    1  #
+    row  52 :    5  #####
+    row  53 :    1  #
+    row  54 :    6  ######
+    row  56 :    8  ########
+    row  57 :    1  #
+    row  58 :    6  ######
+    row  59 :    1  #
+    row  60 :    5  #####
+    row  61 :    2  ##
+    row  62 :    7  #######
+    row  64 :    6  ######
+    row  66 :    4  ####
+    row  68 :    6  ######
+    row  70 :    3  ###
+    row  72 :    3  ###
+    row  74 :    1  #
+    row  76 :    2  ##
     row  78 :    1  #
-    row  80 :    2  ##
-    row  82 :    2  ##
+    row  80 :    3  ###
+    row  82 :    3  ###
     row  84 :    1  #
     row  86 :    1  #
     row  87 :    1  #
     row  88 :    2  ##
     row  90 :    1  #
-    row  92 :    2  ##
+    row  92 :    1  #
     row  94 :    1  #
-    row  96 :    2  ##
+    row  96 :    1  #
     row  98 :    1  #
-    row  99 :    1  #
-    row 102 :    2  ##
+    row  99 :    2  ##
+    row 100 :    1  #
+    row 102 :    1  #
     row 104 :    1  #
+    row 108 :    1  #
     row 110 :    3  ###
     row 111 :    1  #
   Errors per column (0–127):
+    col   0 :    1  #
     col   2 :    1  #
-    col   3 :    2  ##
-    col   7 :    2  ##
+    col   4 :    1  #
+    col   6 :    1  #
+    col   7 :    1  #
     col  11 :    1  #
     col  12 :    1  #
-    col  51 :    1  #
-    col  62 :    1  #
-    col  99 :    3  ###
-    col 100 :    2  ##
-    col 101 :    5  #####
-    col 102 :    1  #
-    col 103 :    5  #####
-    col 104 :    1  #
-    col 105 :    6  ######
-    col 106 :    6  ######
-    col 107 :   10  ##########
-    col 108 :    2  ##
-    col 109 :    8  ########
-    col 110 :    4  ####
-    col 111 :    5  #####
-    col 112 :    2  ##
-    col 113 :    8  ########
-    col 114 :    6  ######
-    col 115 :    7  #######
-    col 116 :    5  #####
-    col 117 :    6  ######
-    col 118 :    3  ###
-    col 119 :   11  ###########
-    col 120 :    4  ####
-    col 121 :   10  ##########
-    col 122 :    2  ##
-    col 123 :   12  ############
-    col 124 :    9  #########
-    col 125 :    7  #######
-    col 126 :    9  #########
-    col 127 :   26  ##########################
+    col  20 :    1  #
+    col  55 :    1  #
+    col  79 :    3  ###
+    col  83 :    1  #
+    col  89 :    3  ###
+    col  91 :    5  #####
+    col  93 :    6  ######
+    col  95 :    7  #######
+    col  96 :    1  #
+    col  97 :    9  #########
+    col  98 :    2  ##
+    col  99 :   12  ############
+    col 100 :    4  ####
+    col 101 :   12  ############
+    col 102 :    5  #####
+    col 103 :   15  ###############
+    col 104 :    3  ###
+    col 105 :   17  #################
+    col 106 :   10  ##########
+    col 107 :   23  #######################
+    col 108 :    7  #######
+    col 109 :   22  ######################
+    col 110 :   16  ################
+    col 111 :   30  ##############################
+    col 112 :   13  #############
+    col 113 :   25  #########################
+    col 114 :   19  ###################
+    col 115 :   35  ###################################
+    col 116 :   17  #################
+    col 117 :   34  ##################################
+    col 118 :   18  ##################
+    col 119 :   38  ######################################
+    col 120 :   18  ##################
+    col 121 :   34  ##################################
+    col 122 :   25  #########################
+    col 123 :   37  #####################################
+    col 124 :   23  #######################
+    col 125 :   24  ########################
+    col 126 :   28  ############################
+    col 127 :   46  ##############################################
 
 ----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (194 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (656 errors, sorted by row then column)
 ----------------------------------------------------------------------
    row   col              result           reference
+     0    55         DG  #9494FF         LG  #FF9494
+     0    79         DG  #9494FF         LG  #FF9494
+     0    83         DG  #9494FF         LG  #FF9494
+     0    89         DG  #9494FF         LG  #FF9494
+     0    91         DG  #9494FF         LG  #FF9494
+     0    93         DG  #9494FF         LG  #FF9494
+     0    95         DG  #9494FF         LG  #FF9494
+     0    97         DG  #9494FF         LG  #FF9494
      0    99         DG  #9494FF         LG  #FF9494
      0   101         DG  #9494FF         LG  #FF9494
+     0   103         DG  #9494FF         LG  #FF9494
      0   105         DG  #9494FF         LG  #FF9494
-     0   124         LG  #FF9494         WH  #FFFFA5
+     0   107         DG  #9494FF         LG  #FF9494
+     0   109         DG  #9494FF         LG  #FF9494
+     0   111         DG  #9494FF         LG  #FF9494
+     0   113         DG  #9494FF         LG  #FF9494
+     0   115         DG  #9494FF         LG  #FF9494
+     0   117         DG  #9494FF         LG  #FF9494
+     0   122         DG  #9494FF         WH  #FFFFA5
+     0   124         DG  #9494FF         WH  #FFFFA5
+     0   125         DG  #9494FF         LG  #FF9494
+     0   126         DG  #9494FF         LG  #FF9494
+     0   127         DG  #9494FF         LG  #FF9494
+     1    98         DG  #9494FF         LG  #FF9494
      1   100         DG  #9494FF         LG  #FF9494
      1   102         DG  #9494FF         LG  #FF9494
+     1   104         DG  #9494FF         LG  #FF9494
      1   106         DG  #9494FF         LG  #FF9494
+     1   110         DG  #9494FF         LG  #FF9494
+     1   112         DG  #9494FF         LG  #FF9494
      1   114         DG  #9494FF         LG  #FF9494
      1   115         DG  #9494FF         LG  #FF9494
      1   118         DG  #9494FF         LG  #FF9494
+     1   119         DG  #9494FF         LG  #FF9494
+     1   120         DG  #9494FF         LG  #FF9494
+     1   122         DG  #9494FF         LG  #FF9494
      1   125         LG  #FF9494         WH  #FFFFA5
+     1   126         DG  #9494FF         LG  #FF9494
+     2    79         DG  #9494FF         LG  #FF9494
+     2    91         DG  #9494FF         LG  #FF9494
+     2    93         DG  #9494FF         LG  #FF9494
+     2    95         DG  #9494FF         LG  #FF9494
+     2    97         DG  #9494FF         LG  #FF9494
+     2    99         DG  #9494FF         LG  #FF9494
+     2   101         DG  #9494FF         LG  #FF9494
+     2   103         DG  #9494FF         LG  #FF9494
+     2   105         DG  #9494FF         LG  #FF9494
+     2   107         DG  #9494FF         LG  #FF9494
      2   109         DG  #9494FF         LG  #FF9494
+     2   111         DG  #9494FF         LG  #FF9494
+     2   113         DG  #9494FF         LG  #FF9494
+     2   115         DG  #9494FF         LG  #FF9494
      2   117         DG  #9494FF         LG  #FF9494
+     2   119         DG  #9494FF         LG  #FF9494
      2   121         DG  #9494FF         LG  #FF9494
      2   124         LG  #FF9494         WH  #FFFFA5
      2   126         LG  #FF9494         WH  #FFFFA5
+     3    96         DG  #9494FF         LG  #FF9494
+     3   100         DG  #9494FF         LG  #FF9494
+     3   102         DG  #9494FF         LG  #FF9494
+     3   104         DG  #9494FF         LG  #FF9494
+     3   106         DG  #9494FF         LG  #FF9494
      3   108         DG  #9494FF         LG  #FF9494
      3   110         DG  #9494FF         LG  #FF9494
+     3   112         DG  #9494FF         LG  #FF9494
+     3   114         DG  #9494FF         LG  #FF9494
      3   115         LG  #FF9494         WH  #FFFFA5
+     3   116         DG  #9494FF         LG  #FF9494
+     3   117         DG  #9494FF         LG  #FF9494
      3   118         DG  #9494FF         LG  #FF9494
+     3   120         DG  #9494FF         LG  #FF9494
+     3   121         DG  #9494FF         LG  #FF9494
+     3   122         DG  #9494FF         LG  #FF9494
+     3   123         DG  #9494FF         LG  #FF9494
+     3   124         DG  #9494FF         LG  #FF9494
+     3   125         DG  #9494FF         LG  #FF9494
      3   126         DG  #9494FF         LG  #FF9494
+     3   127         DG  #9494FF         LG  #FF9494
+     4    79         DG  #9494FF         LG  #FF9494
+     4    93         DG  #9494FF         LG  #FF9494
+     4    95         DG  #9494FF         LG  #FF9494
+     4    97         DG  #9494FF         LG  #FF9494
+     4    99         DG  #9494FF         LG  #FF9494
+     4   101         DG  #9494FF         LG  #FF9494
+     4   103         DG  #9494FF         LG  #FF9494
      4   105         DG  #9494FF         LG  #FF9494
+     4   107         DG  #9494FF         LG  #FF9494
+     4   109         DG  #9494FF         LG  #FF9494
+     4   111         DG  #9494FF         LG  #FF9494
+     4   113         DG  #9494FF         LG  #FF9494
      4   115         DG  #9494FF         LG  #FF9494
      4   116         LG  #FF9494         WH  #FFFFA5
+     4   119         DG  #9494FF         LG  #FF9494
+     4   123         DG  #9494FF         LG  #FF9494
      4   124         LG  #FF9494         WH  #FFFFA5
      4   126         LG  #FF9494         WH  #FFFFA5
+     4   127         DG  #9494FF         LG  #FF9494
+     5    98         DG  #9494FF         LG  #FF9494
+     5   102         DG  #9494FF         LG  #FF9494
+     5   106         DG  #9494FF         LG  #FF9494
+     5   108         DG  #9494FF         LG  #FF9494
+     5   110         DG  #9494FF         LG  #FF9494
+     5   112         DG  #9494FF         LG  #FF9494
      5   114         DG  #9494FF         LG  #FF9494
+     5   115         DG  #9494FF         LG  #FF9494
      5   117         LG  #FF9494         WH  #FFFFA5
      5   118         DG  #9494FF         LG  #FF9494
+     5   122         DG  #9494FF         LG  #FF9494
+     5   123         DG  #9494FF         LG  #FF9494
      5   125         LG  #FF9494         WH  #FFFFA5
      5   126         DG  #9494FF         LG  #FF9494
+     5   127         DG  #9494FF         LG  #FF9494
+     6    93         DG  #9494FF         LG  #FF9494
+     6    95         DG  #9494FF         LG  #FF9494
+     6    97         DG  #9494FF         LG  #FF9494
      6    99         DG  #9494FF         LG  #FF9494
+     6   101         DG  #9494FF         LG  #FF9494
      6   103         DG  #9494FF         LG  #FF9494
      6   105         DG  #9494FF         LG  #FF9494
      6   107         DG  #9494FF         LG  #FF9494
+     6   109         DG  #9494FF         LG  #FF9494
+     6   111         DG  #9494FF         LG  #FF9494
+     6   113         DG  #9494FF         LG  #FF9494
      6   115         DG  #9494FF         LG  #FF9494
+     6   119         DG  #9494FF         LG  #FF9494
      6   122         LG  #FF9494         WH  #FFFFA5
      6   124         LG  #FF9494         WH  #FFFFA5
      6   126         LG  #FF9494         WH  #FFFFA5
+     6   127         DG  #9494FF         LG  #FF9494
+     7   100         DG  #9494FF         LG  #FF9494
      7   106         DG  #9494FF         LG  #FF9494
+     7   108         DG  #9494FF         LG  #FF9494
+     7   110         DG  #9494FF         LG  #FF9494
+     7   112         DG  #9494FF         LG  #FF9494
+     7   114         DG  #9494FF         LG  #FF9494
+     7   116         DG  #9494FF         LG  #FF9494
+     7   118         DG  #9494FF         LG  #FF9494
+     7   119         DG  #9494FF         LG  #FF9494
+     7   120         DG  #9494FF         LG  #FF9494
      7   123         LG  #FF9494         WH  #FFFFA5
      7   124         DG  #9494FF         LG  #FF9494
      7   126         DG  #9494FF         LG  #FF9494
+     7   127         DG  #9494FF         LG  #FF9494
+     8    93         DG  #9494FF         LG  #FF9494
+     8    95         DG  #9494FF         LG  #FF9494
+     8    97         DG  #9494FF         LG  #FF9494
+     8    99         DG  #9494FF         LG  #FF9494
+     8   101         DG  #9494FF         LG  #FF9494
      8   103         DG  #9494FF         LG  #FF9494
+     8   105         DG  #9494FF         LG  #FF9494
      8   107         DG  #9494FF         LG  #FF9494
      8   109         DG  #9494FF         LG  #FF9494
      8   111         DG  #9494FF         LG  #FF9494
+     8   113         DG  #9494FF         LG  #FF9494
      8   114         LG  #FF9494         WH  #FFFFA5
+     8   115         DG  #9494FF         LG  #FF9494
+     8   117         DG  #9494FF         LG  #FF9494
+     8   121         DG  #9494FF         LG  #FF9494
      8   126         LG  #FF9494         WH  #FFFFA5
+     8   127         DG  #9494FF         LG  #FF9494
+     9   102         DG  #9494FF         LG  #FF9494
      9   106         DG  #9494FF         LG  #FF9494
      9   110         DG  #9494FF         LG  #FF9494
+     9   112         DG  #9494FF         LG  #FF9494
+     9   114         DG  #9494FF         LG  #FF9494
+     9   116         DG  #9494FF         LG  #FF9494
+     9   118         DG  #9494FF         LG  #FF9494
      9   119         LG  #FF9494         WH  #FFFFA5
+     9   120         DG  #9494FF         LG  #FF9494
+     9   122         DG  #9494FF         LG  #FF9494
+     9   123         DG  #9494FF         LG  #FF9494
+     9   124         DG  #9494FF         LG  #FF9494
+     9   126         DG  #9494FF         LG  #FF9494
+     9   127         DG  #9494FF         LG  #FF9494
+    10    89         DG  #9494FF         LG  #FF9494
+    10    91         DG  #9494FF         LG  #FF9494
+    10    97         DG  #9494FF         LG  #FF9494
+    10    99         DG  #9494FF         LG  #FF9494
     10   101         DG  #9494FF         LG  #FF9494
     10   103         DG  #9494FF         LG  #FF9494
+    10   105         DG  #9494FF         LG  #FF9494
     10   107         DG  #9494FF         LG  #FF9494
     10   109         DG  #9494FF         LG  #FF9494
+    10   111         DG  #9494FF         LG  #FF9494
     10   113         DG  #9494FF         LG  #FF9494
+    10   115         DG  #9494FF         LG  #FF9494
+    10   117         DG  #9494FF         LG  #FF9494
+    10   127         DG  #9494FF         LG  #FF9494
     11   104         DG  #9494FF         LG  #FF9494
     11   106         DG  #9494FF         LG  #FF9494
     11   108         DG  #9494FF         LG  #FF9494
     11   110         DG  #9494FF         LG  #FF9494
+    11   112         DG  #9494FF         LG  #FF9494
+    11   114         DG  #9494FF         LG  #FF9494
+    11   116         DG  #9494FF         LG  #FF9494
+    11   118         DG  #9494FF         LG  #FF9494
+    11   119         DG  #9494FF         LG  #FF9494
+    11   120         DG  #9494FF         LG  #FF9494
     11   121         LG  #FF9494         WH  #FFFFA5
+    11   125         DG  #9494FF         LG  #FF9494
+    12    91         DG  #9494FF         LG  #FF9494
+    12    95         DG  #9494FF         LG  #FF9494
     12    99         DG  #9494FF         LG  #FF9494
     12   101         DG  #9494FF         LG  #FF9494
+    12   103         DG  #9494FF         LG  #FF9494
+    12   105         DG  #9494FF         LG  #FF9494
     12   107         DG  #9494FF         LG  #FF9494
     12   109         DG  #9494FF         LG  #FF9494
+    12   111         DG  #9494FF         LG  #FF9494
     12   113         DG  #9494FF         LG  #FF9494
     12   115         DG  #9494FF         LG  #FF9494
+    12   117         DG  #9494FF         LG  #FF9494
+    12   119         DG  #9494FF         LG  #FF9494
     12   122         LG  #FF9494         WH  #FFFFA5
     13   110         DG  #9494FF         LG  #FF9494
     13   114         DG  #9494FF         LG  #FF9494
+    13   115         DG  #9494FF         LG  #FF9494
+    13   116         DG  #9494FF         LG  #FF9494
+    13   118         DG  #9494FF         LG  #FF9494
+    13   119         DG  #9494FF         LG  #FF9494
     13   121         LG  #FF9494         WH  #FFFFA5
+    13   122         DG  #9494FF         LG  #FF9494
+    13   123         DG  #9494FF         LG  #FF9494
     13   125         LG  #FF9494         WH  #FFFFA5
+    14    89         DG  #9494FF         LG  #FF9494
+    14    91         DG  #9494FF         LG  #FF9494
+    14    93         DG  #9494FF         LG  #FF9494
+    14    97         DG  #9494FF         LG  #FF9494
+    14    99         DG  #9494FF         LG  #FF9494
+    14   101         DG  #9494FF         LG  #FF9494
     14   103         DG  #9494FF         LG  #FF9494
     14   105         DG  #9494FF         LG  #FF9494
     14   107         DG  #9494FF         LG  #FF9494
+    14   109         DG  #9494FF         LG  #FF9494
     14   111         DG  #9494FF         LG  #FF9494
     14   113         DG  #9494FF         LG  #FF9494
+    14   115         DG  #9494FF         LG  #FF9494
+    14   117         DG  #9494FF         LG  #FF9494
+    14   119         DG  #9494FF         LG  #FF9494
     14   120         LG  #FF9494         WH  #FFFFA5
+    15   108         DG  #9494FF         LG  #FF9494
+    15   110         DG  #9494FF         LG  #FF9494
+    15   112         DG  #9494FF         LG  #FF9494
+    15   114         DG  #9494FF         LG  #FF9494
     15   116         DG  #9494FF         LG  #FF9494
     15   117         LG  #FF9494         WH  #FFFFA5
+    15   118         DG  #9494FF         LG  #FF9494
+    15   120         DG  #9494FF         LG  #FF9494
+    15   122         DG  #9494FF         LG  #FF9494
     15   123         LG  #FF9494         WH  #FFFFA5
+    15   124         DG  #9494FF         LG  #FF9494
+    16    95         DG  #9494FF         LG  #FF9494
+    16    97         DG  #9494FF         LG  #FF9494
+    16    99         DG  #9494FF         LG  #FF9494
     16   103         DG  #9494FF         LG  #FF9494
     16   105         DG  #9494FF         LG  #FF9494
+    16   107         DG  #9494FF         LG  #FF9494
+    16   109         DG  #9494FF         LG  #FF9494
+    16   111         DG  #9494FF         LG  #FF9494
     16   113         DG  #9494FF         LG  #FF9494
+    16   115         DG  #9494FF         LG  #FF9494
+    16   117         DG  #9494FF         LG  #FF9494
+    16   119         DG  #9494FF         LG  #FF9494
+    16   121         DG  #9494FF         LG  #FF9494
+    16   123         DG  #9494FF         LG  #FF9494
+    16   127         DG  #9494FF         LG  #FF9494
     17   106         DG  #9494FF         LG  #FF9494
+    17   110         DG  #9494FF         LG  #FF9494
     17   112         DG  #9494FF         LG  #FF9494
+    17   114         DG  #9494FF         LG  #FF9494
     17   116         DG  #9494FF         LG  #FF9494
+    17   118         DG  #9494FF         LG  #FF9494
+    17   120         DG  #9494FF         LG  #FF9494
+    17   122         DG  #9494FF         LG  #FF9494
     17   125         LG  #FF9494         WH  #FFFFA5
+    18    97         DG  #9494FF         LG  #FF9494
+    18    99         DG  #9494FF         LG  #FF9494
     18   101         DG  #9494FF         LG  #FF9494
+    18   103         DG  #9494FF         LG  #FF9494
+    18   105         DG  #9494FF         LG  #FF9494
     18   107         DG  #9494FF         LG  #FF9494
+    18   109         DG  #9494FF         LG  #FF9494
+    18   111         DG  #9494FF         LG  #FF9494
     18   113         DG  #9494FF         LG  #FF9494
+    18   115         DG  #9494FF         LG  #FF9494
+    18   117         DG  #9494FF         LG  #FF9494
+    18   119         DG  #9494FF         LG  #FF9494
+    18   121         DG  #9494FF         LG  #FF9494
+    18   123         DG  #9494FF         LG  #FF9494
+    18   125         DG  #9494FF         LG  #FF9494
+    18   127         DG  #9494FF         LG  #FF9494
     19   106         DG  #9494FF         LG  #FF9494
     19   112         DG  #9494FF         LG  #FF9494
+    19   114         DG  #9494FF         LG  #FF9494
+    19   116         DG  #9494FF         LG  #FF9494
+    19   118         DG  #9494FF         LG  #FF9494
     19   120         DG  #9494FF         LG  #FF9494
     19   121         LG  #FF9494         WH  #FFFFA5
+    19   122         DG  #9494FF         LG  #FF9494
     19   123         LG  #FF9494         WH  #FFFFA5
+    19   124         DG  #9494FF         LG  #FF9494
     19   125         LG  #FF9494         WH  #FFFFA5
+    19   126         DG  #9494FF         LG  #FF9494
+    20    99         DG  #9494FF         LG  #FF9494
+    20   101         DG  #9494FF         LG  #FF9494
+    20   103         DG  #9494FF         LG  #FF9494
+    20   105         DG  #9494FF         LG  #FF9494
     20   107         DG  #9494FF         LG  #FF9494
     20   109         DG  #9494FF         LG  #FF9494
+    20   111         DG  #9494FF         LG  #FF9494
     20   113         DG  #9494FF         LG  #FF9494
+    20   115         DG  #9494FF         LG  #FF9494
     20   117         DG  #9494FF         LG  #FF9494
+    20   119         DG  #9494FF         LG  #FF9494
+    20   121         DG  #9494FF         LG  #FF9494
+    20   123         DG  #9494FF         LG  #FF9494
     20   127         DG  #9494FF         LG  #FF9494
+    21   110         DG  #9494FF         LG  #FF9494
     21   114         DG  #9494FF         LG  #FF9494
     21   116         DG  #9494FF         LG  #FF9494
+    21   118         DG  #9494FF         LG  #FF9494
+    21   120         DG  #9494FF         LG  #FF9494
     21   121         LG  #FF9494         WH  #FFFFA5
+    21   122         DG  #9494FF         LG  #FF9494
     21   123         DG  #9494FF         LG  #FF9494
+    21   124         DG  #9494FF         LG  #FF9494
+    21   126         DG  #9494FF         LG  #FF9494
+    22    99         DG  #9494FF         LG  #FF9494
+    22   101         DG  #9494FF         LG  #FF9494
+    22   105         DG  #9494FF         LG  #FF9494
     22   107         DG  #9494FF         LG  #FF9494
+    22   109         DG  #9494FF         LG  #FF9494
     22   111         DG  #9494FF         LG  #FF9494
+    22   113         DG  #9494FF         LG  #FF9494
+    22   115         DG  #9494FF         LG  #FF9494
     22   117         DG  #9494FF         LG  #FF9494
+    22   119         DG  #9494FF         LG  #FF9494
+    22   121         DG  #9494FF         LG  #FF9494
+    22   123         DG  #9494FF         LG  #FF9494
     22   124         LG  #FF9494         WH  #FFFFA5
+    22   125         DG  #9494FF         LG  #FF9494
     22   127         DG  #9494FF         LG  #FF9494
+    23   110         DG  #9494FF         LG  #FF9494
+    23   112         DG  #9494FF         LG  #FF9494
     23   116         DG  #9494FF         LG  #FF9494
+    23   118         DG  #9494FF         LG  #FF9494
+    23   120         DG  #9494FF         LG  #FF9494
+    23   122         DG  #9494FF         LG  #FF9494
     23   123         LG  #FF9494         WH  #FFFFA5
+    23   124         DG  #9494FF         LG  #FF9494
+    23   126         DG  #9494FF         LG  #FF9494
+    24   103         DG  #9494FF         LG  #FF9494
     24   105         DG  #9494FF         LG  #FF9494
+    24   107         DG  #9494FF         LG  #FF9494
     24   109         DG  #9494FF         LG  #FF9494
+    24   111         DG  #9494FF         LG  #FF9494
+    24   113         DG  #9494FF         LG  #FF9494
+    24   115         DG  #9494FF         LG  #FF9494
+    24   117         DG  #9494FF         LG  #FF9494
     24   119         DG  #9494FF         LG  #FF9494
     24   121         DG  #9494FF         LG  #FF9494
+    24   123         DG  #9494FF         LG  #FF9494
+    24   125         DG  #9494FF         LG  #FF9494
+    24   127         DG  #9494FF         LG  #FF9494
+    25   106         DG  #9494FF         LG  #FF9494
+    25   110         DG  #9494FF         LG  #FF9494
+    25   114         DG  #9494FF         LG  #FF9494
+    25   116         DG  #9494FF         LG  #FF9494
+    25   118         DG  #9494FF         LG  #FF9494
+    25   120         DG  #9494FF         LG  #FF9494
+    25   122         DG  #9494FF         LG  #FF9494
     25   123         LG  #FF9494         WH  #FFFFA5
+    25   126         DG  #9494FF         LG  #FF9494
+    26   105         DG  #9494FF         LG  #FF9494
+    26   107         DG  #9494FF         LG  #FF9494
+    26   109         DG  #9494FF         LG  #FF9494
     26   111         DG  #9494FF         LG  #FF9494
+    26   113         DG  #9494FF         LG  #FF9494
+    26   115         DG  #9494FF         LG  #FF9494
+    26   117         DG  #9494FF         LG  #FF9494
+    26   119         DG  #9494FF         LG  #FF9494
+    26   121         DG  #9494FF         LG  #FF9494
+    26   123         DG  #9494FF         LG  #FF9494
     26   124         LG  #FF9494         WH  #FFFFA5
+    26   125         DG  #9494FF         LG  #FF9494
+    26   127         DG  #9494FF         LG  #FF9494
+    27   108         DG  #9494FF         LG  #FF9494
+    27   112         DG  #9494FF         LG  #FF9494
     27   114         DG  #9494FF         LG  #FF9494
+    27   116         DG  #9494FF         LG  #FF9494
+    27   118         DG  #9494FF         LG  #FF9494
+    27   120         DG  #9494FF         LG  #FF9494
+    27   122         DG  #9494FF         LG  #FF9494
+    27   124         DG  #9494FF         LG  #FF9494
+    27   126         DG  #9494FF         LG  #FF9494
+    28   103         DG  #9494FF         LG  #FF9494
+    28   105         DG  #9494FF         LG  #FF9494
+    28   107         DG  #9494FF         LG  #FF9494
     28   109         DG  #9494FF         LG  #FF9494
+    28   111         DG  #9494FF         LG  #FF9494
+    28   113         DG  #9494FF         LG  #FF9494
+    28   115         DG  #9494FF         LG  #FF9494
+    28   117         DG  #9494FF         LG  #FF9494
     28   119         DG  #9494FF         LG  #FF9494
+    28   121         DG  #9494FF         LG  #FF9494
+    28   123         DG  #9494FF         LG  #FF9494
     28   124         LG  #FF9494         WH  #FFFFA5
     28   125         DG  #9494FF         LG  #FF9494
+    28   127         DG  #9494FF         LG  #FF9494
+    29   102         DG  #9494FF         LG  #FF9494
+    29   110         DG  #9494FF         LG  #FF9494
+    29   114         DG  #9494FF         LG  #FF9494
+    29   118         DG  #9494FF         LG  #FF9494
     29   120         DG  #9494FF         LG  #FF9494
+    29   122         DG  #9494FF         LG  #FF9494
+    29   124         DG  #9494FF         LG  #FF9494
+    29   126         DG  #9494FF         LG  #FF9494
+    30   103         DG  #9494FF         LG  #FF9494
     30   107         DG  #9494FF         LG  #FF9494
+    30   109         DG  #9494FF         LG  #FF9494
     30   111         DG  #9494FF         LG  #FF9494
     30   113         DG  #9494FF         LG  #FF9494
     30   115         DG  #9494FF         LG  #FF9494
+    30   117         DG  #9494FF         LG  #FF9494
     30   119         DG  #9494FF         LG  #FF9494
     30   121         DG  #9494FF         LG  #FF9494
+    30   123         DG  #9494FF         LG  #FF9494
     30   124         LG  #FF9494         WH  #FFFFA5
+    30   125         DG  #9494FF         LG  #FF9494
+    30   127         DG  #9494FF         LG  #FF9494
+    31   108         DG  #9494FF         LG  #FF9494
+    31   110         DG  #9494FF         LG  #FF9494
+    31   112         DG  #9494FF         LG  #FF9494
+    31   116         DG  #9494FF         LG  #FF9494
+    31   118         DG  #9494FF         LG  #FF9494
+    31   120         DG  #9494FF         LG  #FF9494
+    31   122         DG  #9494FF         LG  #FF9494
+    31   124         DG  #9494FF         LG  #FF9494
+    31   126         DG  #9494FF         LG  #FF9494
+    32   103         DG  #9494FF         LG  #FF9494
+    32   105         DG  #9494FF         LG  #FF9494
+    32   107         DG  #9494FF         LG  #FF9494
+    32   109         DG  #9494FF         LG  #FF9494
+    32   111         DG  #9494FF         LG  #FF9494
     32   113         DG  #9494FF         LG  #FF9494
+    32   115         DG  #9494FF         LG  #FF9494
+    32   117         DG  #9494FF         LG  #FF9494
+    32   119         DG  #9494FF         LG  #FF9494
+    32   121         DG  #9494FF         LG  #FF9494
+    32   123         DG  #9494FF         LG  #FF9494
+    32   125         DG  #9494FF         LG  #FF9494
+    33   114         DG  #9494FF         LG  #FF9494
+    33   118         DG  #9494FF         LG  #FF9494
     33   120         DG  #9494FF         LG  #FF9494
+    33   124         DG  #9494FF         LG  #FF9494
     33   126         DG  #9494FF         LG  #FF9494
+    34   107         DG  #9494FF         LG  #FF9494
     34   109         DG  #9494FF         LG  #FF9494
+    34   111         DG  #9494FF         LG  #FF9494
+    34   113         DG  #9494FF         LG  #FF9494
     34   115         DG  #9494FF         LG  #FF9494
+    34   117         DG  #9494FF         LG  #FF9494
     34   119         DG  #9494FF         LG  #FF9494
+    34   121         DG  #9494FF         LG  #FF9494
+    34   123         DG  #9494FF         LG  #FF9494
     34   125         DG  #9494FF         LG  #FF9494
+    35   116         DG  #9494FF         LG  #FF9494
+    35   120         DG  #9494FF         LG  #FF9494
+    35   122         DG  #9494FF         LG  #FF9494
+    35   126         DG  #9494FF         LG  #FF9494
+    36   107         DG  #9494FF         LG  #FF9494
+    36   109         DG  #9494FF         LG  #FF9494
+    36   111         DG  #9494FF         LG  #FF9494
+    36   113         DG  #9494FF         LG  #FF9494
+    36   115         DG  #9494FF         LG  #FF9494
     36   117         DG  #9494FF         LG  #FF9494
+    36   119         DG  #9494FF         LG  #FF9494
+    36   121         DG  #9494FF         LG  #FF9494
     36   123         DG  #9494FF         LG  #FF9494
+    36   125         DG  #9494FF         LG  #FF9494
+    37   106         DG  #9494FF         LG  #FF9494
+    37   110         DG  #9494FF         LG  #FF9494
+    37   114         DG  #9494FF         LG  #FF9494
+    37   118         DG  #9494FF         LG  #FF9494
+    37   122         DG  #9494FF         LG  #FF9494
+    37   126         DG  #9494FF         LG  #FF9494
+    38   107         DG  #9494FF         LG  #FF9494
+    38   109         DG  #9494FF         LG  #FF9494
+    38   111         DG  #9494FF         LG  #FF9494
+    38   115         DG  #9494FF         LG  #FF9494
+    38   117         DG  #9494FF         LG  #FF9494
     38   119         DG  #9494FF         LG  #FF9494
+    38   121         DG  #9494FF         LG  #FF9494
     38   123         DG  #9494FF         LG  #FF9494
+    38   125         DG  #9494FF         LG  #FF9494
     38   127         WH  #FFFFA5         LG  #FF9494
+    39   112         DG  #9494FF         LG  #FF9494
+    39   114         DG  #9494FF         LG  #FF9494
+    39   116         DG  #9494FF         LG  #FF9494
+    39   124         DG  #9494FF         LG  #FF9494
+    39   126         DG  #9494FF         LG  #FF9494
+    40   105         DG  #9494FF         LG  #FF9494
+    40   109         DG  #9494FF         LG  #FF9494
+    40   111         DG  #9494FF         LG  #FF9494
+    40   115         DG  #9494FF         LG  #FF9494
+    40   117         DG  #9494FF         LG  #FF9494
     40   119         DG  #9494FF         LG  #FF9494
     40   121         DG  #9494FF         LG  #FF9494
+    40   123         DG  #9494FF         LG  #FF9494
+    40   125         DG  #9494FF         LG  #FF9494
+    40   127         DG  #9494FF         LG  #FF9494
+    41   122         DG  #9494FF         LG  #FF9494
     41   123         LG  #FF9494         WH  #FFFFA5
+    41   126         DG  #9494FF         LG  #FF9494
+    42   107         DG  #9494FF         LG  #FF9494
+    42   109         DG  #9494FF         LG  #FF9494
+    42   111         DG  #9494FF         LG  #FF9494
+    42   113         DG  #9494FF         LG  #FF9494
+    42   115         DG  #9494FF         LG  #FF9494
+    42   117         DG  #9494FF         LG  #FF9494
     42   119         DG  #9494FF         LG  #FF9494
+    42   121         DG  #9494FF         LG  #FF9494
     42   123         DG  #9494FF         LG  #FF9494
+    42   125         DG  #9494FF         LG  #FF9494
+    43   116         DG  #9494FF         LG  #FF9494
+    43   122         DG  #9494FF         LG  #FF9494
+    43   124         DG  #9494FF         LG  #FF9494
+    43   126         DG  #9494FF         LG  #FF9494
+    44   107         DG  #9494FF         LG  #FF9494
+    44   111         DG  #9494FF         LG  #FF9494
+    44   113         DG  #9494FF         LG  #FF9494
+    44   117         DG  #9494FF         LG  #FF9494
+    44   119         DG  #9494FF         LG  #FF9494
+    44   121         DG  #9494FF         LG  #FF9494
+    44   123         DG  #9494FF         LG  #FF9494
+    44   127         DG  #9494FF         LG  #FF9494
+    45   114         DG  #9494FF         LG  #FF9494
+    45   122         DG  #9494FF         LG  #FF9494
+    46   111         DG  #9494FF         LG  #FF9494
+    46   117         DG  #9494FF         LG  #FF9494
     46   119         DG  #9494FF         LG  #FF9494
+    46   121         DG  #9494FF         LG  #FF9494
+    46   123         DG  #9494FF         LG  #FF9494
     46   127         WH  #FFFFA5         LG  #FF9494
+    47   120         DG  #9494FF         LG  #FF9494
+    47   122         DG  #9494FF         LG  #FF9494
+    47   124         DG  #9494FF         LG  #FF9494
+    47   126         DG  #9494FF         LG  #FF9494
+    48   119         DG  #9494FF         LG  #FF9494
+    48   121         DG  #9494FF         LG  #FF9494
+    48   123         DG  #9494FF         LG  #FF9494
+    48   125         DG  #9494FF         LG  #FF9494
     48   127         WH  #FFFFA5         LG  #FF9494
+    50   111         DG  #9494FF         LG  #FF9494
+    50   115         DG  #9494FF         LG  #FF9494
+    50   117         DG  #9494FF         LG  #FF9494
     50   119         DG  #9494FF         LG  #FF9494
+    50   121         DG  #9494FF         LG  #FF9494
+    50   123         DG  #9494FF         LG  #FF9494
+    50   125         DG  #9494FF         LG  #FF9494
     50   127         WH  #FFFFA5         LG  #FF9494
+    51   124         DG  #9494FF         LG  #FF9494
+    52   115         DG  #9494FF         LG  #FF9494
+    52   119         DG  #9494FF         LG  #FF9494
+    52   121         DG  #9494FF         LG  #FF9494
+    52   123         DG  #9494FF         LG  #FF9494
     52   127         WH  #FFFFA5         LG  #FF9494
+    53   122         DG  #9494FF         LG  #FF9494
+    54   111         DG  #9494FF         LG  #FF9494
+    54   115         DG  #9494FF         LG  #FF9494
+    54   117         DG  #9494FF         LG  #FF9494
     54   119         DG  #9494FF         LG  #FF9494
+    54   121         DG  #9494FF         LG  #FF9494
     54   127         WH  #FFFFA5         LG  #FF9494
+    56    20         DG  #9494FF         LG  #FF9494
+    56   111         DG  #9494FF         LG  #FF9494
+    56   113         DG  #9494FF         LG  #FF9494
+    56   115         DG  #9494FF         LG  #FF9494
+    56   117         DG  #9494FF         LG  #FF9494
+    56   119         DG  #9494FF         LG  #FF9494
+    56   121         DG  #9494FF         LG  #FF9494
     56   127         WH  #FFFFA5         LG  #FF9494
+    57   126         DG  #9494FF         LG  #FF9494
+    58   113         DG  #9494FF         LG  #FF9494
+    58   115         DG  #9494FF         LG  #FF9494
+    58   117         DG  #9494FF         LG  #FF9494
+    58   119         DG  #9494FF         LG  #FF9494
     58   121         DG  #9494FF         LG  #FF9494
+    58   123         DG  #9494FF         LG  #FF9494
+    59   126         DG  #9494FF         LG  #FF9494
+    60   115         DG  #9494FF         LG  #FF9494
+    60   117         DG  #9494FF         LG  #FF9494
+    60   119         DG  #9494FF         LG  #FF9494
     60   123         DG  #9494FF         LG  #FF9494
     60   127         WH  #FFFFA5         LG  #FF9494
+    61   122         DG  #9494FF         LG  #FF9494
+    61   126         DG  #9494FF         LG  #FF9494
+    62     4         DG  #9494FF         LG  #FF9494
+    62   111         DG  #9494FF         LG  #FF9494
+    62   113         DG  #9494FF         LG  #FF9494
+    62   115         DG  #9494FF         LG  #FF9494
+    62   119         DG  #9494FF         LG  #FF9494
     62   123         DG  #9494FF         LG  #FF9494
+    62   125         DG  #9494FF         LG  #FF9494
+    64   111         DG  #9494FF         LG  #FF9494
+    64   119         DG  #9494FF         LG  #FF9494
+    64   121         DG  #9494FF         LG  #FF9494
+    64   123         DG  #9494FF         LG  #FF9494
+    64   125         DG  #9494FF         LG  #FF9494
     64   127         WH  #FFFFA5         LG  #FF9494
-    68    51         LG  #FF9494         DG  #9494FF
+    66   111         DG  #9494FF         LG  #FF9494
+    66   113         DG  #9494FF         LG  #FF9494
+    66   115         DG  #9494FF         LG  #FF9494
+    66   121         DG  #9494FF         LG  #FF9494
+    68     0         DG  #9494FF         LG  #FF9494
+    68   115         DG  #9494FF         LG  #FF9494
+    68   119         DG  #9494FF         LG  #FF9494
+    68   121         DG  #9494FF         LG  #FF9494
+    68   123         DG  #9494FF         LG  #FF9494
     68   127         WH  #FFFFA5         LG  #FF9494
+    70     6         DG  #9494FF         LG  #FF9494
+    70   117         DG  #9494FF         LG  #FF9494
+    70   119         DG  #9494FF         LG  #FF9494
+    72   117         DG  #9494FF         LG  #FF9494
+    72   119         DG  #9494FF         LG  #FF9494
     72   127         WH  #FFFFA5         LG  #FF9494
+    74   117         DG  #9494FF         LG  #FF9494
+    76   121         DG  #9494FF         LG  #FF9494
     76   127         WH  #FFFFA5         LG  #FF9494
     78   127         WH  #FFFFA5         LG  #FF9494
     80     7         DG  #9494FF         BK  #000000
+    80   123         DG  #9494FF         LG  #FF9494
     80   127         WH  #FFFFA5         LG  #FF9494
     82     2         LG  #FF9494         WH  #FFFFA5
+    82   117         DG  #9494FF         LG  #FF9494
     82   127         WH  #FFFFA5         LG  #FF9494
     84   127         WH  #FFFFA5         LG  #FF9494
     86   127         WH  #FFFFA5         LG  #FF9494
     87    12         DG  #9494FF         BK  #000000
     88    11         DG  #9494FF         BK  #000000
-    88   127         WH  #FFFFA5         LG  #FF9494
+    88   127         DG  #9494FF         LG  #FF9494
     90   127         WH  #FFFFA5         LG  #FF9494
-    92    62         LG  #FF9494         DG  #9494FF
-    92   127         WH  #FFFFA5         LG  #FF9494
+    92   127         DG  #9494FF         LG  #FF9494
     94   127         WH  #FFFFA5         LG  #FF9494
-    96     7         LG  #FF9494         DG  #9494FF
     96   127         DG  #9494FF         LG  #FF9494
     98   127         DG  #9494FF         LG  #FF9494
+    99   110         WH  #FFFFA5         LG  #FF9494
     99   121         LG  #FF9494         WH  #FFFFA5
-   102     3         LG  #FF9494         DG  #9494FF
-   102   127         WH  #FFFFA5         LG  #FF9494
-   104     3         LG  #FF9494         DG  #9494FF
+   100   127         DG  #9494FF         LG  #FF9494
+   102   127         DG  #9494FF         LG  #FF9494
+   104   127         DG  #9494FF         LG  #FF9494
+   108   127         DG  #9494FF         LG  #FF9494
    110   101         WH  #FFFFA5         LG  #FF9494
    110   107         WH  #FFFFA5         LG  #FF9494
    110   126         LG  #FF9494         WH  #FFFFA5
@@ -429,12 +919,12 @@ DIAGNOSTIC IMAGES  (in test-output\zelda-poster-1)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14142  (98.65%)
-  Different    : 194   (1.35%)
+  Matching     : 13680  (95.42%)
+  Different    : 656   (4.58%)
   BK  #000000                 1569        1572        -3
-  DG  #9494FF                 3646        3526      +120
-  LG  #FF9494                 4152        4255      -103
-  WH  #FFFFA5                 4969        4983       -14
+  DG  #9494FF                 4121        3526      +595
+  LG  #FF9494                 3680        4255      -575
+  WH  #FFFFA5                 4966        4983       -17
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
