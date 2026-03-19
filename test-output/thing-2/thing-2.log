@@ -31,11 +31,11 @@ PIPELINE RUN
   R: white-surface normalisation -> 255
   G: Coons+poly -> 255 / 148
     G refinement: 10101 interior DG pixels
-  B: white-surface normalisation -> 165
+  B: white-surface normalisation -> 165 (no global scaling)
   Frame p85 before norm: R=255 G=255 B=164
-  Global scales: R=1.0000 G=1.0000 B=1.0062
+  Global scales: R=1.0000 G=1.0000 B=1.0000
   Saved -> test-output\thing-2\thing-2_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=193.6 G=140.3 B=159.3
+  Camera area mean: R=193.6 G=140.3 B=158.3
     [debug] test-output\thing-2\debug\thing-2_warp__correct_color_a_before_after.png
     [debug] test-output\thing-2\debug\thing-2_warp__correct_color_b_white_surf_heatmap.png
     [debug] test-output\thing-2\debug\thing-2_warp__correct_color_c_full.png
@@ -45,7 +45,7 @@ PIPELINE RUN
 [crop] test-output\thing-2\thing-2_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=160.5, white frame mean=220.3 (OK)
+  Validation: inner border mean=160.4, white frame mean=220.2 (OK)
     [debug] test-output\thing-2\debug\thing-2_correct__crop_a_region.png
   Saved -> test-output\thing-2\thing-2_crop.png  (1024×896 px)
 
@@ -55,13 +55,13 @@ PIPELINE RUN
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
   Saved -> test-output\thing-2\thing-2_sample.png  (colour, subpixel-aware, 128×112 px)
-  R: 73–255  G: 0–255  B: 72–206
+  R: 73–255  G: 0–255  B: 72–204
 
 ============================================================
 [quantize/color] test-output\thing-2\thing-2_sample.png
   Loaded 128×112 colour sample image
-  R: 73–255  G: 0–255  B: 72–205
-  Nearest-RG (B ignored): BK(320)~(R108,G17,B105)  DG(8429)~(R173,G132,B165)  LG(3884)~(R222,G150,B149)  WH(1703)~(R253,G237,B136)
+  R: 73–255  G: 0–255  B: 72–204
+  Nearest-RG (B ignored): BK(320)~(R108,G17,B104)  DG(8429)~(R173,G132,B164)  LG(3884)~(R222,G150,B148)  WH(1703)~(R253,G237,B135)
   Classification: nearest-RG
   Saved -> test-output\thing-2\thing-2_gbcam.png  (grayscale palette)
   Saved -> test-output\thing-2\thing-2_gbcam_rgb.png  (new RGB palette)

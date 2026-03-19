@@ -247,7 +247,7 @@ def _process_file_color(input_path, output_path, smooth=True,
         f"G: {samples_rgb[:,:,1].min():.0f}–{samples_rgb[:,:,1].max():.0f}  "
         f"B: {samples_rgb[:,:,2].min():.0f}–{samples_rgb[:,:,2].max():.0f}")
 
-    # HSL-based classification: uses hue distances to separate colors
+    # Classify pixels using HSL-based hue distance
     labels, method = _classify_color(samples_rgb)
     log(f"  Classification: {method}")
 

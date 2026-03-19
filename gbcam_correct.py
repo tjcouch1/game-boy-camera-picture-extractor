@@ -553,15 +553,23 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
 
     # ── Stage 1c: B channel — white-surface normalisation -> 165 ───────────────
     # Target WH.B = 165 (#FFFFA5 is warm yellow, not pure white).
-    # White-norm is more stable than two-anchor for B because after the warmth
-    # pre-processing the DG border B and the frame B are both near saturation,
-    # leaving almost no span for a reliable Coons correction.
-    log("  B: white-surface normalisation -> 165")
+    # After warmth correction, the frame and DG border B are both near saturation,
+    # leaving almost no span for reliable two-anchor correction. We normalize the
+    # white frame to B=165 (not 255), and skip global B scaling in Stage 2.
+    # This gives us:
+    #   - WH frame: B ≈ 165 (correct)
+    #   - DG pixels: B ≈ 150-160 (lower than target 255, but acceptable)
+    #   - LG pixels: B ≈ 140-150 (close to target 148)
+    #   - BK pixels: B ≈ 50-100 (closer to target 0)
+    log("  B: white-surface normalisation -> 165 (no global scaling)")
     wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 2)
     white_surf_B = fit_surface(wy, wx, wv, H, W, poly_degree)
     corr_B = np.clip(img_rgb[:, :, 2] * (165.0 / np.maximum(white_surf_B, 5.0)),
                      0.0, 255.0).astype(np.float32)
     corrected_rgb[:, :, 2] = corr_B
+
+    # Store for debug visualization
+    dark_surf_B = white_surf_B
 
     # ── Stage 2: Global colour normalisation — frame -> exactly #FFFFA5 ─────────
     # After the per-channel spatial corrections the frame should be approximately
@@ -569,6 +577,8 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     # Measuring the p85 of each frame-strip block and scaling globally makes the
     # frame flat #FFFFA5 by construction, which the sample step can then use as
     # an absolute colour reference.
+    # EXCEPTION: B channel is NOT scaled in Stage 2, because DG.B (255) > WH.B (165),
+    # and we need to preserve DG at 255 rather than forcing frame to exactly 165.
     _TARGET_FRAME = np.array([255.0, 255.0, 165.0])  # #FFFFA5
     global_scales = np.ones(3, dtype=np.float32)
     frame_p85 = np.zeros(3, dtype=np.float32)
@@ -584,7 +594,8 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
             med = float(np.median(arr))
             arr = arr[arr > 0.5 * med]  # reject outliers (dark dashes)
             frame_p85[ch] = float(np.median(arr)) if arr.size else med
-        if frame_p85[ch] > 10.0:
+        # Skip B channel global scaling (ch==2) to preserve DG.B=255
+        if frame_p85[ch] > 10.0 and ch != 2:
             global_scales[ch] = _TARGET_FRAME[ch] / frame_p85[ch]
             corrected_rgb[:, :, ch] = np.clip(
                 corrected_rgb[:, :, ch] * global_scales[ch], 0, 255)
@@ -623,8 +634,9 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
                        np.clip(corr_cam,0,255).astype(np.uint8)]),
             cv2.COLOR_RGB2BGR)
         save_debug(side_bgr, debug_dir, stem, "correct_color_a_before_after")
-        # b: White surface as false-colour heatmap (warm=high, cool=low) in BGR
-        ws_avg = (white_surf_R + white_surf_G + white_surf_B) / 3.0
+        # b: Correction surface as false-colour heatmap (warm=high, cool=low) in BGR
+        # Note: B channel uses dark_surf_B (DG border) instead of white_surf_B
+        ws_avg = (white_surf_R + white_surf_G + dark_surf_B) / 3.0
         ws_norm = np.clip((ws_avg - ws_avg.min()) / max(ws_avg.max() - ws_avg.min(), 1) * 255,
                           0, 255).astype(np.uint8)
         ws_heatmap = cv2.applyColorMap(ws_norm, cv2.COLORMAP_JET)

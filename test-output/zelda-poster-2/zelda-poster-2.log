@@ -31,9 +31,9 @@ PIPELINE RUN
   R: white-surface normalisation -> 255
   G: Coons+poly -> 255 / 148
     G refinement: 8054 interior DG pixels
-  B: white-surface normalisation -> 165
+  B: white-surface normalisation -> 165 (no global scaling)
   Frame p85 before norm: R=255 G=255 B=165
-  Global scales: R=1.0000 G=1.0000 B=0.9996
+  Global scales: R=1.0000 G=1.0000 B=1.0000
   Saved -> test-output\zelda-poster-2\zelda-poster-2_correct.png  (colour, frame normalised to #FFFFA5)
   Camera area mean: R=210.0 G=152.7 B=139.4
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_warp__correct_color_a_before_after.png
