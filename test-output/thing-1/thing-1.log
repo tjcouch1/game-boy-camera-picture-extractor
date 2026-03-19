@@ -1,14 +1,14 @@
 
 ======================================================================
 PIPELINE RUN  [colour]
-  Input:      test-input/thing-1.jpg
-  Output dir: ./test-output/thing-1
+  Input:      test-input\thing-1.jpg
+  Output dir: test-output\thing-1
   scale=8  threshold=180  poly_degree=2  dark_smooth=13
 ======================================================================
 
 
 ============================================================
-[warp] test-input/thing-1.jpg
+[warp] test-input\thing-1.jpg
   Loaded 1299×1186 px
   a — Detecting screen corners
   Contour: area=1393862  aspect=1.108 (expected≈1.111)  thresh=180  quad_score=0.0345
@@ -282,7 +282,7 @@ FULL PIXEL ERROR LIST  (82 errors, sorted by row then column)
    110   126         DG  #9494FF         BK  #000000
 
 ──────────────────────────────────────────────────────────────────────
-DIAGNOSTIC IMAGES  (in ./test-output/thing-1)
+DIAGNOSTIC IMAGES  (in test-output\thing-1)
 ──────────────────────────────────────────────────────────────────────
   thing-1_diag_result.png     — pipeline output (colour palette)
   thing-1_diag_reference.png  — reference image (colour palette)

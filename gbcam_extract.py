@@ -298,6 +298,8 @@ def run_pipeline(input_files, output_dir,
 
                 if not is_final:
                     intermediates.append(out_path)
+                    if step_name == "correct":
+                        intermediates.append(str(Path(out_path).with_suffix(".json")))
                     if step_name == "sample" and not color:
                         # In grayscale mode the sample step also writes auxiliary
                         # _med and _zc stat images for the spatial smoother.

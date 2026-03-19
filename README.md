@@ -93,6 +93,22 @@ python gbcam_extract.py --help
 
 # To Test
 
+To run the full test suite that regenerates all the images checked into this repo, run the following:
+
+```bash
+python run_tests.py
+```
+
+This will run commands like the following:
+
+```bash
+python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
+python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
+python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
+python test_pipeline.py --input "test-input/thing-1.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-1 --keep-intermediates
+python test_pipeline.py --input "test-input/thing-2.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-2 --keep-intermediates
+```
+
 To run a unit test to test the accuracy of the output, gather the following:
 
 - Input image: an input picture of a Game Boy Camera picture [as described above](#taking-pictures-that-work-with-this-script) (e.g. `test-input/zelda-poster-1.jpg`)
@@ -104,15 +120,7 @@ Then run the following:
 python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
 ```
 
-To regenerate all the images checked into this repo, run the following:
 
-```bash
-python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
-python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
-python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
-python test_pipeline.py --input "test-input/thing-1.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-1 --keep-intermediates
-python test_pipeline.py --input "test-input/thing-2.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-2 --keep-intermediates
-```
 
 # Roadmap
 

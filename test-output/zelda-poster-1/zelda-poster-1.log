@@ -1,14 +1,14 @@
 
 ======================================================================
 PIPELINE RUN  [colour]
-  Input:      test-input/zelda-poster-1.jpg
-  Output dir: ./test-output/zelda-poster-1
+  Input:      test-input\zelda-poster-1.jpg
+  Output dir: test-output\zelda-poster-1
   scale=8  threshold=180  poly_degree=2  dark_smooth=13
 ======================================================================
 
 
 ============================================================
-[warp] test-input/zelda-poster-1.jpg
+[warp] test-input\zelda-poster-1.jpg
   Loaded 1297×1188 px
   a — Detecting screen corners
   Contour: area=1401848  aspect=1.108 (expected≈1.111)  thresh=180  quad_score=0.0317
@@ -167,7 +167,7 @@ FULL PIXEL ERROR LIST  (17 errors, sorted by row then column)
    104     3         LG  #FF9494         DG  #9494FF
 
 ──────────────────────────────────────────────────────────────────────
-DIAGNOSTIC IMAGES  (in ./test-output/zelda-poster-1)
+DIAGNOSTIC IMAGES  (in test-output\zelda-poster-1)
 ──────────────────────────────────────────────────────────────────────
   zelda-poster-1_diag_result.png     — pipeline output (colour palette)
   zelda-poster-1_diag_reference.png  — reference image (colour palette)

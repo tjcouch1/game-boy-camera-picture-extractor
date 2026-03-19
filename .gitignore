@@ -208,7 +208,10 @@ __marimo__/
 
 # Output debug files
 sample-pictures-out/debug
-test-output/**/debug
 
-# Keep the output log file
+# Keep the output log file and final image but get rid of the intermediate files and debug files
+test-output/**/*
+!test-output/*/
 !test-output/**/*.log
+!test-output/**/*_gbcam.png
+!test-output/**/*_gbcam_rgb.png
