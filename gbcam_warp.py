@@ -8,16 +8,19 @@ image of the full 160x144 GB screen at a fixed pixel scale.
 Processing:
   1. Detect the four corners of the white filmstrip frame using brightness
      thresholding and contour analysis.
-  2. Apply an initial perspective warp to a (SCREEN_W*scale)x(SCREEN_H*scale)
-     rectangle (default 1280x1152 at scale=8).
-  3. Refine alignment: detect where the inner border band actually landed in
-     the warped image using sub-pixel gradient-peak detection on all four
-     sides (always scanning FROM the reliable white-frame side), then
-     back-project the corrected corner positions to the original photo and
-     re-apply a single-pass perspective warp -- no black bars possible.
+  2. Apply an initial perspective warp to (SCREEN_W*scale) x (SCREEN_H*scale)
+     pixels (default 1280x1152 at scale=8).
+  3. Refine alignment TWICE using sub-pixel inner-border detection:
+       - All four edges scan FROM the white-frame side (the most reliable
+         high-contrast signal).  Top/left scan directly; bottom/right flip
+         the profile so the frame comes first, detect the frame->border drop
+         (inner edge), subtract (scale-1) to get the outer/camera-facing edge.
+       - Back-project corrected corners to the original photo and re-warp in
+         a single pass -- no black bars possible regardless of correction direction.
+       - Run twice to eliminate sub-pixel residuals from the first pass.
 
 Input:  phone photo (.jpg / .png, any size)
-Output: <stem>_warp.png -- colour PNG, (160*scale)x(144*scale) px
+Output: <stem>_warp.png — colour PNG, (160*scale) x (144*scale) px
 
 Standalone usage:
   python gbcam_warp.py photo.jpg [photo2.jpg ...]  [options]
@@ -91,16 +94,15 @@ def find_screen_corners(img, thresh_val=180, debug=False, debug_dir=None, stem=N
     for thresh in range(thresh_val, 114, -5):
         _, binary   = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
         closed      = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL,
+                                        cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             continue
-
         contours = sorted(contours, key=cv2.contourArea, reverse=True)
         largest  = contours[0]
         area     = cv2.contourArea(largest)
         if area < 1000:
             continue
-
         hull = cv2.convexHull(largest)
         peri = cv2.arcLength(hull, True)
         quad = None
@@ -112,15 +114,12 @@ def find_screen_corners(img, thresh_val=180, debug=False, debug_dir=None, stem=N
         if quad is None:
             x, y, w, h = cv2.boundingRect(largest)
             quad = np.array([[x, y], [x+w, y], [x+w, y+h], [x, y+h]])
-
         ordered = _order_corners(quad.astype(float))
         score   = _score_quad(ordered, img_w, img_h)
-
         if best is None or score < best[0]:
             x, y, w, h = cv2.boundingRect(largest)
             aspect = w / h if h else 0
             best = (score, ordered, thresh, area, aspect)
-
         if score < 0.05:
             break
 
@@ -128,9 +127,9 @@ def find_screen_corners(img, thresh_val=180, debug=False, debug_dir=None, stem=N
         raise RuntimeError("No bright contour found -- try adjusting --threshold")
 
     score, ordered, used_thresh, area, aspect = best
-    log(f"  Contour: area={area:.0f}  aspect={aspect:.3f} "
-        f"(expected~{SCREEN_W/SCREEN_H:.3f})  thresh={used_thresh}  "
-        f"quad_score={score:.4f}")
+    expected = SCREEN_W / SCREEN_H
+    log(f"  Contour: area={area:.0f}  aspect={aspect:.3f} (expected~{expected:.3f})"
+        f"  thresh={used_thresh}  quad_score={score:.4f}")
     if score > 0.15:
         log("  WARNING: quad quality is low -- detection may be unreliable")
     log(f"  Corners (TL TR BR BL): {ordered.astype(int).tolist()}")
@@ -160,33 +159,20 @@ def _initial_warp(img, corners, scale, debug=False, debug_dir=None, stem=None):
 # Sub-pixel inner-border edge detection
 # ---------------------------------------------------------------------------
 
-def _find_edge_subpix(profile, base, descending, scale):
+def _first_dark_from_frame(profile):
     """
-    Locate the outer (first-dark-pixel) edge of the inner-border band.
+    Find the sub-pixel index of the first DARK pixel when the profile scans
+    FROM the white frame side INTO the dark inner border.
 
-    We ALWAYS scan from the white-frame side because the frame is uniformly
-    bright and gives a clean, high-contrast gradient signal.
+    The profile must start HIGH (white frame) and transition to LOW (border).
+    The sharpest negative gradient marks the last-white / first-dark boundary;
+    the first dark pixel is one step further.
 
-    descending=True  (top and left sides)
-        Profile runs from the white frame DOWN/RIGHT into the dark border.
-        The derivative dips to its MINIMUM at the last-white/first-dark
-        boundary.  First dark pixel = argmin(diff) + 1 in profile coords.
-
-    descending=False  (bottom and right sides)
-        Profile still runs in the natural image direction, so the dark border
-        appears BEFORE the white frame.  The derivative peaks to its MAXIMUM
-        at the last-dark/first-white boundary.  Because the border is
-        ``scale`` pixels wide, the first dark pixel = argmax(diff) - scale + 1
-        in profile coords.
-
-    Sub-pixel accuracy via parabolic interpolation on the diff extremum.
-    Returns a float pixel coordinate in the original image space.
+    Returns a float index (0-based) in `profile`.
     """
     p = gaussian_filter1d(profile.astype(float), sigma=1.5)
     d = np.diff(p)
-
-    k = int(np.argmin(d) if descending else np.argmax(d))
-
+    k = int(np.argmin(d))
     # Parabolic sub-pixel refinement
     delta = 0.0
     if 0 < k < len(d) - 1:
@@ -194,66 +180,67 @@ def _find_edge_subpix(profile, base, descending, scale):
         denom = d0 - 2.0 * d1 + d2
         if abs(denom) > 1e-10:
             delta = float(np.clip(0.5 * (d0 - d2) / denom, -1.0, 1.0))
-
-    if descending:
-        # k is the last-white pixel; first dark pixel is k+1
-        return base + (k + 1) + delta
-    else:
-        # k is the last-dark/first-white boundary; first dark pixel = k - scale + 1
-        return base + (k - scale + 1) + delta
+    return float(k + 1 + delta)
 
 
 def _find_border_outer_edges(channel, scale):
     """
-    Detect the outer edge of each inner-border band with sub-pixel accuracy.
+    Detect the outer (camera-facing) edge of each inner-border band with
+    sub-pixel accuracy.  All four sides scan FROM the white frame side.
+
+    TOP  / LEFT : profile starts at the frame, drops into border -- direct scan.
+    BOT  / RIGHT: frame is on the far side of the border, so the profile is
+                  FLIPPED before calling _first_dark_from_frame.  This gives
+                  the INNER (frame-facing) edge; subtracting (scale-1) converts
+                  it to the OUTER (camera-facing) edge.
 
     Returns (top_row, bot_row, left_col, right_col) as float pixel coords,
-    each being the FIRST DARK PIXEL of the respective border band:
+    each being the first-dark-pixel row/col of that border band:
+        top_row   ~= INNER_TOP   * scale  (e.g. 120 at scale=8)
+        bot_row   ~= INNER_BOT   * scale  (e.g. 1024 at scale=8)
+        left_col  ~= INNER_LEFT  * scale  (e.g. 120 at scale=8)
+        right_col ~= INNER_RIGHT * scale  (e.g. 1152 at scale=8)
 
-        top_row   ~= INNER_TOP   * scale   (120 at scale=8)
-        bot_row   ~= INNER_BOT   * scale   (1024 at scale=8)
-        left_col  ~= INNER_LEFT  * scale   (120 at scale=8)
-        right_col ~= INNER_RIGHT * scale   (1152 at scale=8)
-
-    ``channel`` is the R-B contrast image (uint8, H x W):
-        warm frame  (#FFFFA5)  -> high values
-        cool border (#9494FF)  -> low values
+    `channel` should be the R-B contrast channel (warm frame -> high,
+    cool border -> low) as a uint8 (H, W) array.
     """
-    H, W = channel.shape
-    srch  = 6 * scale      # search half-window around expected position
+    H, W  = channel.shape
+    srch  = 6 * scale
 
-    # Averaging bands: stay well clear of corners and frame dash regions
-    c_lo = 20 * scale;       c_hi = min(W, 140 * scale)
-    r_lo = 20 * scale;       r_hi = min(H, (SCREEN_H - 20) * scale)
+    # Averaging bands: stay clear of corners and dash regions
+    c_lo = 20 * scale;        c_hi = min(W, 140 * scale)
+    r_lo = 20 * scale;        r_hi = min(H, (SCREEN_H - 20) * scale)
 
-    # Top: white frame is ABOVE the border -> scan descends into border
-    exp = INNER_TOP * scale
-    r1  = max(0, exp - srch);  r2 = min(H, exp + srch)
-    top_row = _find_edge_subpix(
-        channel[r1:r2, c_lo:c_hi].mean(axis=1), r1,
-        descending=True, scale=scale)
+    # TOP: white frame is ABOVE the border; scan top-down, frame comes first
+    exp_top = INNER_TOP * scale
+    r1 = max(0, exp_top - srch);  r2 = min(H, exp_top + srch)
+    prof = channel[r1:r2, c_lo:c_hi].mean(axis=1)
+    top_row = r1 + _first_dark_from_frame(prof)
 
-    # Bottom: white frame is BELOW the border -> border precedes frame in scan
-    # The first dark pixel of the bottom band sits at INNER_BOT * scale.
-    exp_end = (INNER_BOT + 1) * scale   # one pixel past the band
-    r1 = max(0, exp_end - srch);  r2 = min(H, exp_end + srch)
-    bot_row = _find_edge_subpix(
-        channel[r1:r2, c_lo:c_hi].mean(axis=1), r1,
-        descending=False, scale=scale)
+    # BOTTOM: white frame is BELOW the border; flip so frame comes first.
+    #   _first_dark_from_frame returns index j in the flipped profile = inner edge.
+    #   Convert back: flipped index j -> original index (n-1-j).
+    #   Outer edge = inner - (scale - 1).
+    exp_bot_frame = (INNER_BOT + 1) * scale   # first row of white frame below border
+    r1b = max(0, exp_bot_frame - srch);  r2b = min(H, exp_bot_frame + srch)
+    prof_b      = channel[r1b:r2b, c_lo:c_hi].mean(axis=1)
+    inner_idx_b = _first_dark_from_frame(prof_b[::-1])
+    inner_row_b = (r2b - 1) - inner_idx_b
+    bot_row     = inner_row_b - (scale - 1)
 
-    # Left: white frame is to the LEFT -> scan descends into border
-    exp = INNER_LEFT * scale
-    c1  = max(0, exp - srch);  c2 = min(W, exp + srch)
-    left_col = _find_edge_subpix(
-        channel[r_lo:r_hi, c1:c2].mean(axis=0), c1,
-        descending=True, scale=scale)
+    # LEFT: white frame is to the LEFT; scan left-right, frame comes first
+    exp_left = INNER_LEFT * scale
+    c1 = max(0, exp_left - srch);  c2 = min(W, exp_left + srch)
+    prof = channel[r_lo:r_hi, c1:c2].mean(axis=0)
+    left_col = c1 + _first_dark_from_frame(prof)
 
-    # Right: white frame is to the RIGHT -> border precedes frame in scan
-    exp_end = (INNER_RIGHT + 1) * scale
-    c1 = max(0, exp_end - srch);  c2 = min(W, exp_end + srch)
-    right_col = _find_edge_subpix(
-        channel[r_lo:r_hi, c1:c2].mean(axis=0), c1,
-        descending=False, scale=scale)
+    # RIGHT: white frame is to the RIGHT; flip so frame comes first.
+    exp_right_frame = (INNER_RIGHT + 1) * scale   # first col of white frame right of border
+    c1r = max(0, exp_right_frame - srch);  c2r = min(W, exp_right_frame + srch)
+    prof_r      = channel[r_lo:r_hi, c1r:c2r].mean(axis=0)
+    inner_idx_r = _first_dark_from_frame(prof_r[::-1])
+    inner_col_r = (c2r - 1) - inner_idx_r
+    right_col   = inner_col_r - (scale - 1)
 
     return top_row, bot_row, left_col, right_col
 
@@ -262,28 +249,31 @@ def _find_border_outer_edges(channel, scale):
 # Refinement via back-projection to the original photo
 # ---------------------------------------------------------------------------
 
-def refine_warp(img, initial_M, warped, scale, debug=False, debug_dir=None, stem=None):
+def refine_warp(img, current_M, warped, scale,
+                debug=False, debug_dir=None, stem=None, pass_num=1):
     """
     Snap the inner border to its exact pixel-grid position without black bars.
 
-    Warping the already-warped image a second time would produce black bars
-    whenever the correction needs to expand the content outward (the output
-    corners would need to sample beyond the warped image boundary).
+    Warping the already-warped image a second time produces black bars when
+    the correction needs to expand the content outward (output corners would
+    need to sample beyond the warped image boundary).  Instead:
 
-    Instead this function:
-      1. Builds the R-B contrast channel from the warped image.
-      2. Detects the inner border position with sub-pixel accuracy.
-      3. Computes H_corr: 4-point homography, detected -> expected border.
-      4. Applies H_corr^-1 to the four output canvas corners to find which
-         positions in the warped image they correspond to.
-      5. Applies initial_M^-1 to back-project those positions to the original
-         phone photo (which always has dark margin outside the screen).
-      6. Computes a new single-pass perspective warp from those source corners
-         and warps the original image directly -- canvas always fully filled.
+      1. Build the R-B contrast channel (warm frame HIGH, cool border LOW).
+      2. Detect all four border outer edges with sub-pixel accuracy, always
+         scanning FROM the white-frame side.
+      3. Compute H_corr: 4-point homography, detected -> expected border.
+      4. Apply H_corr^-1 to the output canvas corners to find which positions
+         in the warped image they correspond to.
+      5. Apply current_M^-1 to back-project those positions to the original
+         phone photo (which always has dark margin beyond the screen edge).
+      6. Compute a new single-pass warp from those corrected source corners.
+
+    Returns (refined_image, new_M).  Call twice to eliminate residual
+    sub-pixel error from the first pass.
     """
     H, W = warped.shape[:2]
 
-    # R-B channel: warm frame (#FFFFA5) -> high; cool border (#9494FF) -> low
+    # R-B channel: warm frame (#FFFFA5) -> HIGH; cool border (#9494FF) -> LOW
     rgb   = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB).astype(np.float32)
     rb_ch = np.clip(rgb[:, :, 0] - rgb[:, :, 2] + 128.0, 0.0, 255.0).astype(np.uint8)
 
@@ -294,7 +284,7 @@ def refine_warp(img, initial_M, warped, scale, debug=False, debug_dir=None, stem
     exp_left  = float(INNER_LEFT  * scale)
     exp_right = float(INNER_RIGHT * scale)
 
-    log(f"  Border edges (sub-pixel): "
+    log(f"  Pass {pass_num} border edges: "
         f"top={top:.2f}(exp={exp_top:.0f},err={top-exp_top:+.2f}), "
         f"bot={bot:.2f}(exp={exp_bot:.0f},err={bot-exp_bot:+.2f}), "
         f"left={left:.2f}(exp={exp_left:.0f},err={left-exp_left:+.2f}), "
@@ -304,10 +294,10 @@ def refine_warp(img, initial_M, warped, scale, debug=False, debug_dir=None, stem
     max_err = (FRAME_THICK // 2) * scale
     if (abs(top   - exp_top)   > max_err or abs(bot   - exp_bot)   > max_err or
             abs(left  - exp_left)  > max_err or abs(right - exp_right) > max_err):
-        log("  WARNING: border error too large -- skipping refinement")
+        log(f"  WARNING: pass {pass_num} border error too large -- skipping refinement")
         if debug and debug_dir and stem:
             save_debug(warped, debug_dir, stem, "warp_d_refined_color")
-        return warped
+        return warped, current_M
 
     # Step 1: H_corr maps detected border rectangle -> expected rectangle
     src_brd = np.float32([[left,  top], [right, top],
@@ -316,23 +306,22 @@ def refine_warp(img, initial_M, warped, scale, debug=False, debug_dir=None, stem
                            [exp_right, exp_bot], [exp_left,  exp_bot]])
     H_corr = cv2.getPerspectiveTransform(src_brd, dst_brd)
 
-    # Step 2: find where the output canvas corners map to in warped-image space
+    # Step 2: find where output canvas corners map to in warped-image space
     # H_corr:    warped-space -> corrected-space
     # H_corr^-1: corrected-space -> warped-space
-    canvas_corners = np.float32([[[0,   0  ],
-                                   [W-1, 0  ],
-                                   [W-1, H-1],
-                                   [0,   H-1]]])
-    H_corr_inv        = np.linalg.inv(H_corr)
+    canvas = np.float32([[[0,   0  ],
+                           [W-1, 0  ],
+                           [W-1, H-1],
+                           [0,   H-1]]])
     corners_in_warped = cv2.perspectiveTransform(
-        canvas_corners, H_corr_inv).reshape(-1, 2)
+        canvas, np.linalg.inv(H_corr)).reshape(-1, 2)
 
-    # Step 3: back-project those warped-space positions to the original photo
-    M1_inv         = np.linalg.inv(initial_M)
+    # Step 3: back-project warped-space positions to the original photo
     corners_in_src = cv2.perspectiveTransform(
-        corners_in_warped.reshape(1, -1, 2), M1_inv).reshape(-1, 2)
+        corners_in_warped.reshape(1, -1, 2),
+        np.linalg.inv(current_M)).reshape(-1, 2)
 
-    log(f"  Corrected src corners: {corners_in_src.astype(int).tolist()}")
+    log(f"  Pass {pass_num} corrected src corners: {corners_in_src.astype(int).tolist()}")
 
     # Step 4: single-pass warp from corrected source corners
     dst_corners = np.float32([[0,   0  ],
@@ -342,20 +331,10 @@ def refine_warp(img, initial_M, warped, scale, debug=False, debug_dir=None, stem
     M_new   = cv2.getPerspectiveTransform(corners_in_src, dst_corners)
     refined = cv2.warpPerspective(img, M_new, (W, H), flags=cv2.INTER_LANCZOS4)
 
-    # Verify post-refinement border positions
-    rgb2   = cv2.cvtColor(refined, cv2.COLOR_BGR2RGB).astype(np.float32)
-    rb_ch2 = np.clip(rgb2[:, :, 0] - rgb2[:, :, 2] + 128.0, 0.0, 255.0).astype(np.uint8)
-    t2, b2, l2, r2 = _find_border_outer_edges(rb_ch2, scale)
-    log(f"  After refinement: "
-        f"top={t2:.2f}(exp={exp_top:.0f},err={t2-exp_top:+.2f}), "
-        f"bot={b2:.2f}(exp={exp_bot:.0f},err={b2-exp_bot:+.2f}), "
-        f"left={l2:.2f}(exp={exp_left:.0f},err={l2-exp_left:+.2f}), "
-        f"right={r2:.2f}(exp={exp_right:.0f},err={r2-exp_right:+.2f})")
-
-    if debug and debug_dir and stem:
+    if debug and debug_dir and stem and pass_num == 2:
         save_debug(refined, debug_dir, stem, "warp_d_refined_color")
 
-    return refined
+    return refined, M_new
 
 
 # ---------------------------------------------------------------------------
@@ -377,10 +356,13 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
     corners = find_screen_corners(img, thresh_val, debug, debug_dir, stem)
 
     log("  b -- Initial perspective warp")
-    warped, initial_M = _initial_warp(img, corners, scale, debug, debug_dir, stem)
+    warped, M = _initial_warp(img, corners, scale, debug, debug_dir, stem)
 
-    log("  c -- Refining alignment (sub-pixel border detection, back-projection)")
-    warped = refine_warp(img, initial_M, warped, scale, debug, debug_dir, stem)
+    log("  c -- Refining alignment (pass 1: sub-pixel border detection)")
+    warped, M = refine_warp(img, M, warped, scale, debug, debug_dir, stem, pass_num=1)
+
+    log("  c -- Refining alignment (pass 2: eliminate residual sub-pixel error)")
+    warped, M = refine_warp(img, M, warped, scale, debug, debug_dir, stem, pass_num=2)
 
     # Warmth pre-processing (disabled -- B channel preserved for correction step)
     _WARMTH_STRENGTH = 0.0
