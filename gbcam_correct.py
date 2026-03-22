@@ -332,17 +332,21 @@ def _quick_sample_color(corrected_rg, scale, h_margin=2, v_margin=1):
     Fast inline sampling of the camera area from the per-channel corrected image.
     Returns a (CAM_H, CAM_W, 2) float32 array of per-pixel (R, G) values.
     corrected_rg is a (H, W, 2) float32 array with channels [R, G].
+    Uses subpixel-aware column ranges: R from right cols, G from middle cols.
     """
+    # Channel 0 in corrected_rg is R (ch=0), channel 1 is G (ch=1)
+    r_lo, r_hi = _subpixel_col_range(0, scale)  # R = right columns
+    g_lo, g_hi = _subpixel_col_range(1, scale)  # G = middle columns
     out = np.empty((CAM_H, CAM_W, 2), dtype=np.float32)
     for gy in range(CAM_H):
+        y1 = (FRAME_THICK + gy) * scale + v_margin
+        y2 = (FRAME_THICK + gy + 1) * scale - v_margin
         for gx in range(CAM_W):
-            y1 = (FRAME_THICK + gy) * scale + v_margin
-            y2 = (FRAME_THICK + gy + 1) * scale - v_margin
-            x1 = (FRAME_THICK + gx) * scale + h_margin
-            x2 = (FRAME_THICK + gx + 1) * scale - h_margin
-            block = corrected_rg[y1:y2, x1:x2, :]
-            out[gy, gx, 0] = float(np.mean(block[:, :, 0]))
-            out[gy, gx, 1] = float(np.mean(block[:, :, 1]))
+            x0 = (FRAME_THICK + gx) * scale
+            blk_r = corrected_rg[y1:y2, x0 + r_lo : x0 + r_hi, 0]
+            blk_g = corrected_rg[y1:y2, x0 + g_lo : x0 + g_hi, 1]
+            out[gy, gx, 0] = float(np.mean(blk_r)) if blk_r.size else 0.0
+            out[gy, gx, 1] = float(np.mean(blk_g)) if blk_g.size else 0.0
     return out
 
 
@@ -354,8 +358,11 @@ def _collect_border_dark_color(img_rgb, scale, dark_smooth, ch):
     gy_range = range(INNER_TOP, INNER_BOT + 1)
     gx_range = range(INNER_LEFT, INNER_RIGHT + 1)
 
+    col_lo, col_hi = _subpixel_col_range(ch, scale)
     def smp(gy, gx):
-        return float(np.median(img_rgb[gy*scale:(gy+1)*scale, gx*scale:(gx+1)*scale, ch]))
+        x0 = gx * scale
+        block = img_rgb[gy*scale:(gy+1)*scale, x0 + col_lo : x0 + col_hi, ch]
+        return float(np.median(block)) if block.size > 0 else 0.0
 
     left  = np.array([smp(gy, INNER_LEFT)  for gy in gy_range])
     right = np.array([smp(gy, INNER_RIGHT) for gy in gy_range])
@@ -382,11 +389,29 @@ def _collect_border_dark_color(img_rgb, scale, dark_smooth, ch):
     return np.array(bdy), np.array(bdx), np.array(bdv)
 
 
+def _subpixel_col_range(ch, scale):
+    """Return (lo, hi) column offsets within a block for the given channel's subpixel.
+    BGR stripe layout: B=left, G=middle, R=right."""
+    inner_start = 1
+    inner_end = scale - 1
+    inner_w = inner_end - inner_start
+    third = inner_w // 3
+    if ch == 2:    # B — left columns
+        return inner_start, inner_start + third
+    elif ch == 1:  # G — middle columns
+        return inner_start + third, inner_start + 2 * third
+    else:          # R — right columns
+        return inner_start + 2 * third, inner_end
+
+
 def _gb_block_sample_ch_color(img_rgb, gy, gx, scale, ch, pct=50):
-    """Return the <pct>-th percentile of channel <ch> in GB pixel block (gy, gx)."""
+    """Return the <pct>-th percentile of channel <ch> in the subpixel columns
+    of GB pixel block (gy, gx).  Uses subpixel-aware column ranges to match
+    what the sample step extracts."""
     y1, y2 = gy * scale, (gy + 1) * scale
-    x1, x2 = gx * scale, (gx + 1) * scale
-    block = img_rgb[y1:y2, x1:x2, ch]
+    x0 = gx * scale
+    col_lo, col_hi = _subpixel_col_range(ch, scale)
+    block = img_rgb[y1:y2, x0 + col_lo : x0 + col_hi, ch]
     return float(np.percentile(block, pct)) if block.size > 0 else 0.0
 
 
@@ -507,19 +532,21 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
         log(f"    R refinement: {n_cal} interior DG pixels")
         if n_cal >= 50:
             # Debug: print sample cal_v vs dark_surf_R at DG positions
+            r_lo, r_hi = _subpixel_col_range(0, scale)
             sample_idxs = np.arange(0, min(n_cal, 20))
             for i in sample_idxs[:5]:
                 gy, gx = cys[i], cxs[i]
                 py = (FRAME_THICK + gy) * scale + scale // 2
                 px = (FRAME_THICK + gx) * scale + scale // 2
-                raw_v = float(img_rgb[py, px, 0])
+                raw_v = float(np.mean(img_rgb[(FRAME_THICK+gy)*scale:(FRAME_THICK+gy+1)*scale,
+                                               (FRAME_THICK+gx)*scale+r_lo:(FRAME_THICK+gx)*scale+r_hi, 0]))
                 coons_v = float(dark_surf_R[py, px])
                 corr_v = float(corr_R[py, px])
                 log(f"      DG[{gy},{gx}]: raw={raw_v:.1f} coons={coons_v:.1f} corr={corr_v:.1f}")
             cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2 for gy in cys], float)
             cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2 for gx in cxs], float)
-            cal_v = np.array([float(img_rgb[(FRAME_THICK+gy)*scale+scale//2,
-                                            (FRAME_THICK+gx)*scale+scale//2, 0])
+            cal_v = np.array([float(np.mean(img_rgb[(FRAME_THICK+gy)*scale:(FRAME_THICK+gy+1)*scale,
+                                                     (FRAME_THICK+gx)*scale+r_lo:(FRAME_THICK+gx)*scale+r_hi, 0]))
                                for gy, gx in zip(cys, cxs)], float)
             dark_surf_R2 = _fit_surface_poly(
                 np.concatenate([border_y_r, cal_y]),
@@ -587,10 +614,11 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
         n_cal = len(cys)
         log(f"    G refinement: {n_cal} interior DG pixels")
         if n_cal >= 50:
+            g_lo, g_hi = _subpixel_col_range(1, scale)
             cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2 for gy in cys], float)
             cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2 for gx in cxs], float)
-            cal_v = np.array([float(img_rgb[(FRAME_THICK+gy)*scale+scale//2,
-                                            (FRAME_THICK+gx)*scale+scale//2, 1])
+            cal_v = np.array([float(np.mean(img_rgb[(FRAME_THICK+gy)*scale:(FRAME_THICK+gy+1)*scale,
+                                                     (FRAME_THICK+gx)*scale+g_lo:(FRAME_THICK+gx)*scale+g_hi, 1]))
                                for gy, gx in zip(cys, cxs)], float)
             dark_surf_G2 = _fit_surface_poly(
                 np.concatenate([border_y_g, cal_y]),

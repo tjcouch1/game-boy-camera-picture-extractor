@@ -242,9 +242,104 @@ def _classify_color(samples_rgb, init_centers=None):
             if cnt > 0:
                 m = flat[labels_flat == i].mean(axis=0)
                 center_info.append(f"{name}({cnt})~(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
-        log(f"  Adaptive k-means RG: " + "  ".join(center_info))
+        log(f"  Global k-means RG: " + "  ".join(center_info))
 
-        return labels_flat.reshape(112, 128).astype(np.uint8), "adaptive-kmeans-RG"
+        # ── Column-strip k-means for locally adaptive classification ──
+        # Run k-means on overlapping vertical strips, using global centers
+        # as initialization.  Each strip adapts to the local gradient.
+        labels_2d = labels_flat.reshape(CAM_H, CAM_W)
+        samples_rg = samples_rgb[:, :, :2].astype(np.float32)
+
+        # Get global centers in palette order
+        global_centers_po = np.zeros((4, 2), dtype=np.float32)
+        for pi in range(4):
+            cidx = np.where(cluster_to_palette == pi)[0]
+            global_centers_po[pi] = centers_rg[cidx[0]] if len(cidx) > 0 else targets_rg[pi]
+
+        strip_width = 32
+        step = 16  # overlap of 16
+        n_strips = (CAM_W - strip_width) // step + 1
+
+        strip_labels = np.full((CAM_H, CAM_W, n_strips), -1, dtype=np.int8)
+        strip_centers_col = np.zeros(n_strips, dtype=float)  # center column of each strip
+
+        for s in range(n_strips):
+            col_start = s * step
+            col_end = min(col_start + strip_width, CAM_W)
+            strip_data = samples_rg[:, col_start:col_end, :].reshape(-1, 2)
+
+            # Run k-means with global centers as init
+            km_strip = KMeans(n_clusters=4, init=global_centers_po,
+                              n_init=1, max_iter=300, random_state=42)
+            sl = km_strip.fit_predict(strip_data)
+            sc = km_strip.cluster_centers_
+
+            # Map strip clusters to palette using optimal assignment
+            dm = np.zeros((4, 4))
+            for i in range(4):
+                for j in range(4):
+                    dm[i, j] = np.linalg.norm(sc[i] - targets_rg[j])
+
+            best_p2 = None
+            best_c2 = float('inf')
+            for perm in permutations(range(4)):
+                cost = sum(dm[i, perm[i]] for i in range(4))
+                if cost < best_c2:
+                    best_c2 = cost
+                    best_p2 = perm
+
+            c2p = np.array(best_p2, dtype=int)
+            sl_palette = c2p[sl].reshape(CAM_H, col_end - col_start)
+            strip_labels[:, col_start:col_end, s] = sl_palette
+            strip_centers_col[s] = (col_start + col_end) / 2.0
+
+        # Ensemble: for each pixel, if ANY strip agrees with global → keep global.
+        # If ALL overlapping strips disagree with global → use the closest strip.
+        # This avoids strip k-means introducing errors while capturing improvements.
+        final_labels = labels_2d.copy()
+        changed = 0
+        for x in range(CAM_W):
+            # Find all strips that cover this column
+            covering_strips = []
+            for s in range(n_strips):
+                col_start = s * step
+                col_end = min(col_start + strip_width, CAM_W)
+                if col_start <= x < col_end and strip_labels[0, x, s] >= 0:
+                    covering_strips.append(s)
+
+            if not covering_strips:
+                continue
+
+            # Get the closest strip
+            best_strip = min(covering_strips,
+                             key=lambda s: abs(strip_centers_col[s] - x))
+
+            for y in range(CAM_H):
+                global_l = int(labels_2d[y, x])
+                strip_l = int(strip_labels[y, x, best_strip])
+
+                if strip_l != global_l:
+                    # Check if ANY covering strip agrees with global
+                    any_agree = any(int(strip_labels[y, x, s]) == global_l
+                                    for s in covering_strips)
+                    if not any_agree:
+                        # All strips disagree — use closest strip
+                        final_labels[y, x] = strip_l
+                        changed += 1
+
+        log(f"  Strip ensemble: {n_strips} strips, changed {changed} px")
+
+        # Log refined results
+        counts2 = np.bincount(final_labels.ravel(), minlength=4)
+        center_info2 = []
+        for i, (name, cnt) in enumerate(zip(names, counts2)):
+            if cnt > 0:
+                mask = (final_labels == i)
+                m = samples_rgb[mask].mean(axis=0)
+                center_info2.append(f"{name}({cnt})~(R{int(m[0])},G{int(m[1])},B{int(m[2])})")
+        log(f"  Strip-refined RG:   " + "  ".join(center_info2))
+
+        return final_labels.astype(np.uint8), "strip-kmeans-RG"
 
     except (ImportError, Exception) as e:
         # Fallback to fixed nearest-neighbor if k-means fails

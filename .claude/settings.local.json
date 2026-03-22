@@ -9,7 +9,14 @@
       "Bash(.venv\\\\Scripts\\\\python.exe:*)",
       "Bash(findstr:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(grep -E \"\\\\.py$|^d\")",
+      "Bash(.venv/Scripts/pip.exe list:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/tj_co/source/repos-p/game-boy-camera-picture-extractor/**)",
+      "Bash(done)",
+      "Bash(python3:*)"
     ]
   }
 }
