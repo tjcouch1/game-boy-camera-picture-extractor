@@ -17,14 +17,13 @@ PIPELINE RUN
   b -- Initial perspective warp
   Initial warp -> 1280x1152  (scale=8)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_b_initial_color.png
-  c -- Refining alignment (pass 1: sub-pixel border detection)
+  c -- Refining (pass 1)
   Pass 1 border edges: top=119.10(exp=120,err=-0.90), bot=1024.89(exp=1024,err=+0.89), left=117.72(exp=120,err=-2.28), right=1156.00(exp=1152,err=+4.00)
-  Pass 1 corrected src corners: [[21, 18], [1274, 32], [1259, 1156], [14, 1153]]
-  c -- Refining alignment (pass 2: eliminate residual sub-pixel error)
+  Pass 1 src corners: [[21, 18], [1274, 32], [1259, 1156], [14, 1153]]
+  c -- Refining (pass 2)
   Pass 2 border edges: top=120.00(exp=120,err=+0.00), bot=1023.98(exp=1024,err=-0.02), left=120.01(exp=120,err=+0.01), right=1151.96(exp=1152,err=-0.04)
-  Pass 2 corrected src corners: [[21, 18], [1274, 32], [1259, 1156], [14, 1153]]
+  Pass 2 src corners: [[21, 18], [1274, 32], [1259, 1156], [14, 1153]]
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_d_refined_color.png
-  d -- Warmth (0%): R x1.000+0.0  G x1.000-0.0  B x1.000-0.0
   Saved -> test-output\zelda-poster-1\zelda-poster-1_warp.png  (colour BGR)
 
 ============================================================
@@ -68,35 +67,26 @@ PIPELINE RUN
 ============================================================
 [quantize/color] test-output\zelda-poster-1\zelda-poster-1_sample.png
   Loaded 128x112 colour sample
-  R: 16-255  G: 0-255  B: 71-176
   Global k-means RG: BK(1572)~(R65,G21,B116)  DG(3522)~(R152,G148,B153)  LG(4136)~(R241,G164,B136)  WH(5106)~(R246,G248,B153)
+  Strip ensemble: 7 strips, changed 86 px
   G-valley threshold: 225.0  (LG centre 164.8, WH centre 248.7)
-  G-valley refinement: changed 118 px
-  G-valley threshold: 218.0  (LG centre 160.0, WH centre 247.5)
-  G-valley threshold: 219.0  (LG centre 157.5, WH centre 249.1)
-  G-valley threshold: 221.0  (LG centre 158.2, WH centre 252.3)
-  G-valley threshold: 221.0  (LG centre 155.1, WH centre 253.7)
-  G-valley threshold: 220.0  (LG centre 154.3, WH centre 252.7)
-  G-valley threshold: 222.0  (LG centre 165.9, WH centre 249.4)
-  G-valley threshold: 227.0  (LG centre 188.2, WH centre 246.4)
-  Strip ensemble: 7 strips, changed 6 px
+  G-valley refinement (post-strip): threshold=225.0, changed 36 px
   Final labels: BK(1572)~(R65,G21,B116)  DG(3522)~(R152,G148,B153)  LG(4254)~(R241,G166,B137)  WH(4988)~(R246,G249,B154)
   Classification: strip-kmeans-RG+G-valley
-  Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam.png  (grayscale palette)
-  Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam_rgb.png  (new RGB palette)
-  BK:  1572 px  ( 11.0%)
-  DG:  3522 px  ( 24.6%)
-  LG:  4254 px  ( 29.7%)
-  WH:  4988 px  ( 34.8%)
+  Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam.png
+  Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam_rgb.png
+  BK:  1572 px ( 11.0%)
+  DG:  3522 px ( 24.6%)
+  LG:  4254 px ( 29.7%)
+  WH:  4988 px ( 34.8%)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_a_gray_8x.png
-    [debug] test-output\zelda-poster-1\debug\zelda-poster-1_sample__quantize_color_b_rgb_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14327  (99.94%)
-  Different    : 9   (0.06%)
+  Matching     : 14323  (99.91%)
+  Different    : 13   (0.09%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
@@ -113,48 +103,57 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1572 v                0                  0                  0      1572
   DG  #9494FF                       0               3522 v                0                  0      3522
-  LG  #FF9494                       0                  4 X             4250 v                0      4254
-  WH  #FFFFA5                       0                  0                  5 X             4983 v    4988
+  LG  #FF9494                       0                  4 X             4248 v                2 X    4254
+  WH  #FFFFA5                       0                  0                  7 X             4981 v    4988
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
   LG  #FF9494  ->  DG  #9494FF : 4 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 5 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 2 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 7 px
 
 ----------------------------------------------------------------------
 SPATIAL DISTRIBUTION OF ERRORS
 ----------------------------------------------------------------------
   Errors per row (0–111):
+    row   1 :    1  #
     row   3 :    1  #
     row   5 :    1  #
     row   6 :    1  #
-    row   7 :    1  #
+    row   7 :    2  ##
     row   8 :    1  #
     row  34 :    1  #
     row  68 :    1  #
+    row  76 :    1  #
     row  91 :    1  #
     row  92 :    1  #
+    row 103 :    1  #
   Errors per column (0–127):
-    col  15 :    1  #
+    col  12 :    1  #
+    col  15 :    2  ##
     col  51 :    1  #
     col  62 :    2  ##
     col 126 :    1  #
-    col 127 :    4  ####
+    col 127 :    6  ######
 
 ----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (9 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (13 errors, sorted by row then column)
 ----------------------------------------------------------------------
    row   col              result           reference
+     1   127         WH  #FFFFA5         LG  #FF9494
      3   127         WH  #FFFFA5         LG  #FF9494
      5   127         WH  #FFFFA5         LG  #FF9494
      6   127         WH  #FFFFA5         LG  #FF9494
      7   126         WH  #FFFFA5         LG  #FF9494
+     7   127         WH  #FFFFA5         LG  #FF9494
      8   127         WH  #FFFFA5         LG  #FF9494
     34    15         LG  #FF9494         DG  #9494FF
     68    51         LG  #FF9494         DG  #9494FF
+    76    12         LG  #FF9494         WH  #FFFFA5
     91    62         LG  #FF9494         DG  #9494FF
     92    62         LG  #FF9494         DG  #9494FF
+   103    15         LG  #FF9494         WH  #FFFFA5
 
 ----------------------------------------------------------------------
 DIAGNOSTIC IMAGES  (in test-output\zelda-poster-1)
@@ -168,8 +167,8 @@ DIAGNOSTIC IMAGES  (in test-output\zelda-poster-1)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14327  (99.94%)
-  Different    : 9   (0.06%)
+  Matching     : 14323  (99.91%)
+  Different    : 13   (0.09%)
   BK  #000000                 1572        1572        +0
   DG  #9494FF                 3522        3526        -4
   LG  #FF9494                 4254        4255        -1
