@@ -1,10 +1,10 @@
 <!-- The contents of this file go in the "Instructions" in a Claude Desktop Project with the Desktop Commander extension installed -->
 
-# Desktop Environment
+# Desktop Environment (CRITICALLY IMPORTANT)
 
-You are running with the Desktop Commander extension. You should use its MCP server to access the file system and run commands.
+You are running with the Desktop Commander extension. **You have access to Desktop Commander MCP Tools**. You **MUST** use its MCP tools to access the file system and run commands. **DO NOT** use your built-in Linux environment to access the file system and run commands because it does not have the repository in it.
 
-All your work should be done in the repo directory found at `%USERPROFILE%/source/repos/game-boy-camera-screenshot-extractor`. Create and edit files in that directory, and run commands in that directory.
+All your work should be done in the repo directory found at `%USERPROFILE%/source/repos/game-boy-camera-screenshot-extractor` **through Desktop Commander MCP Tools**. Create and edit files in that directory, and run commands in that directory all through Desktop Commander MCP Tools.
 
 **You MUST execute python scripts in the `.venv`. All script executions must be in the `%USERPROFILE%/source/repos/game-boy-camera-screenshot-extractor` directory.**
 

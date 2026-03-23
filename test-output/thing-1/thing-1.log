@@ -18,11 +18,13 @@ PIPELINE RUN
   Initial warp -> 1280x1152  (scale=8)
     [debug] test-output\thing-1\debug\thing-1__warp_b_initial_color.png
   c -- Refining (pass 1)
-  Pass 1 border edges: top=118.98(exp=120,err=-1.02), bot=1024.73(exp=1024,err=+0.73), left=117.84(exp=120,err=-2.16), right=1155.31(exp=1152,err=+3.31)
-  Pass 1 src corners: [[22, 19], [1272, 36], [1253, 1153], [14, 1150]]
+  Pass 1 corners: TL=(117.5,118.9) err=(-2.5,-1.1)  TR=(1155.3,119.2) err=(+3.3,-0.8)  BR=(1155.3,1025.0) err=(+3.3,+1.0)  BL=(118.1,1024.3) err=(-1.9,+0.3)
+  Pass 1 border edges (avg): top=119.03(exp=120,err=-0.97), bot=1024.67(exp=1024,err=+0.67), left=117.81(exp=120,err=-2.19), right=1155.31(exp=1152,err=+3.31)
+  Pass 1 src corners: [[21, 19], [1272, 36], [1253, 1154], [14, 1150]]
   c -- Refining (pass 2)
-  Pass 2 border edges: top=120.00(exp=120,err=-0.00), bot=1023.97(exp=1024,err=-0.03), left=120.02(exp=120,err=+0.02), right=1151.97(exp=1152,err=-0.03)
-  Pass 2 src corners: [[22, 19], [1272, 36], [1253, 1153], [14, 1150]]
+  Pass 2 corners: TL=(119.9,119.9) err=(-0.1,-0.1)  TR=(1152.0,120.1) err=(-0.0,+0.1)  BR=(1152.0,1024.2) err=(-0.0,+0.2)  BL=(120.1,1023.8) err=(+0.1,-0.2)
+  Pass 2 border edges (avg): top=120.00(exp=120,err=+0.00), bot=1023.99(exp=1024,err=-0.01), left=120.02(exp=120,err=+0.02), right=1151.96(exp=1152,err=-0.04)
+  Pass 2 src corners: [[21, 19], [1273, 37], [1253, 1154], [14, 1150]]
     [debug] test-output\thing-1\debug\thing-1__warp_d_refined_color.png
   Saved -> test-output\thing-1\thing-1_warp.png  (colour BGR)
 
@@ -30,19 +32,19 @@ PIPELINE RUN
 [correct/color] test-output\thing-1\thing-1_warp.png
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
-    R refinement: 8154 interior DG pixels
-      DG[3,3]: raw=78.3 coons=85.1 corr=168.0
-      DG[3,4]: raw=95.9 coons=86.1 corr=164.2
-      DG[3,5]: raw=76.2 coons=87.0 corr=146.0
-      DG[3,6]: raw=110.8 coons=89.2 corr=164.5
-      DG[3,7]: raw=74.1 coons=89.0 corr=153.2
+    R refinement: 8149 interior DG pixels
+      DG[3,3]: raw=81.4 coons=87.5 corr=164.8
+      DG[3,4]: raw=97.6 coons=88.1 corr=163.3
+      DG[3,5]: raw=77.7 coons=88.7 corr=145.4
+      DG[3,6]: raw=112.6 coons=90.4 corr=158.4
+      DG[3,7]: raw=79.1 coons=90.4 corr=153.5
   G: Coons+poly -> 255 / 148
-    G refinement: 9719 interior DG pixels
+    G refinement: 9727 interior DG pixels
   B: white-surface normalisation -> 165 (no global scaling)
-  Frame p85 before norm: R=255 G=248 B=167
-  Global scales: R=1.0000 G=1.0273 B=1.0000
+  Frame p85 before norm: R=255 G=251 B=173
+  Global scales: R=1.0000 G=1.0162 B=1.0000
   Saved -> test-output\thing-1\thing-1_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=160.2 G=133.8 B=153.7
+  Camera area mean: R=159.7 G=133.2 B=155.3
     [debug] test-output\thing-1\debug\thing-1_warp__correct_color_a_before_after.png
     [debug] test-output\thing-1\debug\thing-1_warp__correct_color_b_white_surf_heatmap.png
     [debug] test-output\thing-1\debug\thing-1_warp__correct_color_c_full.png
@@ -52,7 +54,7 @@ PIPELINE RUN
 [crop] test-output\thing-1\thing-1_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=146.8, white frame mean=209.3 (OK)
+  Validation: inner border mean=145.1, white frame mean=207.0 (OK)
     [debug] test-output\thing-1\debug\thing-1_correct__crop_a_region.png
   Saved -> test-output\thing-1\thing-1_crop.png  (1024×896 px)
 
@@ -62,64 +64,61 @@ PIPELINE RUN
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
   Saved -> test-output\thing-1\thing-1_sample.png  (colour, subpixel-aware, 128×112 px)
-  R: 42–255  G: 0–255  B: 67–182
+  R: 43–255  G: 0–255  B: 67–185
 
 ============================================================
 [quantize/color] test-output\thing-1\thing-1_sample.png
   Loaded 128x112 colour sample
-  Global k-means RG: BK(1332)~(R85,G17,B98)  DG(8606)~(R148,G146,B157)  LG(2536)~(R239,G177,B135)  WH(1862)~(R246,G250,B140)
-  Strip ensemble: 7 strips, changed 163 px
-  G-valley threshold: 237.0  (LG centre 177.5, WH centre 250.6)
-  G-valley refinement (post-strip): threshold=237.0, changed 326 px
-  Final labels: BK(1335)~(R85,G17,B98)  DG(8613)~(R148,G146,B157)  LG(2702)~(R239,G180,B136)  WH(1686)~(R247,G253,B139)
+  Global k-means RG: BK(1336)~(R85,G17,B100)  DG(8598)~(R149,G145,B158)  LG(2520)~(R239,G173,B135)  WH(1882)~(R247,G249,B138)
+  Strip ensemble: 7 strips, changed 149 px
+  G-valley threshold: 237.0  (LG centre 173.3, WH centre 249.9)
+  G-valley refinement (post-strip): threshold=237.0, changed 332 px
+  Final labels: BK(1336)~(R85,G17,B100)  DG(8612)~(R149,G145,B158)  LG(2703)~(R239,G176,B136)  WH(1685)~(R248,G253,B136)
   Classification: strip-kmeans-RG+G-valley
   Saved -> test-output\thing-1\thing-1_gbcam.png
   Saved -> test-output\thing-1\thing-1_gbcam_rgb.png
-  BK:  1335 px (  9.3%)
-  DG:  8613 px ( 60.1%)
-  LG:  2702 px ( 18.8%)
-  WH:  1686 px ( 11.8%)
+  BK:  1336 px (  9.3%)
+  DG:  8612 px ( 60.1%)
+  LG:  2703 px ( 18.9%)
+  WH:  1685 px ( 11.8%)
     [debug] test-output\thing-1\debug\thing-1_sample__quantize_color_a_gray_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14317  (99.87%)
-  Different    : 19   (0.13%)
+  Matching     : 14319  (99.88%)
+  Different    : 17   (0.12%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
-  BK  #000000                 1335        1336        -1
-  DG  #9494FF                 8613        8626       -13
-  LG  #FF9494                 2702        2690       +12
-  WH  #FFFFA5                 1686        1684        +2
+  BK  #000000                 1336        1336        +0
+  DG  #9494FF                 8612        8626       -14
+  LG  #FF9494                 2703        2690       +13
+  WH  #FFFFA5                 1685        1684        +1
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
-  BK  #000000                    1335 v                0                  0                  0      1335
-  DG  #9494FF                       1 X             8612 v                0                  0      8613
-  LG  #FF9494                       0                 14 X             2687 v                1 X    2702
-  WH  #FFFFA5                       0                  0                  3 X             1683 v    1686
+  BK  #000000                    1336 v                0                  0                  0      1336
+  DG  #9494FF                       0               8612 v                0                  0      8612
+  LG  #FF9494                       0                 14 X             2688 v                1 X    2703
+  WH  #FFFFA5                       0                  0                  2 X             1683 v    1685
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  DG  #9494FF  ->  BK  #000000 : 1 px
   LG  #FF9494  ->  DG  #9494FF : 14 px
   LG  #FF9494  ->  WH  #FFFFA5 : 1 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 3 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 2 px
 
 ----------------------------------------------------------------------
 SPATIAL DISTRIBUTION OF ERRORS
 ----------------------------------------------------------------------
   Errors per row (0–111):
-    row   4 :    1  #
-    row  10 :    1  #
     row  22 :    1  #
     row  44 :    1  #
     row  62 :    1  #
@@ -128,11 +127,11 @@ SPATIAL DISTRIBUTION OF ERRORS
     row  72 :    3  ###
     row  77 :    1  #
     row  78 :    1  #
-    row  80 :    1  #
     row  81 :    1  #
     row  82 :    1  #
     row  83 :    1  #
     row  84 :    1  #
+    row  85 :    1  #
     row 110 :    1  #
   Errors per column (0–127):
     col  42 :    1  #
@@ -141,21 +140,19 @@ SPATIAL DISTRIBUTION OF ERRORS
     col  77 :    1  #
     col  80 :    1  #
     col  81 :    3  ###
+    col  82 :    1  #
     col  83 :    1  #
-    col  85 :    4  ####
+    col  85 :    3  ###
     col  89 :    1  #
     col  92 :    1  #
-    col 102 :    1  #
-    col 123 :    2  ##
+    col 123 :    1  #
     col 125 :    1  #
 
 ----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (19 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (17 errors, sorted by row then column)
 ----------------------------------------------------------------------
    row   col              result           reference
-     4   123         WH  #FFFFA5         LG  #FF9494
-    10   125         WH  #FFFFA5         LG  #FF9494
-    22   102         DG  #9494FF         BK  #000000
+    22   125         WH  #FFFFA5         LG  #FF9494
     44    42         LG  #FF9494         WH  #FFFFA5
     62    81         LG  #FF9494         DG  #9494FF
     70    81         LG  #FF9494         DG  #9494FF
@@ -166,11 +163,11 @@ FULL PIXEL ERROR LIST  (19 errors, sorted by row then column)
     72    77         LG  #FF9494         DG  #9494FF
     77    89         LG  #FF9494         DG  #9494FF
     78    81         LG  #FF9494         DG  #9494FF
-    80    85         LG  #FF9494         DG  #9494FF
     81    92         LG  #FF9494         DG  #9494FF
     82    85         LG  #FF9494         DG  #9494FF
     83    85         LG  #FF9494         DG  #9494FF
     84    85         LG  #FF9494         DG  #9494FF
+    85    82         LG  #FF9494         DG  #9494FF
    110   123         WH  #FFFFA5         LG  #FF9494
 
 ----------------------------------------------------------------------
@@ -185,12 +182,12 @@ DIAGNOSTIC IMAGES  (in test-output\thing-1)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14317  (99.87%)
-  Different    : 19   (0.13%)
-  BK  #000000                 1335        1336        -1
-  DG  #9494FF                 8613        8626       -13
-  LG  #FF9494                 2702        2690       +12
-  WH  #FFFFA5                 1686        1684        +2
+  Matching     : 14319  (99.88%)
+  Different    : 17   (0.12%)
+  BK  #000000                 1336        1336        +0
+  DG  #9494FF                 8612        8626       -14
+  LG  #FF9494                 2703        2690       +13
+  WH  #FFFFA5                 1685        1684        +1
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.

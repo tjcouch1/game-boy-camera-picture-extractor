@@ -173,50 +173,66 @@ def _first_dark_from_frame(profile):
     return float(k + 1 + delta)
 
 
-def _find_border_outer_edges(channel, scale):
+def _find_border_corners(channel, scale):
     """
-    Detect the outer (camera-facing) edge of each inner-border band.
-    All four sides scan FROM the white frame for maximum reliability.
+    Detect the four corners of the inner-border rectangle independently.
 
-    TOP / LEFT : profile starts at the frame, drops into border -- direct scan.
-    BOT / RIGHT: frame is on the far side, so the profile is FLIPPED before
-                 calling _first_dark_from_frame, giving the INNER (frame-facing)
-                 edge; subtracting (scale-1) gives the OUTER edge.
+    Each corner is located using a localised profile in its own quadrant of the
+    image (top-half vs bottom-half rows; left-half vs right-half columns).
+    This captures per-corner residual perspective errors that a single averaged
+    edge measurement misses -- for example when low contrast in one corner causes
+    the border to sit noticeably off from what the global average would imply.
 
-    Returns (top_row, bot_row, left_col, right_col) as float pixel coords.
+    All four sides still scan FROM the white-frame side for reliability.
+
+    Returns (TL, TR, BR, BL) corner (x, y) float pairs.
     """
     H, W = channel.shape
     srch = 6 * scale
-    c_lo = 20 * scale;  c_hi = min(W, 140 * scale)
-    r_lo = 20 * scale;  r_hi = min(H, (SCREEN_H - 20) * scale)
 
-    # TOP
-    exp_top = INNER_TOP * scale
-    r1 = max(0, exp_top - srch);  r2 = min(H, exp_top + srch)
-    top_row = r1 + _first_dark_from_frame(
-        channel[r1:r2, c_lo:c_hi].mean(axis=1))
+    # Horizontal midpoint of the camera area (in image pixels)
+    mid_col = (INNER_LEFT + INNER_RIGHT) // 2 * scale   # ≈79*scale
+    # Vertical midpoint of the camera area (in image pixels)
+    mid_row = (INNER_TOP  + INNER_BOT)   // 2 * scale   # ≈71*scale
 
-    # BOTTOM (flipped -- frame side is at higher row indices)
-    exp_bot_frame = (INNER_BOT + 1) * scale
-    r1b = max(0, exp_bot_frame - srch);  r2b = min(H, exp_bot_frame + srch)
-    prof_b      = channel[r1b:r2b, c_lo:c_hi].mean(axis=1)
-    inner_idx_b = _first_dark_from_frame(prof_b[::-1])
-    bot_row     = (r2b - 1) - inner_idx_b - (scale - 1)
+    # Localised column bands used when detecting the top / bottom edges
+    c_lft = (20 * scale,  mid_col)
+    c_rgt = (mid_col,     min(W, 140 * scale))
 
-    # LEFT
-    exp_left = INNER_LEFT * scale
-    c1 = max(0, exp_left - srch);  c2 = min(W, exp_left + srch)
-    left_col = c1 + _first_dark_from_frame(
-        channel[r_lo:r_hi, c1:c2].mean(axis=0))
+    # Localised row bands used when detecting the left / right edges
+    r_top = (20 * scale,  mid_row)
+    r_bot = (mid_row,     min(H, (SCREEN_H - 20) * scale))
 
-    # RIGHT (flipped -- frame side is at higher col indices)
-    exp_right_frame = (INNER_RIGHT + 1) * scale
-    c1r = max(0, exp_right_frame - srch);  c2r = min(W, exp_right_frame + srch)
-    prof_r      = channel[r_lo:r_hi, c1r:c2r].mean(axis=0)
-    inner_idx_r = _first_dark_from_frame(prof_r[::-1])
-    right_col   = (c2r - 1) - inner_idx_r - (scale - 1)
+    def _top_y(c0, c1):
+        exp = INNER_TOP * scale
+        r1, r2 = max(0, exp - srch), min(H, exp + srch)
+        return r1 + _first_dark_from_frame(channel[r1:r2, c0:c1].mean(axis=1))
 
-    return top_row, bot_row, left_col, right_col
+    def _bot_y(c0, c1):
+        exp_frame = (INNER_BOT + 1) * scale
+        r1, r2 = max(0, exp_frame - srch), min(H, exp_frame + srch)
+        prof = channel[r1:r2, c0:c1].mean(axis=1)
+        idx  = _first_dark_from_frame(prof[::-1])
+        return (r2 - 1) - idx - (scale - 1)
+
+    def _left_x(r0, r1_):
+        exp = INNER_LEFT * scale
+        c1, c2 = max(0, exp - srch), min(W, exp + srch)
+        return c1 + _first_dark_from_frame(channel[r0:r1_, c1:c2].mean(axis=0))
+
+    def _right_x(r0, r1_):
+        exp_frame = (INNER_RIGHT + 1) * scale
+        c1, c2 = max(0, exp_frame - srch), min(W, exp_frame + srch)
+        prof = channel[r0:r1_, c1:c2].mean(axis=0)
+        idx  = _first_dark_from_frame(prof[::-1])
+        return (c2 - 1) - idx - (scale - 1)
+
+    tl_y = _top_y(*c_lft);  tr_y = _top_y(*c_rgt)
+    bl_y = _bot_y(*c_lft);  br_y = _bot_y(*c_rgt)
+    tl_x = _left_x(*r_top); bl_x = _left_x(*r_bot)
+    tr_x = _right_x(*r_top);br_x = _right_x(*r_bot)
+
+    return (tl_x, tl_y), (tr_x, tr_y), (br_x, br_y), (bl_x, bl_y)
 
 
 # ---------------------------------------------------------------------------
@@ -241,31 +257,43 @@ def refine_warp(img, current_M, warped, scale,
     rgb   = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB).astype(np.float32)
     rb_ch = np.clip(rgb[:, :, 0] - rgb[:, :, 2] + 128.0, 0.0, 255.0).astype(np.uint8)
 
-    top, bot, left, right = _find_border_outer_edges(rb_ch, scale)
+    TL, TR, BR, BL = _find_border_corners(rb_ch, scale)
 
-    exp_top   = float(INNER_TOP   * scale)
-    exp_bot   = float(INNER_BOT   * scale)
-    exp_left  = float(INNER_LEFT  * scale)
-    exp_right = float(INNER_RIGHT * scale)
+    exp_TL = (float(INNER_LEFT  * scale), float(INNER_TOP * scale))
+    exp_TR = (float(INNER_RIGHT * scale), float(INNER_TOP * scale))
+    exp_BR = (float(INNER_RIGHT * scale), float(INNER_BOT * scale))
+    exp_BL = (float(INNER_LEFT  * scale), float(INNER_BOT * scale))
 
-    log(f"  Pass {pass_num} border edges: "
+    # Averaged edges for logging (compatible with previous log format)
+    top   = (TL[1] + TR[1]) / 2;  bot   = (BL[1] + BR[1]) / 2
+    left  = (TL[0] + BL[0]) / 2;  right = (TR[0] + BR[0]) / 2
+    exp_top, exp_bot   = exp_TL[1], exp_BL[1]
+    exp_left, exp_right = exp_TL[0], exp_TR[0]
+    log(f"  Pass {pass_num} corners: "
+        f"TL=({TL[0]:.1f},{TL[1]:.1f}) err=({TL[0]-exp_TL[0]:+.1f},{TL[1]-exp_TL[1]:+.1f})  "
+        f"TR=({TR[0]:.1f},{TR[1]:.1f}) err=({TR[0]-exp_TR[0]:+.1f},{TR[1]-exp_TR[1]:+.1f})  "
+        f"BR=({BR[0]:.1f},{BR[1]:.1f}) err=({BR[0]-exp_BR[0]:+.1f},{BR[1]-exp_BR[1]:+.1f})  "
+        f"BL=({BL[0]:.1f},{BL[1]:.1f}) err=({BL[0]-exp_BL[0]:+.1f},{BL[1]-exp_BL[1]:+.1f})")
+    log(f"  Pass {pass_num} border edges (avg): "
         f"top={top:.2f}(exp={exp_top:.0f},err={top-exp_top:+.2f}), "
         f"bot={bot:.2f}(exp={exp_bot:.0f},err={bot-exp_bot:+.2f}), "
         f"left={left:.2f}(exp={exp_left:.0f},err={left-exp_left:+.2f}), "
         f"right={right:.2f}(exp={exp_right:.0f},err={right-exp_right:+.2f})")
 
     max_err = (16 // 2) * scale   # FRAME_THICK / 2 * scale
-    if (abs(top   - exp_top)   > max_err or abs(bot   - exp_bot)   > max_err or
-            abs(left  - exp_left)  > max_err or abs(right - exp_right) > max_err):
+    corners_ok = all(
+        abs(cx - ex) <= max_err and abs(cy - ey) <= max_err
+        for (cx, cy), (ex, ey) in zip(
+            [TL, TR, BR, BL], [exp_TL, exp_TR, exp_BR, exp_BL])
+    )
+    if not corners_ok:
         log(f"  WARNING: pass {pass_num} border error too large -- skipping")
         if debug and debug_dir and stem and pass_num >= 2:
             save_debug(warped, debug_dir, stem, "warp_d_refined_color")
         return warped, current_M
 
-    src_brd = np.float32([[left,  top], [right, top],
-                           [right, bot], [left,  bot]])
-    dst_brd = np.float32([[exp_left,  exp_top], [exp_right, exp_top],
-                           [exp_right, exp_bot], [exp_left,  exp_bot]])
+    src_brd = np.float32([list(TL), list(TR), list(BR), list(BL)])
+    dst_brd = np.float32([list(exp_TL), list(exp_TR), list(exp_BR), list(exp_BL)])
     H_corr = cv2.getPerspectiveTransform(src_brd, dst_brd)
 
     canvas = np.float32([[[0,   0  ],
