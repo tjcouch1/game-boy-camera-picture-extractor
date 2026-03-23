@@ -1,18 +1,40 @@
-<!-- The contents of this file go in the "Instructions" in the Claude Web Project -->
+<!-- The contents of this file go in the "Instructions" in a Claude Desktop Project with the Desktop Commander extension installed -->
+
+# Desktop Environment
+
+You are running with the Desktop Commander extension. You should use its MCP server to access the file system and run commands.
+
+All your work should be done in the repo directory found at `%USERPROFILE%/source/repos/game-boy-camera-screenshot-extractor`. Create and edit files in that directory, and run commands in that directory.
+
+**You MUST execute python scripts in the `.venv`. All script executions must be in the `%USERPROFILE%/source/repos/game-boy-camera-screenshot-extractor` directory.**
 
 # Overview
 
 You are working on a script that transforms a phone picture taken of a Game Boy Camera Image on a Game Boy Advance SP screen into a 128x112 image of the actual Game Boy Camera image.
 
-You run the script itself with something along the following lines:
+## Running the script
+
+You can run the script itself with something along the following lines:
 
 ```
 python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
 ```
 
+## Running the test suite
+
+To run the test suite that runs the script on a set of pictures in `sample-pictures` and also runs the unit tests on images in the `test-input` folder (including reference images named the same thing as the tests with `-output-corrected.png` e.g. `zelda-poster-1.png` and `zelda-poster-output-corrected.png`) with a nice output that summarizes all the test results, run the following:
+
+```
+python run_tests.py
+```
+
+There will be lots of debug output in the `test-output` folder you can use to consider how to make improvements. For example, the test results summary will be at `test-output\test-summary.log`.
+
+## Running an individual image through a test
+
 To run a unit test to test the accuracy of the output, gather the following:
 
-- Input image: an input picture of a Game Boy Camera picture [as described above](#taking-pictures-that-work-with-this-script) (e.g. `test-input/zelda-poster-1.jpg`)
+- Input image: an input picture of a Game Boy Camera picture [as described below](#taking-pictures-that-work-with-this-script) (e.g. `test-input/zelda-poster-1.jpg`)
 - Reference image: a perfectly digitized 128x112 reproduction of the input Game Boy Camera picture (e.g. `test-input/zelda-poster-output-corrected.png`)
 
 Then run the following:
@@ -21,17 +43,9 @@ Then run the following:
 python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
 ```
 
-If you want to run the script on a set of pictures and also run the unit tests with a nice output that summarizes all the test results, you can put sample input pictures in the `sample-pictures` folder, put test input images in the `test-input` folder (including reference images named the same thing as the tests with `-output-corrected.png` e.g. `zelda-poster-1.png` and `zelda-poster-output-corrected.png`), then run the following:
-
-```
-python run_tests.py
-```
-
-The summary will be at `test-output\test-summary.log`.
-
 # Goal
 
-Your goal is to improve the script to increase the accuracy of the transformation. You can use the tests with the reference files (`-output-corrected.png`) to track your progress.
+Your goal is to improve the script to increase the accuracy of the transformation. You can [run the test suite](#run-the-test-suite) to track your progress.
 
 # Explanation of the input image
 
