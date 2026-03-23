@@ -84,10 +84,18 @@ def _g_valley_threshold(g_vals, lg_center_g, wh_center_g):
         return (lg_center_g + wh_center_g) / 2.0
 
     smooth = gaussian_filter1d(hist.astype(float), sigma=3.0)
-    # Only look for valley in the upper half of the range (near WH) to avoid
-    # picking up the dense LG body as the minimum
+    # Start search from upper 2/3 of range to avoid the dense LG body.
     search_lo = len(smooth) * 2 // 3
     valley_idx = search_lo + int(np.argmin(smooth[search_lo:]))
+
+    # If the search was boundary-constrained (minimum is at search_lo itself),
+    # the true valley lies lower in the range than the restrictive window allows.
+    # Retry from the lower 1/3 point -- this still stays well above the LG body
+    # peak (near LG_centre) while admitting valleys in the middle of the range.
+    if valley_idx == search_lo:
+        wider_lo = max(len(smooth) // 3, 1)
+        valley_idx = wider_lo + int(np.argmin(smooth[wider_lo:]))
+
     threshold = float(edges[valley_idx])
     log(f"  G-valley threshold: {threshold:.1f}  (LG centre {lg_center_g:.1f}, WH centre {wh_center_g:.1f})")
     return threshold

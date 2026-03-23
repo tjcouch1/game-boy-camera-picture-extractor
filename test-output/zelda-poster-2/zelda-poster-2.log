@@ -69,24 +69,24 @@ PIPELINE RUN
   Loaded 128x112 colour sample
   Global k-means RG: BK(1572)~(R61,G25,B116)  DG(3525)~(R148,G146,B173)  LG(4210)~(R240,G156,B128)  WH(5029)~(R245,G245,B149)
   Strip ensemble: 7 strips, changed 18 px
-  G-valley threshold: 216.0  (LG centre 156.5, WH centre 245.9)
-  G-valley refinement (post-strip): threshold=216.0, changed 33 px
-  Final labels: BK(1572)~(R61,G25,B116)  DG(3525)~(R148,G146,B173)  LG(4257)~(R240,G157,B128)  WH(4982)~(R245,G246,B149)
+  G-valley threshold: 209.0  (LG centre 156.5, WH centre 245.9)
+  G-valley refinement (post-strip): threshold=209.0, changed 10 px
+  Final labels: BK(1572)~(R61,G25,B116)  DG(3525)~(R148,G146,B173)  LG(4234)~(R240,G156,B128)  WH(5005)~(R245,G246,B149)
   Classification: strip-kmeans-RG+G-valley
   Saved -> test-output\zelda-poster-2\zelda-poster-2_gbcam.png
   Saved -> test-output\zelda-poster-2\zelda-poster-2_gbcam_rgb.png
   BK:  1572 px ( 11.0%)
   DG:  3525 px ( 24.6%)
-  LG:  4257 px ( 29.7%)
-  WH:  4982 px ( 34.8%)
+  LG:  4234 px ( 29.5%)
+  WH:  5005 px ( 34.9%)
     [debug] test-output\zelda-poster-2\debug\zelda-poster-2_sample__quantize_color_a_gray_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14330  (99.96%)
-  Different    : 6   (0.04%)
+  Matching     : 14313  (99.84%)
+  Different    : 23   (0.16%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
@@ -94,8 +94,8 @@ COLOR DISTRIBUTION
   Color                     Result   Reference      Diff
   BK  #000000                 1572        1572        +0
   DG  #9494FF                 3525        3526        -1
-  LG  #FF9494                 4257        4255        +2
-  WH  #FFFFA5                 4982        4983        -1
+  LG  #FF9494                 4234        4255       -21
+  WH  #FFFFA5                 5005        4983       +22
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
@@ -103,41 +103,73 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1572 v                0                  0                  0      1572
   DG  #9494FF                       0               3525 v                0                  0      3525
-  LG  #FF9494                       0                  1 X             4253 v                3 X    4257
-  WH  #FFFFA5                       0                  0                  2 X             4980 v    4982
+  LG  #FF9494                       0                  1 X             4233 v                0      4234
+  WH  #FFFFA5                       0                  0                 22 X             4983 v    5005
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
   LG  #FF9494  ->  DG  #9494FF : 1 px
-  LG  #FF9494  ->  WH  #FFFFA5 : 3 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 2 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 22 px
 
 ----------------------------------------------------------------------
 SPATIAL DISTRIBUTION OF ERRORS
 ----------------------------------------------------------------------
   Errors per row (0–111):
     row   9 :    1  #
+    row  18 :    1  #
+    row  26 :    1  #
+    row  28 :    1  #
+    row  30 :    1  #
+    row  32 :    1  #
+    row  36 :    1  #
+    row  42 :    1  #
+    row  44 :    1  #
+    row  52 :    1  #
+    row  54 :    1  #
+    row  56 :    1  #
+    row  60 :    1  #
+    row  64 :    1  #
+    row  68 :    1  #
     row  72 :    1  #
-    row  95 :    1  #
-    row  97 :    1  #
-    row 101 :    1  #
+    row  76 :    1  #
+    row  77 :    1  #
+    row  78 :    1  #
+    row 104 :    1  #
+    row 106 :    1  #
+    row 108 :    1  #
     row 110 :    1  #
   Errors per column (0–127):
     col  18 :    1  #
-    col 119 :    2  ##
-    col 122 :    1  #
-    col 127 :    2  ##
+    col 126 :    1  #
+    col 127 :   21  #####################
 
 ----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (6 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (23 errors, sorted by row then column)
 ----------------------------------------------------------------------
    row   col              result           reference
      9    18         LG  #FF9494         DG  #9494FF
+    18   127         WH  #FFFFA5         LG  #FF9494
+    26   127         WH  #FFFFA5         LG  #FF9494
+    28   127         WH  #FFFFA5         LG  #FF9494
+    30   127         WH  #FFFFA5         LG  #FF9494
+    32   127         WH  #FFFFA5         LG  #FF9494
+    36   127         WH  #FFFFA5         LG  #FF9494
+    42   127         WH  #FFFFA5         LG  #FF9494
+    44   127         WH  #FFFFA5         LG  #FF9494
+    52   127         WH  #FFFFA5         LG  #FF9494
+    54   127         WH  #FFFFA5         LG  #FF9494
+    56   127         WH  #FFFFA5         LG  #FF9494
+    60   127         WH  #FFFFA5         LG  #FF9494
+    64   127         WH  #FFFFA5         LG  #FF9494
+    68   127         WH  #FFFFA5         LG  #FF9494
     72   127         WH  #FFFFA5         LG  #FF9494
-    95   122         LG  #FF9494         WH  #FFFFA5
-    97   119         LG  #FF9494         WH  #FFFFA5
-   101   119         LG  #FF9494         WH  #FFFFA5
+    76   127         WH  #FFFFA5         LG  #FF9494
+    77   126         WH  #FFFFA5         LG  #FF9494
+    78   127         WH  #FFFFA5         LG  #FF9494
+   104   127         WH  #FFFFA5         LG  #FF9494
+   106   127         WH  #FFFFA5         LG  #FF9494
+   108   127         WH  #FFFFA5         LG  #FF9494
    110   127         WH  #FFFFA5         LG  #FF9494
 
 ----------------------------------------------------------------------
@@ -152,12 +184,12 @@ DIAGNOSTIC IMAGES  (in test-output\zelda-poster-2)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14330  (99.96%)
-  Different    : 6   (0.04%)
+  Matching     : 14313  (99.84%)
+  Different    : 23   (0.16%)
   BK  #000000                 1572        1572        +0
   DG  #9494FF                 3525        3526        -1
-  LG  #FF9494                 4257        4255        +2
-  WH  #FFFFA5                 4982        4983        -1
+  LG  #FF9494                 4234        4255       -21
+  WH  #FFFFA5                 5005        4983       +22
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
