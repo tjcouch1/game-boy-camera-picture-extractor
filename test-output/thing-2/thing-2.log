@@ -85,15 +85,15 @@ PIPELINE RUN
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14244  (99.36%)
-  Different    : 92   (0.64%)
+  Matching     : 14254  (99.43%)
+  Different    : 82   (0.57%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
-  BK  #000000                 1336        1330        +6
-  DG  #9494FF                 8598        8632       -34
+  BK  #000000                 1336        1336        +0
+  DG  #9494FF                 8598        8626       -28
   LG  #FF9494                 2716        2690       +26
   WH  #FFFFA5                 1686        1684        +2
 
@@ -101,17 +101,16 @@ COLOR DISTRIBUTION
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
-  BK  #000000                    1330 v                6 X                0                  0      1336
-  DG  #9494FF                       0               8570 v               28 X                0      8598
-  LG  #FF9494                       0                 56 X             2660 v                0      2716
+  BK  #000000                    1336 v                0                  0                  0      1336
+  DG  #9494FF                       0               8572 v               26 X                0      8598
+  LG  #FF9494                       0                 54 X             2662 v                0      2716
   WH  #FFFFA5                       0                  0                  2 X             1684 v    1686
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  BK  #000000  ->  DG  #9494FF : 6 px
-  DG  #9494FF  ->  LG  #FF9494 : 28 px
-  LG  #FF9494  ->  DG  #9494FF : 56 px
+  DG  #9494FF  ->  LG  #FF9494 : 26 px
+  LG  #FF9494  ->  DG  #9494FF : 54 px
   WH  #FFFFA5  ->  LG  #FF9494 : 2 px
 
 ----------------------------------------------------------------------
@@ -136,9 +135,9 @@ SPATIAL DISTRIBUTION OF ERRORS
     row  35 :    1  #
     row  36 :    1  #
     row  37 :    1  #
-    row  38 :    5  #####
+    row  38 :    3  ###
     row  39 :    1  #
-    row  40 :    5  #####
+    row  40 :    3  ###
     row  42 :    3  ###
     row  44 :    6  ######
     row  45 :    1  #
@@ -151,7 +150,6 @@ SPATIAL DISTRIBUTION OF ERRORS
     row  53 :    1  #
     row  55 :    1  #
     row  59 :    1  #
-    row  60 :    2  ##
     row  61 :    3  ###
     row  63 :    3  ###
     row  65 :    2  ##
@@ -164,7 +162,7 @@ SPATIAL DISTRIBUTION OF ERRORS
     row  79 :    3  ###
     row  80 :    1  #
     row  81 :    2  ##
-    row  82 :    3  ###
+    row  82 :    1  #
     row  83 :    1  #
     row  87 :    1  #
     row  99 :    1  #
@@ -172,12 +170,11 @@ SPATIAL DISTRIBUTION OF ERRORS
     row 103 :    1  #
     row 104 :    1  #
     row 109 :    1  #
-    row 110 :    2  ##
   Errors per column (0–127):
     col   0 :   27  ###########################
     col   2 :    4  ####
     col   4 :    3  ###
-    col   6 :    4  ####
+    col   6 :    3  ###
     col   8 :    2  ##
     col  10 :    3  ###
     col  12 :    4  ####
@@ -185,34 +182,25 @@ SPATIAL DISTRIBUTION OF ERRORS
     col  18 :    3  ###
     col  20 :    1  #
     col  22 :    1  #
-    col  23 :    1  #
     col  24 :    4  ####
     col  28 :    2  ##
-    col  29 :    1  #
     col  30 :    2  ##
     col  32 :    2  ##
     col  33 :    1  #
     col  34 :    1  #
     col  36 :    2  ##
-    col  37 :    1  #
     col  38 :    1  #
     col  40 :    2  ##
     col  42 :    2  ##
-    col  45 :    1  #
     col  75 :    1  #
     col  77 :    1  #
     col  79 :    2  ##
-    col  82 :    1  #
     col  89 :    1  #
-    col  90 :    1  #
     col  93 :    1  #
-    col  98 :    1  #
-    col 104 :    1  #
-    col 121 :    1  #
     col 127 :    5  #####
 
 ----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (92 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (82 errors, sorted by row then column)
 ----------------------------------------------------------------------
    row   col              result           reference
      1    12         LG  #FF9494         DG  #9494FF
@@ -240,16 +228,12 @@ FULL PIXEL ERROR LIST  (92 errors, sorted by row then column)
     36    42         DG  #9494FF         LG  #FF9494
     37     0         LG  #FF9494         DG  #9494FF
     38    24         DG  #9494FF         LG  #FF9494
-    38    29         BK  #000000         DG  #9494FF
     38    40         DG  #9494FF         LG  #FF9494
     38    42         DG  #9494FF         LG  #FF9494
-    38    98         BK  #000000         DG  #9494FF
     39     0         LG  #FF9494         DG  #9494FF
     40    20         DG  #9494FF         LG  #FF9494
     40    24         DG  #9494FF         LG  #FF9494
     40    40         DG  #9494FF         LG  #FF9494
-    40    45         BK  #000000         DG  #9494FF
-    40    82         BK  #000000         DG  #9494FF
     42     4         DG  #9494FF         LG  #FF9494
     42    18         DG  #9494FF         LG  #FF9494
     42    24         DG  #9494FF         LG  #FF9494
@@ -271,8 +255,6 @@ FULL PIXEL ERROR LIST  (92 errors, sorted by row then column)
     53     0         LG  #FF9494         DG  #9494FF
     55     0         LG  #FF9494         DG  #9494FF
     59     0         LG  #FF9494         DG  #9494FF
-    60    37         DG  #9494FF         LG  #FF9494
-    60    90         DG  #9494FF         LG  #FF9494
     61     0         LG  #FF9494         DG  #9494FF
     61     2         LG  #FF9494         DG  #9494FF
     61    93         LG  #FF9494         DG  #9494FF
@@ -295,9 +277,7 @@ FULL PIXEL ERROR LIST  (92 errors, sorted by row then column)
     80    75         LG  #FF9494         DG  #9494FF
     81     0         LG  #FF9494         DG  #9494FF
     81    79         LG  #FF9494         DG  #9494FF
-    82     6         LG  #FF9494         DG  #9494FF
     82    33         LG  #FF9494         DG  #9494FF
-    82   121         LG  #FF9494         DG  #9494FF
     83     0         LG  #FF9494         DG  #9494FF
     87     0         LG  #FF9494         DG  #9494FF
     99    12         LG  #FF9494         DG  #9494FF
@@ -305,8 +285,6 @@ FULL PIXEL ERROR LIST  (92 errors, sorted by row then column)
    103     0         LG  #FF9494         DG  #9494FF
    104   127         WH  #FFFFA5         LG  #FF9494
    109    14         LG  #FF9494         DG  #9494FF
-   110    23         BK  #000000         DG  #9494FF
-   110   104         BK  #000000         DG  #9494FF
 
 ----------------------------------------------------------------------
 DIAGNOSTIC IMAGES  (in test-output\thing-2)
@@ -320,10 +298,10 @@ DIAGNOSTIC IMAGES  (in test-output\thing-2)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14244  (99.36%)
-  Different    : 92   (0.64%)
-  BK  #000000                 1336        1330        +6
-  DG  #9494FF                 8598        8632       -34
+  Matching     : 14254  (99.43%)
+  Different    : 82   (0.57%)
+  BK  #000000                 1336        1336        +0
+  DG  #9494FF                 8598        8626       -28
   LG  #FF9494                 2716        2690       +26
   WH  #FFFFA5                 1686        1684        +2
 
