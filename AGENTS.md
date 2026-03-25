@@ -1,6 +1,6 @@
 # Execution Environment (CRITICALLY IMPORTANT)
 
-**You MUST execute python scripts in the `.venv`.**
+**You MUST execute python scripts in the `.venv`. ALWAYS RUN ALL PYTHON SCRIPTS IN THE `.venv`. IF YOU SEE THAT SOME PYTHON SCRIPT EXECUTIONS ARE NOT WORKING BECAUSE PACKAGES ARE NOT INSTALLED, TRY RUNNING IN THE `.venv` BEFORE TAKING FURTHER STEPS. DO NOT RUN PYTHON OUTSIDE OF THE `.venv`!**
 
 # Overview
 
