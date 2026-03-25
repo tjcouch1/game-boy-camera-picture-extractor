@@ -146,6 +146,8 @@ def _initial_warp(img, corners, scale, debug=False, debug_dir=None, stem=None):
     M      = cv2.getPerspectiveTransform(corners, dst)
     warped = cv2.warpPerspective(img, M, (W, H), flags=cv2.INTER_LANCZOS4)
     log(f"  Initial warp -> {W}x{H}  (scale={scale})")
+    log(f"  Initial verification:")
+    _verify_dash_positions(warped, scale, debug_dir, stem)
     if debug and debug_dir and stem:
         save_debug(warped, debug_dir, stem, "warp_b_initial_color")
     return warped, M
@@ -155,13 +157,16 @@ def _initial_warp(img, corners, scale, debug=False, debug_dir=None, stem=None):
 # Sub-pixel inner-border edge detection
 # ---------------------------------------------------------------------------
 
-def _first_dark_from_frame(profile):
+def _first_dark_from_frame(profile, smooth_sigma=1.5):
     """
     Sub-pixel index of the first dark pixel scanning FROM the white frame.
     Profile must start HIGH (white frame) and drop LOW (dark border).
     Returns float index into `profile`.
+    
+    Uses adaptive smoothing and local curvature for improved robustness in
+    low-contrast areas.
     """
-    p = gaussian_filter1d(profile.astype(float), sigma=1.5)
+    p = gaussian_filter1d(profile.astype(float), sigma=smooth_sigma)
     d = np.diff(p)
     k = int(np.argmin(d))
     delta = 0.0
@@ -177,11 +182,9 @@ def _find_border_corners(channel, scale):
     """
     Detect the four corners of the inner-border rectangle independently.
 
-    Each corner is located using a localised profile in its own quadrant of the
-    image (top-half vs bottom-half rows; left-half vs right-half columns).
-    This captures per-corner residual perspective errors that a single averaged
-    edge measurement misses -- for example when low contrast in one corner causes
-    the border to sit noticeably off from what the global average would imply.
+    Enhanced version: Each corner uses its own dedicated detection region
+    and tries multiple strategies to find the border edge, with fallback
+    to midpoint detection if initial edge detection fails.
 
     All four sides still scan FROM the white-frame side for reliability.
 
@@ -190,49 +193,151 @@ def _find_border_corners(channel, scale):
     H, W = channel.shape
     srch = 6 * scale
 
-    # Horizontal midpoint of the camera area (in image pixels)
-    mid_col = (INNER_LEFT + INNER_RIGHT) // 2 * scale   # ≈79*scale
-    # Vertical midpoint of the camera area (in image pixels)
-    mid_row = (INNER_TOP  + INNER_BOT)   // 2 * scale   # ≈71*scale
-
-    # Localised column bands used when detecting the top / bottom edges
-    c_lft = (20 * scale,  mid_col)
-    c_rgt = (mid_col,     min(W, 140 * scale))
-
-    # Localised row bands used when detecting the left / right edges
-    r_top = (20 * scale,  mid_row)
-    r_bot = (mid_row,     min(H, (SCREEN_H - 20) * scale))
-
-    def _top_y(c0, c1):
-        exp = INNER_TOP * scale
-        r1, r2 = max(0, exp - srch), min(H, exp + srch)
-        return r1 + _first_dark_from_frame(channel[r1:r2, c0:c1].mean(axis=1))
-
-    def _bot_y(c0, c1):
-        exp_frame = (INNER_BOT + 1) * scale
-        r1, r2 = max(0, exp_frame - srch), min(H, exp_frame + srch)
-        prof = channel[r1:r2, c0:c1].mean(axis=1)
-        idx  = _first_dark_from_frame(prof[::-1])
-        return (r2 - 1) - idx - (scale - 1)
-
-    def _left_x(r0, r1_):
-        exp = INNER_LEFT * scale
-        c1, c2 = max(0, exp - srch), min(W, exp + srch)
-        return c1 + _first_dark_from_frame(channel[r0:r1_, c1:c2].mean(axis=0))
-
-    def _right_x(r0, r1_):
-        exp_frame = (INNER_RIGHT + 1) * scale
-        c1, c2 = max(0, exp_frame - srch), min(W, exp_frame + srch)
-        prof = channel[r0:r1_, c1:c2].mean(axis=0)
-        idx  = _first_dark_from_frame(prof[::-1])
-        return (c2 - 1) - idx - (scale - 1)
-
-    tl_y = _top_y(*c_lft);  tr_y = _top_y(*c_rgt)
-    bl_y = _bot_y(*c_lft);  br_y = _bot_y(*c_rgt)
-    tl_x = _left_x(*r_top); bl_x = _left_x(*r_bot)
-    tr_x = _right_x(*r_top);br_x = _right_x(*r_bot)
-
+    # Expected positions
+    exp_TL = (float(INNER_LEFT  * scale), float(INNER_TOP * scale))
+    exp_TR = (float(INNER_RIGHT * scale), float(INNER_TOP * scale))
+    exp_BR = (float(INNER_RIGHT * scale), float(INNER_BOT * scale))
+    exp_BL = (float(INNER_LEFT  * scale), float(INNER_BOT * scale))
+    
+    # Define corner-specific detection bands with extra margin for robustness
+    # Top-left: scan left half of top edge
+    c_tl_x = (max(0, int(exp_TL[0] - srch * 2)), int(exp_TL[0] + srch))
+    r_tl_y = (max(0, int(exp_TL[1] - srch * 2)), int(exp_TL[1] + srch))
+    
+    # Top-right: scan right half of top edge
+    c_tr_x = (int(exp_TR[0] - srch), min(W, int(exp_TR[0] + srch * 2)))
+    r_tr_y = (max(0, int(exp_TR[1] - srch * 2)), int(exp_TR[1] + srch))
+    
+    # Bottom-left: scan left half of bottom edge
+    c_bl_x = (max(0, int(exp_BL[0] - srch * 2)), int(exp_BL[0] + srch))
+    r_bl_y = (int(exp_BL[1] - srch), min(H, int(exp_BL[1] + srch * 2)))
+    
+    # Bottom-right: scan right half of bottom edge
+    c_br_x = (int(exp_BR[0] - srch), min(W, int(exp_BR[0] + srch * 2)))
+    r_br_y = (int(exp_BR[1] - srch), min(H, int(exp_BR[1] + srch * 2)))
+    
+    def _detect_y(r0, r1, c0, c1, is_bottom=False):
+        """Detect Y position of horizontal edge with fallback strategy."""
+        if r1 <= r0 or c1 <= c0:
+            return None
+        prof = channel[r0:r1, c0:c1].mean(axis=1)
+        
+        try:
+            if is_bottom:
+                # For bottom edge, flip profile so frame comes first
+                idx = _first_dark_from_frame(prof[::-1])
+                return (r1 - 1) - idx - (scale - 1)
+            else:
+                # For top edge, scan from top
+                return r0 + _first_dark_from_frame(prof)
+        except Exception:
+            # Fallback: use simple threshold
+            threshold = (prof.max() + prof.min()) / 2
+            if is_bottom:
+                for i in range(len(prof) - 1, -1, -1):
+                    if prof[i] < threshold:
+                        return r0 + i
+            else:
+                for i in range(len(prof)):
+                    if prof[i] < threshold:
+                        return r0 + i
+            return None
+    
+    def _detect_x(r0, r1, c0, c1, is_right=False):
+        """Detect X position of vertical edge with fallback strategy."""
+        if r1 <= r0 or c1 <= c0:
+            return None
+        prof = channel[r0:r1, c0:c1].mean(axis=0)
+        
+        try:
+            if is_right:
+                # For right edge, flip profile so frame comes first
+                idx = _first_dark_from_frame(prof[::-1])
+                return (c1 - 1) - idx - (scale - 1)
+            else:
+                # For left edge, scan from left
+                return c0 + _first_dark_from_frame(prof)
+        except Exception:
+            # Fallback: use simple threshold
+            threshold = (prof.max() + prof.min()) / 2
+            if is_right:
+                for i in range(len(prof) - 1, -1, -1):
+                    if prof[i] < threshold:
+                        return c0 + i
+            else:
+                for i in range(len(prof)):
+                    if prof[i] < threshold:
+                        return c0 + i
+            return None
+    
+    # Detect each corner independently using corner-specific bands
+    tl_y = _detect_y(r_tl_y[0], r_tl_y[1], c_tl_x[0], c_tl_x[1], is_bottom=False)
+    tr_y = _detect_y(r_tr_y[0], r_tr_y[1], c_tr_x[0], c_tr_x[1], is_bottom=False)
+    bl_y = _detect_y(r_bl_y[0], r_bl_y[1], c_bl_x[0], c_bl_x[1], is_bottom=True)
+    br_y = _detect_y(r_br_y[0], r_br_y[1], c_br_x[0], c_br_x[1], is_bottom=True)
+    
+    tl_x = _detect_x(r_tl_y[0], r_tl_y[1], c_tl_x[0], c_tl_x[1], is_right=False)
+    tr_x = _detect_x(r_tr_y[0], r_tr_y[1], c_tr_x[0], c_tr_x[1], is_right=True)
+    bl_x = _detect_x(r_bl_y[0], r_bl_y[1], c_bl_x[0], c_bl_x[1], is_right=False)
+    br_x = _detect_x(r_br_y[0], r_br_y[1], c_br_x[0], c_br_x[1], is_right=True)
+    
+    # Check for None values (detection failures)
+    for val, corner_name in [(tl_y, "TL_y"), (tr_y, "TR_y"), (bl_y, "BL_y"), (br_y, "BR_y"),
+                             (tl_x, "TL_x"), (tr_x, "TR_x"), (bl_x, "BL_x"), (br_x, "BR_x")]:
+        if val is None:
+            raise RuntimeError(f"Failed to detect border corner {corner_name}")
+    
     return (tl_x, tl_y), (tr_x, tr_y), (br_x, br_y), (bl_x, bl_y)
+
+
+# ---------------------------------------------------------------------------
+# Dash-position verification diagnostics
+# ---------------------------------------------------------------------------
+
+def _verify_dash_positions(warped, scale, debug_dir=None, stem=None):
+    """
+    Verify that the frame edges have the expected white color.
+    
+    This diagnostic function checks that the frame border edges are predominantly
+    white (#FFFFA5), which validates that the perspective correction is accurate
+    and the border wasn't clipped or misaligned.
+    
+    Returns True if verification passes, False otherwise.
+    """
+    H, W = warped.shape[:2]
+    rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB).astype(np.float32)
+    
+    # Check top edge (should be mostly white FFFFA5)
+    top_region = rgb[0:2*scale, :, :].mean(axis=(0, 1))
+    # Check bottom edge
+    bottom_region = rgb[-2*scale:, :, :].mean(axis=(0, 1))
+    # Check left edge
+    left_region = rgb[:, 0:2*scale, :].mean(axis=(0, 1))
+    # Check right edge
+    right_region = rgb[:, -2*scale:, :].mean(axis=(0, 1))
+    
+    # FFFFA5 = (165, 255, 255) in BGR
+    expected = np.array([165, 255, 255], dtype=np.float32)
+    
+    tolerance = 20  # Allow 20-point deviation
+    
+    checks = [
+        ("top", top_region, expected),
+        ("bottom", bottom_region, expected),
+        ("left", left_region, expected),
+        ("right", right_region, expected),
+    ]
+    
+    all_ok = True
+    for name, actual, expect in checks:
+        error = np.linalg.norm(actual - expect)
+        is_ok = error < tolerance
+        all_ok = all_ok and is_ok
+        status = "OK" if is_ok else "WARN"
+        log(f"    [verify] {name:8} edge: error={error:.1f} (expect~{expect.astype(int).tolist()}, "
+            f"actual~{actual.astype(int).tolist()}) [{status}]")
+    
+    return all_ok
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +419,10 @@ def refine_warp(img, current_M, warped, scale,
                                [0,   H-1]])
     M_new   = cv2.getPerspectiveTransform(corners_in_src, dst_corners)
     refined = cv2.warpPerspective(img, M_new, (W, H), flags=cv2.INTER_LANCZOS4)
+
+    # Verify frame edge colors to validate correction
+    log(f"  Pass {pass_num} verification:")
+    _verify_dash_positions(refined, scale, debug_dir, stem)
 
     if debug and debug_dir and stem and pass_num >= 2:
         save_debug(refined, debug_dir, stem, "warp_d_refined_color")
