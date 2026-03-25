@@ -472,6 +472,77 @@ def _validate_inner_border(warped, scale, pass_num=1):
 # Back-projection refinement
 # ---------------------------------------------------------------------------
 
+def _find_border_points(channel, scale):
+    """
+    Detect the inner border not just at the four corners, but at multiple points
+    along each edge. This allows detection of edge curvature/lens distortion.
+    
+    Returns a dict with:
+      'top': list of (x, y) points along top edge
+      'right': list of (x, y) points along right edge  
+      'bottom': list of (x, y) points along bottom edge
+      'left': list of (x, y) points along left edge
+    """
+    H, W = channel.shape
+    srch = 6 * scale
+    
+    points = {
+        'top': [],
+        'right': [],
+        'bottom': [],
+        'left': []
+    }
+    
+    exp_left   = INNER_LEFT * scale
+    exp_right  = INNER_RIGHT * scale
+    exp_top    = INNER_TOP * scale
+    exp_bottom = INNER_BOT * scale
+    
+    # Sample top edge at 9 points along the width
+    for col_frac in np.linspace(0.0, 1.0, 9):
+        col = int(exp_left + (exp_right - exp_left) * col_frac)
+        col = np.clip(col, 0, W - 1)
+        r1, r2 = max(0, int(exp_top - srch)), min(H, int(exp_top + srch))
+        if r1 < r2:
+            profile = channel[int(r1):int(r2), col].astype(float)
+            y_pos = r1 + _first_dark_from_frame(profile)
+            points['top'].append((float(col), y_pos))
+    
+    # Sample bottom edge
+    for col_frac in np.linspace(0.0, 1.0, 9):
+        col = int(exp_left + (exp_right - exp_left) * col_frac)
+        col = np.clip(col, 0, W - 1)
+        r1, r2 = max(0, int(exp_bottom - srch)), min(H, int(exp_bottom + srch))
+        if r1 < r2:
+            prof = channel[int(r1):int(r2), col].astype(float)
+            idx = _first_dark_from_frame(prof[::-1])
+            y_pos = int(r2 - 1) - idx - (scale - 1)
+            points['bottom'].append((float(col), y_pos))
+    
+    # Sample left edge at 9 points along the height
+    for row_frac in np.linspace(0.0, 1.0, 9):
+        row = int(exp_top + (exp_bottom - exp_top) * row_frac)
+        row = np.clip(row, 0, H - 1)
+        c1, c2 = max(0, int(exp_left - srch)), min(W, int(exp_left + srch))
+        if c1 < c2:
+            profile = channel[row, int(c1):int(c2)].astype(float)
+            x_pos = c1 + _first_dark_from_frame(profile)
+            points['left'].append((x_pos, float(row)))
+    
+    # Sample right edge
+    for row_frac in np.linspace(0.0, 1.0, 9):
+        row = int(exp_top + (exp_bottom - exp_top) * row_frac)
+        row = np.clip(row, 0, H - 1)
+        c1, c2 = max(0, int(exp_right - srch)), min(W, int(exp_right + srch))
+        if c1 < c2:
+            prof = channel[row, int(c1):int(c2)].astype(float)
+            idx = _first_dark_from_frame(prof[::-1])
+            x_pos = int(c2 - 1) - idx - (scale - 1)
+            points['right'].append((x_pos, float(row)))
+    
+    return points
+
+
 def refine_warp(img, current_M, warped, scale,
                 debug=False, debug_dir=None, stem=None, pass_num=1):
     """
@@ -490,28 +561,91 @@ def refine_warp(img, current_M, warped, scale,
     rgb   = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB).astype(np.float32)
     rb_ch = np.clip(rgb[:, :, 0] - rgb[:, :, 2] + 128.0, 0.0, 255.0).astype(np.uint8)
 
+    # Get multi-point border detection (for edge curvature analysis)
+    border_points = _find_border_points(rb_ch, scale)
+    
+    # Get corner detection  
     TL, TR, BR, BL = _find_border_corners(rb_ch, scale)
 
     exp_TL = (float(INNER_LEFT  * scale), float(INNER_TOP * scale))
     exp_TR = (float(INNER_RIGHT * scale), float(INNER_TOP * scale))
     exp_BR = (float(INNER_RIGHT * scale), float(INNER_BOT * scale))
     exp_BL = (float(INNER_LEFT  * scale), float(INNER_BOT * scale))
+    
+    # Expected edge positions
+    exp_top = INNER_TOP * scale
+    exp_bottom = INNER_BOT * scale
+    exp_left = INNER_LEFT * scale
+    exp_right = INNER_RIGHT * scale
 
     # Averaged edges for logging (compatible with previous log format)
     top   = (TL[1] + TR[1]) / 2;  bot   = (BL[1] + BR[1]) / 2
     left  = (TL[0] + BL[0]) / 2;  right = (TR[0] + BR[0]) / 2
-    exp_top, exp_bot   = exp_TL[1], exp_BL[1]
-    exp_left, exp_right = exp_TL[0], exp_TR[0]
+    exp_top_avg = exp_TL[1]
+    exp_bottom_avg = exp_BL[1]
+    exp_left_avg = exp_TL[0]
+    exp_right_avg = exp_TR[0]
+    
+    # Analyze edge curvature from the multipoint detection
+    # If edges are bowing outward, we need to correct for that in the source
+    edge_curvatures = {
+        'top': np.mean([y - exp_top for x, y in border_points['top']]) if border_points['top'] else 0,
+        'bottom': np.mean([y - exp_bottom for x, y in border_points['bottom']]) if border_points['bottom'] else 0,
+        'left': np.mean([x - exp_left for x, y in border_points['left']]) if border_points['left'] else 0,
+        'right': np.mean([x - exp_right for x, y in border_points['right']]) if border_points['right'] else 0,
+    }
+    
+    # If the middle of an edge is significantly offset from expected, it indicates lens distortion
+    # Adjust the corner positions proportionally to compensate
+    adjusted_TL = list(TL)
+    adjusted_TR = list(TR)
+    adjusted_BR = list(BR)
+    adjusted_BL = list(BL)
+    
+    # Scale factor for edge curvature compensation
+    # Higher values (closer to 1.0) give stronger correction
+    corr_scale = 0.45
+    
+    # Adjust top corners if top edge is bowed
+    if abs(edge_curvatures['top']) > 0.5:
+        # Top edge is bowed - shift top corners inward/outward to compensate
+        adjusted_TL[1] -= edge_curvatures['top'] * corr_scale
+        adjusted_TR[1] -= edge_curvatures['top'] * corr_scale
+    
+    # Adjust bottom corners if bottom edge is bowed
+    if abs(edge_curvatures['bottom']) > 0.5:
+        adjusted_BL[1] -= edge_curvatures['bottom'] * corr_scale
+        adjusted_BR[1] -= edge_curvatures['bottom'] * corr_scale
+    
+    # Adjust left corners if left edge is bowed
+    if abs(edge_curvatures['left']) > 0.5:
+        adjusted_TL[0] -= edge_curvatures['left'] * corr_scale
+        adjusted_BL[0] -= edge_curvatures['left'] * corr_scale
+    
+    # Adjust right corners if right edge is bowed (this is the primary issue)
+    if abs(edge_curvatures['right']) > 0.5:
+        adjusted_TR[0] -= edge_curvatures['right'] * corr_scale
+        adjusted_BR[0] -= edge_curvatures['right'] * corr_scale
+    
+    # Use adjusted corners for refinement
+    TL = tuple(adjusted_TL)
+    TR = tuple(adjusted_TR)
+    BR = tuple(adjusted_BR)
+    BL = tuple(adjusted_BL)
+    
+    log(f"  Pass {pass_num} edge curvatures: "
+        f"top={edge_curvatures['top']:+.2f}, bot={edge_curvatures['bottom']:+.2f}, "
+        f"left={edge_curvatures['left']:+.2f}, right={edge_curvatures['right']:+.2f}")
     log(f"  Pass {pass_num} corners: "
         f"TL=({TL[0]:.1f},{TL[1]:.1f}) err=({TL[0]-exp_TL[0]:+.1f},{TL[1]-exp_TL[1]:+.1f})  "
         f"TR=({TR[0]:.1f},{TR[1]:.1f}) err=({TR[0]-exp_TR[0]:+.1f},{TR[1]-exp_TR[1]:+.1f})  "
         f"BR=({BR[0]:.1f},{BR[1]:.1f}) err=({BR[0]-exp_BR[0]:+.1f},{BR[1]-exp_BR[1]:+.1f})  "
         f"BL=({BL[0]:.1f},{BL[1]:.1f}) err=({BL[0]-exp_BL[0]:+.1f},{BL[1]-exp_BL[1]:+.1f})")
     log(f"  Pass {pass_num} border edges (avg): "
-        f"top={top:.2f}(exp={exp_top:.0f},err={top-exp_top:+.2f}), "
-        f"bot={bot:.2f}(exp={exp_bot:.0f},err={bot-exp_bot:+.2f}), "
-        f"left={left:.2f}(exp={exp_left:.0f},err={left-exp_left:+.2f}), "
-        f"right={right:.2f}(exp={exp_right:.0f},err={right-exp_right:+.2f})")
+        f"top={top:.2f}(exp={exp_top_avg:.0f},err={top-exp_top_avg:+.2f}), "
+        f"bot={bot:.2f}(exp={exp_bottom_avg:.0f},err={bot-exp_bottom_avg:+.2f}), "
+        f"left={left:.2f}(exp={exp_left_avg:.0f},err={left-exp_left_avg:+.2f}), "
+        f"right={right:.2f}(exp={exp_right_avg:.0f},err={right-exp_right_avg:+.2f})")
 
     # Try refinement even for large errors - it will fail gracefully if homography is degenerate
     try:
