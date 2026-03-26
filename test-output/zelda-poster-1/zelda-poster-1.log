@@ -77,19 +77,34 @@ PIPELINE RUN
 [correct/color] test-output\zelda-poster-1\zelda-poster-1_warp.png
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
-    R refinement: 3596 interior DG pixels
-      DG[4,3]: raw=120.1 coons=94.6 corr=180.5
+    R refinement: 3577 interior DG pixels
+      DG[4,3]: raw=120.1 coons=94.6 corr=180.2
       DG[6,21]: raw=82.2 coons=91.3 corr=150.9
-      DG[7,21]: raw=92.9 coons=91.1 corr=170.1
-      DG[7,25]: raw=100.4 coons=89.9 corr=165.7
-      DG[8,20]: raw=71.3 coons=90.2 corr=134.2
+      DG[7,21]: raw=92.9 coons=91.1 corr=170.3
+      DG[7,25]: raw=100.4 coons=89.9 corr=165.8
+      DG[8,20]: raw=71.3 coons=90.2 corr=134.1
   G: Coons+poly -> 255 / 148
-    G refinement: 7172 interior DG pixels
+    G refinement: 7177 interior DG pixels
   B: white-surface normalisation -> 165 (no global scaling)
-  Frame p85 before norm: R=255 G=242 B=183
-  Global scales: R=1.0000 G=1.0559 B=1.0000
+  Frame p85 before norm: R=255 G=239 B=184
+  Global scales: R=1.0000 G=1.0660 B=1.0000
+  Frame smoothing (aggressive):
+    yellow: 7163 pixels, current_mean=(235,196,163) target=(255,255,165) delta_mean=(20,59,2)
+    red: 135 pixels, current_mean=(225,119,158) target=(255,148,148) delta_mean=(30,29,-10)
+    blue: 860 pixels, current_mean=(153,105,159) target=(148,148,255) delta_mean=(-5,43,96)
+    black: 546 pixels, current_mean=(96,31,119) target=(0,0,0) delta_mean=(-96,-31,-119)
+  Frame smoothing (aggressive):
+    yellow: 7163 pixels, current_mean=(253,248,165) target=(255,255,165) delta_mean=(2,7,0)
+    red: 135 pixels, current_mean=(253,148,148) target=(255,148,148) delta_mean=(2,-0,-0)
+    blue: 860 pixels, current_mean=(148,148,254) target=(148,148,255) delta_mean=(0,0,1)
+    black: 546 pixels, current_mean=(7,3,3) target=(0,0,0) delta_mean=(-7,-3,-3)
+  Frame smoothing (aggressive):
+    yellow: 7163 pixels, current_mean=(254,251,165) target=(255,255,165) delta_mean=(1,4,-0)
+    red: 135 pixels, current_mean=(254,148,148) target=(255,148,148) delta_mean=(1,-0,-0)
+    blue: 860 pixels, current_mean=(148,148,254) target=(148,148,255) delta_mean=(0,0,1)
+    black: 546 pixels, current_mean=(3,1,1) target=(0,0,0) delta_mean=(-3,-1,-1)
   Saved -> test-output\zelda-poster-1\zelda-poster-1_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=178.7 G=156.6 B=160.9
+  Camera area mean: R=178.6 G=157.8 B=160.0
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_a_before_after.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_b_white_surf_heatmap.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_c_full.png
@@ -99,7 +114,7 @@ PIPELINE RUN
 [crop] test-output\zelda-poster-1\zelda-poster-1_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=132.3, white frame mean=197.0 (OK)
+  Validation: inner border mean=162.1, white frame mean=229.6 (OK)
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_correct__crop_a_region.png
   Saved -> test-output\zelda-poster-1\zelda-poster-1_crop.png  (1024×896 px)
 
@@ -109,16 +124,16 @@ PIPELINE RUN
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
   Saved -> test-output\zelda-poster-1\zelda-poster-1_sample.png  (colour, subpixel-aware, 128×112 px)
-  R: 12–255  G: 0–255  B: 79–183
+  R: 7–255  G: 0–255  B: 79–183
 
 ============================================================
 [quantize/color] test-output\zelda-poster-1\zelda-poster-1_sample.png
   Loaded 128x112 colour sample
-  Global k-means RG: BK(1572)~(R62,G34,B124)  DG(3526)~(R148,G151,B161)  LG(4195)~(R235,G157,B140)  WH(5043)~(R247,G249,B153)
+  Global k-means RG: BK(1572)~(R59,G34,B123)  DG(3526)~(R148,G152,B160)  LG(4197)~(R237,G159,B140)  WH(5041)~(R247,G249,B152)
   Strip ensemble: 7 strips, changed 44 px
-  G-valley threshold: 222.0  (LG centre 157.8, WH centre 249.2)
-  G-valley refinement (post-strip): threshold=222.0, changed 16 px
-  Final labels: BK(1572)~(R62,G34,B124)  DG(3526)~(R148,G151,B161)  LG(4255)~(R235,G158,B141)  WH(4983)~(R247,G249,B153)
+  G-valley threshold: 223.0  (LG centre 159.2, WH centre 249.9)
+  G-valley refinement (post-strip): threshold=223.0, changed 14 px
+  Final labels: BK(1572)~(R59,G34,B123)  DG(3526)~(R148,G152,B160)  LG(4255)~(R237,G159,B140)  WH(4983)~(R247,G250,B152)
   Classification: strip-kmeans-RG+G-valley
   Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam.png
   Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam_rgb.png

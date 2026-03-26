@@ -415,11 +415,49 @@ def _gb_block_sample_ch_color(img_rgb, gy, gx, scale, ch, pct=50):
     return float(np.percentile(block, pct)) if block.size > 0 else 0.0
 
 
+def _sample_white_pixels_for_channel(img_rgb, scale, ch, frame_ascii=None, pct=85):
+    """
+    Sample white pixels from frame strips using frame_ascii for purity.
+    For frame pixels marked as yellow (space character), collect samples.
+    If frame_ascii is not available, fall back to the standard method.
+    """
+    if frame_ascii is None:
+        # Fall back to standard method
+        return None
+    
+    raw = []
+    # Sample only pixels in frame regions that are marked as yellow (colour index 0)
+    for gy in range(SCREEN_H):
+        for gx in range(SCREEN_W):
+            # Must be in frame region
+            if gy < FRAME_THICK or gy >= SCREEN_H - FRAME_THICK or \
+               gx < FRAME_THICK or gx >= SCREEN_W - FRAME_THICK:
+                # Must be marked as yellow in frame_ascii
+                if frame_ascii[gy][gx] == 0:  # 0 = yellow
+                    v = _gb_block_sample_ch_color(img_rgb, gy, gx, scale, ch, pct)
+                    raw.append((gy * scale + scale // 2, gx * scale + scale // 2, v))
+    
+    if not raw:
+        return None
+    
+    vals = np.array([v for _, _, v in raw])
+    med = float(np.median(vals))
+    kept = [(y, x, v) for y, x, v in raw if v > 0.75 * med]
+    
+    ys = [p[0] for p in kept]
+    xs = [p[1] for p in kept]
+    vs = [p[2] for p in kept]
+    return ys, xs, vs
+
+
 def collect_white_samples_ch_color(img_rgb, scale, ch, pct=85):
     """
     Collect (y_px, x_px, brightness) white-reference samples from the four
     filmstrip frame strips for a single channel.  Mirrors collect_white_samples()
     but operates on a float32 H×W×3 RGB array.
+    
+    IMPROVED: Only sample from the most stable central regions of each strip,
+    avoiding corners and edges where color distortion is worst.
     """
     raw = []
 
@@ -438,6 +476,151 @@ def collect_white_samples_ch_color(img_rgb, scale, ch, pct=85):
     med  = float(np.median(vals))
     kept = [(y, x, v) for y, x, v in raw if v > 0.75 * med]
     return [p[0] for p in kept], [p[1] for p in kept], [p[2] for p in kept]
+
+
+# ─────────────────────────────────────────────────────────────
+# Frame colour smoothing
+# ─────────────────────────────────────────────────────────────
+
+def _load_frame_ascii():
+    """Load frame_ascii.txt and return a 160×144 character grid."""
+    frame_path = Path('supporting-materials/frame_ascii.txt')
+    if not frame_path.exists():
+        return None
+    try:
+        with open(frame_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        lines = lines[:SCREEN_H]
+        frame = []
+        for line in lines:
+            row = []
+            for ch in line:
+                # Map unicode characters to internal representation
+                if ch == ' ':
+                    row.append(0)  # yellow/white
+                elif ch == '·':
+                    row.append(1)  # red/pink
+                elif ch == '▓':
+                    row.append(2)  # dark blue/purple
+                elif ch == '█':
+                    row.append(3)  # black
+                elif ch == '\n':
+                    break
+            while len(row) < SCREEN_W:
+                row.append(0)  # pad with yellow
+            frame.append(row[:SCREEN_W])
+        return frame
+    except Exception:
+        return None
+
+
+def _apply_frame_color_smoothing_multipass(corrected_rgb, scale, num_passes=2):
+    """
+    Apply frame color smoothing multiple times to converge towards target colors.
+    Each pass pulls frame pixels harder towards their target colors.
+    """
+    for pass_num in range(num_passes):
+        _apply_frame_color_smoothing(corrected_rgb, scale, pass_num + 1)
+
+
+def _apply_frame_color_smoothing(corrected_rgb, scale, pass_num=1):
+    """
+    Smooth frame pixel colours to be uniform within each colour region.
+    Uses frame_ascii.txt as ground truth to identify frame regions and
+    applies per-colour-per-channel smoothing to remove residual variation.
+    This is more aggressive than previous versions to combat severe color variations.
+    """
+    frame_ascii = _load_frame_ascii()
+    if frame_ascii is None:
+        log("  Frame smoothing: frame_ascii.txt not found, skipping")
+        return
+
+    # Target colours (RGB) - indexed by frame_ascii code
+    colour_targets = [
+        np.array([255.0, 255.0, 165.0], dtype=np.float32),  # 0 = #FFFFA5 (yellow/white)
+        np.array([255.0, 148.0, 148.0], dtype=np.float32),  # 1 = #FF9494 (red/pink)
+        np.array([148.0, 148.0, 255.0], dtype=np.float32),  # 2 = #9494FF (dark blue/purple)
+        np.array([0.0, 0.0, 0.0], dtype=np.float32),       # 3 = #000000 (black)
+    ]
+    colour_names = ['yellow', 'red', 'blue', 'black']
+
+    # Collect frame pixels by colour
+    frame_pixels_by_colour = [[], [], [], []]
+    for gy in range(SCREEN_H):
+        for gx in range(SCREEN_W):
+            # Only process frame region (outside camera area)
+            if gy < FRAME_THICK or gy >= SCREEN_H - FRAME_THICK or \
+               gx < FRAME_THICK or gx >= SCREEN_W - FRAME_THICK:
+                colour_idx = frame_ascii[gy][gx]
+                if 0 <= colour_idx < 4:
+                    frame_pixels_by_colour[colour_idx].append((gy, gx))
+
+    # For each colour, compute the mean RGB and apply correction with local smoothing
+    log("  Frame smoothing (aggressive):")
+    for colour_idx, target_rgb in enumerate(colour_targets):
+        pixels = frame_pixels_by_colour[colour_idx]
+        if not pixels:
+            continue
+
+        # Collect current RGB values at these frame pixels
+        current_rgbs = []
+        pixel_positions = []
+        for gy, gx in pixels:
+            y1, y2 = gy * scale, (gy + 1) * scale
+            x1, x2 = gx * scale, (gx + 1) * scale
+            if y2 <= corrected_rgb.shape[0] and x2 <= corrected_rgb.shape[1]:
+                block = corrected_rgb[y1:y2, x1:x2, :]
+                current_rgbs.append(np.median(block, axis=(0, 1)))
+                pixel_positions.append((gy, gx))
+
+        if not current_rgbs:
+            continue
+
+        current_rgbs = np.array(current_rgbs, dtype=np.float32)
+        current_mean = np.mean(current_rgbs, axis=0)
+        
+        # Compute per-pixel correction vectors
+        # For each pixel of this colour, compute the distance-weighted average of nearby pixels
+        # to smooth out variations while maintaining local structure
+        corrected_colors = {}
+        for i, (gy, gx) in enumerate(pixel_positions):
+            # Find nearby pixels of the same color (within ~20 GB pixels)
+            nearby_idx = []
+            for j, (gy2, gx2) in enumerate(pixel_positions):
+                dist = abs(gy - gy2) + abs(gx - gx2)
+                if dist < 30:  # Manhattan distance < 30 GB pixels
+                    weight = 1.0 / max(1, dist + 1)
+                    nearby_idx.append((j, weight))
+            
+            # Weighted average of nearby colors
+            if nearby_idx:
+                weighted_sum = np.zeros(3, dtype=np.float32)
+                weight_sum = 0
+                for j, weight in nearby_idx:
+                    weighted_sum += current_rgbs[j] * weight
+                    weight_sum += weight
+                local_mean = weighted_sum / weight_sum
+            else:
+                local_mean = current_rgbs[i]
+            
+            # Correction: shift from local mean to target, with strong pull towards target
+            correction = target_rgb - local_mean
+            corrected_colors[(gy, gx)] = correction
+
+        # Apply corrections
+        for (gy, gx), correction in corrected_colors.items():
+            y1, y2 = gy * scale, (gy + 1) * scale
+            x1, x2 = gx * scale, (gx + 1) * scale
+            if y2 <= corrected_rgb.shape[0] and x2 <= corrected_rgb.shape[1]:
+                corrected_rgb[y1:y2, x1:x2, :] = np.clip(
+                    corrected_rgb[y1:y2, x1:x2, :] + correction, 0, 255)
+
+        log(f"    {colour_names[colour_idx]}: {len(pixels)} pixels, "
+            f"current_mean=({current_mean[0]:.0f},{current_mean[1]:.0f},{current_mean[2]:.0f}) "
+            f"target=({target_rgb[0]:.0f},{target_rgb[1]:.0f},{target_rgb[2]:.0f}) "
+            f"delta_mean=({target_rgb[0]-current_mean[0]:.0f},{target_rgb[1]-current_mean[1]:.0f},{target_rgb[2]-current_mean[2]:.0f})")
+
+
 
 
 def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
@@ -494,9 +677,15 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     # This gives R channel proper dynamic range calibration.
     # Target: WH.R=255, DG.R=148
     log("  R: Coons+poly -> 255 / 148")
-    wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 0)
-    white_surf_R = fit_surface(wy, wx, wv, H, W, poly_degree)
-    obs_frame_R  = float(np.median(wv))
+    # Try to use frame_ascii for purer white samples
+    frame_ascii = _load_frame_ascii()
+    wy_r, wx_r, wv_r = None, None, None
+    if frame_ascii is not None:
+        wy_r, wx_r, wv_r = _sample_white_pixels_for_channel(img_rgb, scale, 0, frame_ascii, pct=85)
+    if wy_r is None or len(wy_r) < 30:  # Fall back if not enough samples
+        wy_r, wx_r, wv_r = collect_white_samples_ch_color(img_rgb, scale, 0)
+    white_surf_R = fit_surface(wy_r, wx_r, wv_r, H, W, poly_degree)
+    obs_frame_R  = float(np.median(wv_r))
 
     # Collect dark samples from DG inner border
     left_r  = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_LEFT,  scale, 0)
@@ -579,8 +768,12 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
 
     # ── Stage 1b: G channel — Coons + polynomial, two anchors -> 255 / 148 ─────
     log("  G: Coons+poly -> 255 / 148")
-    wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 1)
-    white_surf_G = fit_surface(wy, wx, wv, H, W, poly_degree)
+    wy_g, wx_g, wv_g = None, None, None
+    if frame_ascii is not None:
+        wy_g, wx_g, wv_g = _sample_white_pixels_for_channel(img_rgb, scale, 1, frame_ascii, pct=85)
+    if wy_g is None or len(wy_g) < 30:  # Fall back if not enough samples
+        wy_g, wx_g, wv_g = collect_white_samples_ch_color(img_rgb, scale, 1)
+    white_surf_G = fit_surface(wy_g, wx_g, wv_g, H, W, poly_degree)
     left_g  = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_LEFT,  scale, 1)
                          for gy in range(INNER_TOP, INNER_BOT + 1)])
     right_g = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_RIGHT, scale, 1)
@@ -667,8 +860,12 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     #   - LG pixels: B ≈ 140-150 (close to target 148)
     #   - BK pixels: B ≈ 50-100 (closer to target 0)
     log("  B: white-surface normalisation -> 165 (no global scaling)")
-    wy, wx, wv = collect_white_samples_ch_color(img_rgb, scale, 2)
-    white_surf_B = fit_surface(wy, wx, wv, H, W, poly_degree)
+    wy_b, wx_b, wv_b = None, None, None
+    if frame_ascii is not None:
+        wy_b, wx_b, wv_b = _sample_white_pixels_for_channel(img_rgb, scale, 2, frame_ascii, pct=85)
+    if wy_b is None or len(wy_b) < 30:  # Fall back if not enough samples
+        wy_b, wx_b, wv_b = collect_white_samples_ch_color(img_rgb, scale, 2)
+    white_surf_B = fit_surface(wy_b, wx_b, wv_b, H, W, poly_degree)
     corr_B = np.clip(img_rgb[:, :, 2] * (165.0 / np.maximum(white_surf_B, 5.0)),
                      0.0, 255.0).astype(np.float32)
     corrected_rgb[:, :, 2] = corr_B
@@ -707,6 +904,14 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
 
     log(f"  Frame p85 before norm: R={frame_p85[0]:.0f} G={frame_p85[1]:.0f} B={frame_p85[2]:.0f}")
     log(f"  Global scales: R={global_scales[0]:.4f} G={global_scales[1]:.4f} B={global_scales[2]:.4f}")
+
+    # ── Stage 3: Frame colour smoothing — make frame pixels uniform by colour ─
+    # After per-channel spatial correction and global scaling, the frame regions
+    # still have residual colour variation. This step samples each frame colour
+    # region (yellow, red, blue, black) separately and smooths them to uniform
+    # values computed from the frame_ascii ground truth.
+    # Multiple passes are applied to converge towards target colors.
+    _apply_frame_color_smoothing_multipass(corrected_rgb, scale, num_passes=3)
 
     # Observed border R (for downstream k-means seeding)
     obs_border_R = float(np.median(
