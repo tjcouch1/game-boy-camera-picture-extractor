@@ -76,21 +76,6 @@ PIPELINE RUN
   B: white-surface normalisation -> 165 (no global scaling)
   Frame p85 before norm: R=255 G=244 B=198
   Global scales: R=1.0000 G=1.0438 B=1.0000
-  Frame smoothing (aggressive):
-    yellow: 7163 pixels, current_mean=(233,201,166) target=(255,255,165) delta_mean=(22,54,-1)
-    red: 135 pixels, current_mean=(211,113,162) target=(255,148,148) delta_mean=(44,35,-14)
-    blue: 860 pixels, current_mean=(154,105,167) target=(148,148,255) delta_mean=(-6,43,88)
-    black: 546 pixels, current_mean=(85,34,124) target=(0,0,0) delta_mean=(-85,-34,-124)
-  Frame smoothing (aggressive):
-    yellow: 7163 pixels, current_mean=(252,244,165) target=(255,255,165) delta_mean=(3,11,-0)
-    red: 135 pixels, current_mean=(253,148,148) target=(255,148,148) delta_mean=(2,-0,-0)
-    blue: 860 pixels, current_mean=(148,148,254) target=(148,148,255) delta_mean=(-0,0,1)
-    black: 546 pixels, current_mean=(8,4,3) target=(0,0,0) delta_mean=(-8,-4,-3)
-  Frame smoothing (aggressive):
-    yellow: 7163 pixels, current_mean=(253,249,165) target=(255,255,165) delta_mean=(2,6,-0)
-    red: 135 pixels, current_mean=(254,148,148) target=(255,148,148) delta_mean=(1,-0,-0)
-    blue: 860 pixels, current_mean=(148,148,254) target=(148,148,255) delta_mean=(-0,0,1)
-    black: 546 pixels, current_mean=(4,2,2) target=(0,0,0) delta_mean=(-4,-2,-2)
   Saved -> test-output\zelda-poster-3\zelda-poster-3_correct.png  (colour, frame normalised to #FFFFA5)
   Camera area mean: R=178.0 G=153.5 B=164.8
     [debug] test-output\zelda-poster-3\debug\zelda-poster-3_warp__correct_color_a_before_after.png
@@ -102,7 +87,7 @@ PIPELINE RUN
 [crop] test-output\zelda-poster-3\zelda-poster-3_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=161.0, white frame mean=227.9 (OK)
+  Validation: inner border mean=132.3, white frame mean=195.8 (OK)
     [debug] test-output\zelda-poster-3\debug\zelda-poster-3_correct__crop_a_region.png
   Saved -> test-output\zelda-poster-3\zelda-poster-3_crop.png  (1024×896 px)
 

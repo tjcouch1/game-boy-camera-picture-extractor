@@ -82,21 +82,6 @@ PIPELINE RUN
   B: white-surface normalisation -> 165 (no global scaling)
   Frame p85 before norm: R=255 G=248 B=186
   Global scales: R=1.0000 G=1.0291 B=1.0000
-  Frame smoothing (aggressive):
-    yellow: 7163 pixels, current_mean=(237,226,162) target=(255,255,165) delta_mean=(18,29,3)
-    red: 135 pixels, current_mean=(220,183,158) target=(255,148,148) delta_mean=(35,-35,-10)
-    blue: 860 pixels, current_mean=(160,151,168) target=(148,148,255) delta_mean=(-12,-3,87)
-    black: 546 pixels, current_mean=(100,52,116) target=(0,0,0) delta_mean=(-100,-52,-116)
-  Frame smoothing (aggressive):
-    yellow: 7163 pixels, current_mean=(254,253,165) target=(255,255,165) delta_mean=(1,2,-0)
-    red: 135 pixels, current_mean=(253,148,148) target=(255,148,148) delta_mean=(2,-0,-0)
-    blue: 860 pixels, current_mean=(148,148,253) target=(148,148,255) delta_mean=(-0,-0,2)
-    black: 546 pixels, current_mean=(6,6,3) target=(0,0,0) delta_mean=(-6,-6,-3)
-  Frame smoothing (aggressive):
-    yellow: 7163 pixels, current_mean=(254,254,165) target=(255,255,165) delta_mean=(1,1,-0)
-    red: 135 pixels, current_mean=(254,148,148) target=(255,148,148) delta_mean=(1,-0,-0)
-    blue: 860 pixels, current_mean=(148,148,254) target=(148,148,255) delta_mean=(-0,-0,1)
-    black: 546 pixels, current_mean=(3,3,2) target=(0,0,0) delta_mean=(-3,-3,-2)
   Saved -> test-output\thing-3\thing-3_correct.png  (colour, frame normalised to #FFFFA5)
   Camera area mean: R=161.7 G=144.8 B=172.4
     [debug] test-output\thing-3\debug\thing-3_warp__correct_color_a_before_after.png
@@ -108,7 +93,7 @@ PIPELINE RUN
 [crop] test-output\thing-3\thing-3_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=159.8, white frame mean=232.1 (OK)
+  Validation: inner border mean=151.8, white frame mean=208.5 (OK)
     [debug] test-output\thing-3\debug\thing-3_correct__crop_a_region.png
   Saved -> test-output\thing-3\thing-3_crop.png  (1024×896 px)
 
