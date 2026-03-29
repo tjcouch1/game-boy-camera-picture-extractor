@@ -604,26 +604,26 @@ def refine_warp(img, current_M, warped, scale,
     
     # Scale factor for edge curvature compensation
     # Higher values (closer to 1.0) give stronger correction
-    corr_scale = 0.45
+    corr_scale = 0.55
     
     # Adjust top corners if top edge is bowed
-    if abs(edge_curvatures['top']) > 0.5:
+    if abs(edge_curvatures['top']) > 0.3:
         # Top edge is bowed - shift top corners inward/outward to compensate
         adjusted_TL[1] -= edge_curvatures['top'] * corr_scale
         adjusted_TR[1] -= edge_curvatures['top'] * corr_scale
     
     # Adjust bottom corners if bottom edge is bowed
-    if abs(edge_curvatures['bottom']) > 0.5:
+    if abs(edge_curvatures['bottom']) > 0.3:
         adjusted_BL[1] -= edge_curvatures['bottom'] * corr_scale
         adjusted_BR[1] -= edge_curvatures['bottom'] * corr_scale
     
     # Adjust left corners if left edge is bowed
-    if abs(edge_curvatures['left']) > 0.5:
+    if abs(edge_curvatures['left']) > 0.3:
         adjusted_TL[0] -= edge_curvatures['left'] * corr_scale
         adjusted_BL[0] -= edge_curvatures['left'] * corr_scale
     
     # Adjust right corners if right edge is bowed (this is the primary issue)
-    if abs(edge_curvatures['right']) > 0.5:
+    if abs(edge_curvatures['right']) > 0.3:
         adjusted_TR[0] -= edge_curvatures['right'] * corr_scale
         adjusted_BR[0] -= edge_curvatures['right'] * corr_scale
     
