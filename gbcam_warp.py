@@ -222,8 +222,7 @@ def _find_border_corners(channel, scale):
         r1, r2 = max(0, exp_frame - srch), min(H, exp_frame + srch)
         prof = channel[int(r1):int(r2), c0:c1].mean(axis=1)
         idx  = _first_dark_from_frame(prof[::-1])
-        # Adjust downward slightly to fix bottom edge positioning
-        return int(r2 - 1) - idx - (scale - 1) - 0.25
+        return int(r2 - 1) - idx - (scale - 1)
 
     def _left_x(r0, r1_):
         exp = INNER_LEFT * scale
@@ -235,8 +234,7 @@ def _find_border_corners(channel, scale):
         c1, c2 = max(0, exp_frame - srch), min(W, exp_frame + srch)
         prof = channel[r0:r1_, int(c1):int(c2)].mean(axis=0)
         idx  = _first_dark_from_frame(prof[::-1])
-        # Adjust rightward slightly to fix zelda-poster-3 right edge cutoff
-        return int(c2 - 1) - idx - (scale - 1) - 0.25
+        return int(c2 - 1) - idx - (scale - 1)
 
     tl_y = _top_y(c_lft[0], c_lft[1]);  tr_y = _top_y(c_rgt[0], c_rgt[1])
     bl_y = _bot_y(c_lft[0], c_lft[1]);  br_y = _bot_y(c_rgt[0], c_rgt[1])
