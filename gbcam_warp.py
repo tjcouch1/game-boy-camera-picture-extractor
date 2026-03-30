@@ -543,15 +543,120 @@ def _find_border_points(channel, scale):
     return points
 
 
+def _analyze_edge_curvature(points, exp_pos, edge_name):
+    """
+    Analyze curvature of an edge by dividing it into segments and computing
+    deviation from expected position at each segment.
+    
+    Returns dict with:
+      'overall': average deviation across entire edge
+      'segments': list of (segment_name, deviation) for top/middle/bottom thirds
+      'max_deviation': maximum local deviation
+      'min_deviation': minimum local deviation
+    """
+    if not points:
+        return {
+            'overall': 0.0,
+            'segments': [],
+            'max_deviation': 0.0,
+            'min_deviation': 0.0,
+        }
+    
+    # Extract position along the edge (y for top/bottom, x for left/right)
+    if edge_name in ['top', 'bottom']:
+        deviations = [y - exp_pos for x, y in points]
+        segment_labels = ['left-third', 'middle-third', 'right-third']
+    else:  # left, right
+        deviations = [x - exp_pos for x, y in points]
+        segment_labels = ['top-third', 'middle-third', 'bottom-third']
+    
+    overall_dev = np.mean(deviations)
+    
+    # Split into 3 segments
+    n = len(deviations)
+    seg_size = max(1, n // 3)
+    segments = [
+        (segment_labels[0], np.mean(deviations[:seg_size])),
+        (segment_labels[1], np.mean(deviations[seg_size:2*seg_size])),
+        (segment_labels[2], np.mean(deviations[2*seg_size:])),
+    ]
+    
+    return {
+        'overall': overall_dev,
+        'segments': segments,
+        'max_deviation': float(np.max(deviations)),
+        'min_deviation': float(np.min(deviations)),
+    }
+
+
+def _save_border_detection_debug(warped, border_points, TL, TR, BR, BL,
+                                  exp_TL, exp_TR, exp_BR, exp_BL,
+                                  debug_dir, stem, pass_num):
+    """
+    Create debug visualization showing detected border points and corners
+    overlaid on the warped image.
+    """
+    dbg = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
+    dbg = cv2.cvtColor(dbg, cv2.COLOR_RGB2BGR)
+    
+    # Draw expected corners (green)
+    for pt, label in [(exp_TL, 'TL'), (exp_TR, 'TR'), (exp_BR, 'BR'), (exp_BL, 'BL')]:
+        pt_int = tuple(map(int, pt))
+        cv2.circle(dbg, pt_int, 8, (0, 255, 0), 2)
+        cv2.putText(dbg, label, (pt_int[0]-15, pt_int[1]-15),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    
+    # Draw detected corners (red)
+    for pt, label in [(TL, 'TL'), (TR, 'TR'), (BR, 'BR'), (BL, 'BL')]:
+        pt_int = tuple(map(int, pt))
+        cv2.circle(dbg, pt_int, 6, (0, 0, 255), 2)
+        cv2.putText(dbg, label, (pt_int[0]+10, pt_int[1]-10),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    
+    # Draw border points (different colors for each edge)
+    colors = {
+        'top': (255, 0, 0),      # Blue
+        'right': (0, 255, 0),    # Green
+        'bottom': (0, 0, 255),   # Red
+        'left': (255, 255, 0),   # Cyan
+    }
+    
+    for edge_name in ['top', 'right', 'bottom', 'left']:
+        color = colors[edge_name]
+        for pt in border_points[edge_name]:
+            pt_int = tuple(map(int, pt))
+            cv2.circle(dbg, pt_int, 3, color, 2)
+    
+    # Draw lines connecting border points
+    for edge_name, color in colors.items():
+        pts = border_points[edge_name]
+        if len(pts) > 1:
+            pts_arr = np.array(pts, dtype=np.int32)
+            cv2.polylines(dbg, [pts_arr], False, color, 1)
+    
+    # Draw connection between expected and detected corners
+    for exp_pt, det_pt in [(exp_TL, TL), (exp_TR, TR), (exp_BR, BR), (exp_BL, BL)]:
+        exp_pt_int = tuple(map(int, exp_pt))
+        det_pt_int = tuple(map(int, det_pt))
+        cv2.line(dbg, exp_pt_int, det_pt_int, (128, 128, 128), 1)
+    
+    # Save the debug image
+    filename = f"warp_c_pass{pass_num}_border_detection.png"
+    output_path = Path(debug_dir) / filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(output_path), dbg)
+    log(f"    Saved border detection debug: {filename}")
+
+
 def refine_warp(img, current_M, warped, scale,
                 debug=False, debug_dir=None, stem=None, pass_num=1):
     """
     Snap the inner border to its exact pixel-grid position without black bars.
 
-    Detects where the inner border landed in the warped image, computes a
-    correction homography H_corr (detected -> expected border rectangle),
-    back-projects the output canvas corners through H_corr^-1 and current_M^-1
-    to the original photo, then re-warps in a single fresh pass.
+    Dynamically analyzes edge curvature by dividing edges into segments
+    (thirds), detects where each segment is offset from expected position,
+    and applies per-corner corrections based on the local curvature around
+    each corner.
 
     Returns (refined_image, new_M).
     """
@@ -578,54 +683,74 @@ def refine_warp(img, current_M, warped, scale,
     exp_left = INNER_LEFT * scale
     exp_right = INNER_RIGHT * scale
 
-    # Averaged edges for logging (compatible with previous log format)
-    top   = (TL[1] + TR[1]) / 2;  bot   = (BL[1] + BR[1]) / 2
-    left  = (TL[0] + BL[0]) / 2;  right = (TR[0] + BR[0]) / 2
-    exp_top_avg = exp_TL[1]
-    exp_bottom_avg = exp_BL[1]
-    exp_left_avg = exp_TL[0]
-    exp_right_avg = exp_TR[0]
+    # Analyze edge curvature with segment-based detection
+    top_analysis = _analyze_edge_curvature(border_points['top'], exp_top, 'top')
+    bottom_analysis = _analyze_edge_curvature(border_points['bottom'], exp_bottom, 'bottom')
+    left_analysis = _analyze_edge_curvature(border_points['left'], exp_left, 'left')
+    right_analysis = _analyze_edge_curvature(border_points['right'], exp_right, 'right')
     
-    # Analyze edge curvature from the multipoint detection
-    # If edges are bowing outward, we need to correct for that in the source
-    edge_curvatures = {
-        'top': np.mean([y - exp_top for x, y in border_points['top']]) if border_points['top'] else 0,
-        'bottom': np.mean([y - exp_bottom for x, y in border_points['bottom']]) if border_points['bottom'] else 0,
-        'left': np.mean([x - exp_left for x, y in border_points['left']]) if border_points['left'] else 0,
-        'right': np.mean([x - exp_right for x, y in border_points['right']]) if border_points['right'] else 0,
-    }
-    
-    # If the middle of an edge is significantly offset from expected, it indicates lens distortion
-    # Adjust the corner positions proportionally to compensate
+    # Log detailed edge analysis
+    log(f"  Pass {pass_num} edge analysis (segment deviations):")
+    for edge_name, analysis in [('top', top_analysis), ('bottom', bottom_analysis),
+                                 ('left', left_analysis), ('right', right_analysis)]:
+        log(f"    {edge_name}: overall={analysis['overall']:+.2f}px, "
+            f"min={analysis['min_deviation']:+.2f}px, max={analysis['max_deviation']:+.2f}px")
+        for seg_name, seg_dev in analysis['segments']:
+            log(f"      {seg_name}: {seg_dev:+.2f}px")
+
+    # Dynamically compute corner adjustments based on segment analysis
+    # For each corner, use the average of the two adjacent segments
     adjusted_TL = list(TL)
     adjusted_TR = list(TR)
     adjusted_BR = list(BR)
     adjusted_BL = list(BL)
     
-    # Scale factor for edge curvature compensation
-    # Higher values (closer to 1.0) give stronger correction
-    corr_scale = 0.55
+    # Conservative: Only adjust if segments agree strongly on a deviation
+    def should_adjust(analysis, min_consistency_px=0.5):
+        """
+        Check if multiple segments agree on a deviation.
+        Return the adjustment if consistent, else 0.
+        """
+        if not analysis['segments'] or len(analysis['segments']) < 2:
+            return 0.0
+        
+        devs = [seg_dev for _, seg_dev in analysis['segments']]
+        # Check if all segments are offset in same direction by similar amount
+        if all(d > min_consistency_px for d in devs) or all(d < -min_consistency_px for d in devs):
+            # Consistent offset - use the average but cap it
+            avg_dev = np.mean(devs)
+            return np.clip(avg_dev, -1.5, 1.5)  # Cap adjustment to ±1.5px
+        elif max(devs) - min(devs) < 0.5:
+            # All segments very close to each other
+            avg_dev = np.mean(devs)
+            if abs(avg_dev) > min_consistency_px:
+                return np.clip(avg_dev, -1.5, 1.5)
+        return 0.0
     
-    # Adjust top corners if top edge is bowed
-    if abs(edge_curvatures['top']) > 0.3:
-        # Top edge is bowed - shift top corners inward/outward to compensate
-        adjusted_TL[1] -= edge_curvatures['top'] * corr_scale
-        adjusted_TR[1] -= edge_curvatures['top'] * corr_scale
+    # Apply conservative adjustments to all edges
+    top_adj = should_adjust(top_analysis)
+    bottom_adj = should_adjust(bottom_analysis)
+    left_adj = should_adjust(left_analysis)
+    right_adj = should_adjust(right_analysis)
     
-    # Adjust bottom corners if bottom edge is bowed
-    if abs(edge_curvatures['bottom']) > 0.3:
-        adjusted_BL[1] -= edge_curvatures['bottom'] * corr_scale
-        adjusted_BR[1] -= edge_curvatures['bottom'] * corr_scale
+    log(f"  Pass {pass_num} conservative adjustments: "
+        f"top={top_adj:+.2f}, bot={bottom_adj:+.2f}, left={left_adj:+.2f}, right={right_adj:+.2f}")
     
-    # Adjust left corners if left edge is bowed
-    if abs(edge_curvatures['left']) > 0.3:
-        adjusted_TL[0] -= edge_curvatures['left'] * corr_scale
-        adjusted_BL[0] -= edge_curvatures['left'] * corr_scale
+    if abs(top_adj) > 0.1:
+        adjusted_TL[1] += top_adj
+        adjusted_TR[1] += top_adj
     
-    # Adjust right corners if right edge is bowed (this is the primary issue)
-    if abs(edge_curvatures['right']) > 0.3:
-        adjusted_TR[0] -= edge_curvatures['right'] * corr_scale
-        adjusted_BR[0] -= edge_curvatures['right'] * corr_scale
+    if abs(bottom_adj) > 0.1:
+        adjusted_BL[1] += bottom_adj
+        adjusted_BR[1] += bottom_adj
+    
+    if abs(left_adj) > 0.1:
+        adjusted_TL[0] += left_adj
+        adjusted_BL[0] += left_adj
+    
+    if abs(right_adj) > 0.1:
+        adjusted_TR[0] += right_adj
+        adjusted_BR[0] += right_adj
     
     # Use adjusted corners for refinement
     TL = tuple(adjusted_TL)
@@ -633,19 +758,11 @@ def refine_warp(img, current_M, warped, scale,
     BR = tuple(adjusted_BR)
     BL = tuple(adjusted_BL)
     
-    log(f"  Pass {pass_num} edge curvatures: "
-        f"top={edge_curvatures['top']:+.2f}, bot={edge_curvatures['bottom']:+.2f}, "
-        f"left={edge_curvatures['left']:+.2f}, right={edge_curvatures['right']:+.2f}")
-    log(f"  Pass {pass_num} corners: "
+    log(f"  Pass {pass_num} corners after dynamic adjustment: "
         f"TL=({TL[0]:.1f},{TL[1]:.1f}) err=({TL[0]-exp_TL[0]:+.1f},{TL[1]-exp_TL[1]:+.1f})  "
         f"TR=({TR[0]:.1f},{TR[1]:.1f}) err=({TR[0]-exp_TR[0]:+.1f},{TR[1]-exp_TR[1]:+.1f})  "
         f"BR=({BR[0]:.1f},{BR[1]:.1f}) err=({BR[0]-exp_BR[0]:+.1f},{BR[1]-exp_BR[1]:+.1f})  "
         f"BL=({BL[0]:.1f},{BL[1]:.1f}) err=({BL[0]-exp_BL[0]:+.1f},{BL[1]-exp_BL[1]:+.1f})")
-    log(f"  Pass {pass_num} border edges (avg): "
-        f"top={top:.2f}(exp={exp_top_avg:.0f},err={top-exp_top_avg:+.2f}), "
-        f"bot={bot:.2f}(exp={exp_bottom_avg:.0f},err={bot-exp_bottom_avg:+.2f}), "
-        f"left={left:.2f}(exp={exp_left_avg:.0f},err={left-exp_left_avg:+.2f}), "
-        f"right={right:.2f}(exp={exp_right_avg:.0f},err={right-exp_right_avg:+.2f})")
 
     # Try refinement even for large errors - it will fail gracefully if homography is degenerate
     try:
@@ -675,6 +792,12 @@ def refine_warp(img, current_M, warped, scale,
         log(f"  Pass {pass_num} refinement failed ({type(e).__name__}), using current warp")
         M_new = current_M
         refined = warped
+
+    # Save debug visualization showing detected borders
+    if debug and debug_dir and stem:
+        _save_border_detection_debug(warped, border_points, TL, TR, BR, BL,
+                                     exp_TL, exp_TR, exp_BR, exp_BL,
+                                     debug_dir, stem, pass_num)
 
     # Detailed border validation
     border_validation = _validate_inner_border(refined, scale, pass_num)
