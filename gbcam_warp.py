@@ -203,15 +203,12 @@ def _first_dark_from_frame(profile, smooth_sigma=1.5):
 
 def _find_border_corners(channel, scale):
     """
-    Detect the four corners of the inner-border rectangle independently.
-
-    Each corner is located using a localised profile in its own quadrant of the
-    image (top-half vs bottom-half rows; left-half vs right-half columns).
-    This captures per-corner residual perspective errors that a single averaged
-    edge measurement misses -- for example when low contrast in one corner causes
-    the border to sit noticeably off from what the global average would imply.
-
-    All four sides still scan FROM the white-frame side for reliability.
+    Detect the four corners of the inner-border rectangle by combining:
+    1. Per-corner localized detection (robust to per-corner variations)
+    2. Validation from the full 9-point edge detection
+    
+    This hybrid approach gives geometrically coherent corners while accounting
+    for edge curvature and per-corner distortions.
 
     Returns (TL, TR, BR, BL) corner (x, y) float pairs.
     """
@@ -219,17 +216,15 @@ def _find_border_corners(channel, scale):
     srch = 6 * scale
 
     # Horizontal midpoint of the camera area (in image pixels)
-    mid_col = (INNER_LEFT + INNER_RIGHT) // 2 * scale   # ≈79*scale
+    mid_col = (INNER_LEFT + INNER_RIGHT) // 2 * scale
     # Vertical midpoint of the camera area (in image pixels)
-    mid_row = (INNER_TOP  + INNER_BOT)   // 2 * scale   # ≈71*scale
+    mid_row = (INNER_TOP  + INNER_BOT)   // 2 * scale
 
     # Localised column bands used when detecting the top / bottom edges
-    # Use wider bands (10-150 instead of 20-140) for better sub-pixel detection
     c_lft = (max(0, 10 * scale),  mid_col)
     c_rgt = (mid_col,     min(W, 150 * scale))
 
     # Localised row bands used when detecting the left / right edges
-    # Use wider bands (10-SCREEN_H-10 instead of 20-SCREEN_H-20) for better sub-pixel detection
     r_top = (max(0, 10 * scale),  mid_row)
     r_bot = (mid_row,     min(H, (SCREEN_H - 10) * scale))
 
@@ -257,12 +252,86 @@ def _find_border_corners(channel, scale):
         idx  = _first_dark_from_frame(prof[::-1])
         return int(c2 - 1) - idx - (scale - 1)
 
+    # Detect corners using per-quadrant localized regions
     tl_y = _top_y(c_lft[0], c_lft[1]);  tr_y = _top_y(c_rgt[0], c_rgt[1])
     bl_y = _bot_y(c_lft[0], c_lft[1]);  br_y = _bot_y(c_rgt[0], c_rgt[1])
     tl_x = _left_x(r_top[0], r_top[1]); bl_x = _left_x(r_bot[0], r_bot[1])
     tr_x = _right_x(r_top[0], r_top[1]); br_x = _right_x(r_bot[0], r_bot[1])
 
-    return (tl_x, tl_y), (tr_x, tr_y), (br_x, br_y), (bl_x, bl_y)
+    TL = (tl_x, tl_y)
+    TR = (tr_x, tr_y)
+    BR = (br_x, br_y)
+    BL = (bl_x, bl_y)
+    
+    # Validate and refine using full edge point detection
+    TL, TR, BR, BL = _refine_corners_with_edge_points(
+        TL, TR, BR, BL, channel, scale
+    )
+    
+    return TL, TR, BR, BL
+
+
+def _refine_corners_with_edge_points(TL, TR, BR, BL, channel, scale):
+    """
+    Refine corner positions using the 9-point edge detection to catch
+    systematic biases (like edges that bow or corners that are off).
+    
+    This uses the edge points as a consensus check, and blends the per-corner
+    detection with information from the full edge.
+    """
+    # Get the full edge point detection
+    border_points = _find_border_points(channel, scale)
+    
+    # Extract edge positions from the detected points
+    # For top edge: average the y positions from detected points
+    if len(border_points.get('top', [])) > 0:
+        top_y_vals = [pt[1] for pt in border_points['top']]
+        # The first points should be near TL
+        tl_y_from_edge = np.mean(top_y_vals[:2])
+        # The last points should be near TR
+        tr_y_from_edge = np.mean(top_y_vals[-2:])
+        
+        # Blend with per-corner detection (20% from edge, 80% from per-corner)
+        # This gives more weight to edge points while preserving per-corner robustness
+        tl_y_new = TL[1] * 0.8 + tl_y_from_edge * 0.2
+        tr_y_new = TR[1] * 0.8 + tr_y_from_edge * 0.2
+        TL = (TL[0], tl_y_new)
+        TR = (TR[0], tr_y_new)
+    
+    # For bottom edge
+    if len(border_points.get('bottom', [])) > 0:
+        bot_y_vals = [pt[1] for pt in border_points['bottom']]
+        bl_y_from_edge = np.mean(bot_y_vals[:2])
+        br_y_from_edge = np.mean(bot_y_vals[-2:])
+        
+        bl_y_new = BL[1] * 0.8 + bl_y_from_edge * 0.2
+        br_y_new = BR[1] * 0.8 + br_y_from_edge * 0.2
+        BL = (BL[0], bl_y_new)
+        BR = (BR[0], br_y_new)
+    
+    # For left edge
+    if len(border_points.get('left', [])) > 0:
+        left_x_vals = [pt[0] for pt in border_points['left']]
+        tl_x_from_edge = np.mean(left_x_vals[:2])
+        bl_x_from_edge = np.mean(left_x_vals[-2:])
+        
+        tl_x_new = TL[0] * 0.8 + tl_x_from_edge * 0.2
+        bl_x_new = BL[0] * 0.8 + bl_x_from_edge * 0.2
+        TL = (tl_x_new, TL[1])
+        BL = (bl_x_new, BL[1])
+    
+    # For right edge
+    if len(border_points.get('right', [])) > 0:
+        right_x_vals = [pt[0] for pt in border_points['right']]
+        tr_x_from_edge = np.mean(right_x_vals[:2])
+        br_x_from_edge = np.mean(right_x_vals[-2:])
+        
+        tr_x_new = TR[0] * 0.8 + tr_x_from_edge * 0.2
+        br_x_new = BR[0] * 0.8 + br_x_from_edge * 0.2
+        TR = (tr_x_new, TR[1])
+        BR = (br_x_new, BR[1])
+    
+    return TL, TR, BR, BL
 
 
 # ---------------------------------------------------------------------------
@@ -495,8 +564,11 @@ def _validate_inner_border(warped, scale, pass_num=1):
 
 def _find_border_points(channel, scale):
     """
-    Detect the inner border not just at the four corners, but at multiple points
-    along each edge. This allows detection of edge curvature/lens distortion.
+    Detect the inner border at multiple points along each edge with robustness
+    against white gap lines and noise.
+    
+    For each edge position, if the detection looks suspicious (far from neighbors),
+    try sampling offset positions and average those results.
     
     Returns a dict with:
       'top': list of (x, y) points along top edge
@@ -561,62 +633,105 @@ def _find_border_points(channel, scale):
             x_pos = int(c2 - 1) - idx - (scale - 1)
             points['right'].append((x_pos, float(row)))
     
-    # Validate and fix outliers in each edge
+    # Fix outliers by re-detecting at offset positions
     for edge_name in ['top', 'right', 'bottom', 'left']:
-        before = points[edge_name]
-        points[edge_name] = _validate_border_points(points[edge_name], edge_name, scale)
-        after = points[edge_name]
-        if len(before) > 0:
-            val_before = [before[i][1] if edge_name in ['top', 'bottom'] else before[i][0] for i in range(len(before))]
-            val_after = [after[i][1] if edge_name in ['top', 'bottom'] else after[i][0] for i in range(len(after))]
-            if val_before != val_after:
-                log(f"    {edge_name}: validation fixed points: {val_before} -> {val_after}")
+        points[edge_name] = _fix_border_outliers(points[edge_name], edge_name, channel, scale)
     
     return points
 
 
-def _validate_border_points(pts, edge_name, scale, max_deviation=10):
+def _fix_border_outliers(pts, edge_name, channel, scale):
     """
-    Validate detected border points and fix major outliers using a median filter.
+    Detect and fix outliers in border points by trying offset positions.
     
-    This approach is robust to spurious detections (like the -40px outlier we saw)
-    while preserving smaller legitimate variations in the edge position.
-    
-    Args:
-        pts: list of (x,y) tuples for the edge points
-        edge_name: 'top', 'bottom', 'left', or 'right'
-        scale: GB pixel scale
-        max_deviation: only fix points this far from median-smoothed value
-        
-    Returns:
-        Validated and corrected list of points
+    When a point is significantly far from neighbors (>3px), re-detect at
+    offset positions (±3-4 pixels along the edge) and use median of those.
+    This helps avoid white gap lines.
     """
     if len(pts) < 3:
         return pts
     
+    H, W = channel.shape
+    srch = 6 * scale
+    exp_left   = INNER_LEFT * scale
+    exp_right  = INNER_RIGHT * scale
+    exp_top    = INNER_TOP * scale
+    exp_bottom = INNER_BOT * scale
+    
+    check_y = edge_name in ['top', 'bottom']
     fixed_pts = list(pts)
     
-    # Determine which coordinate to check (y for top/bottom, x for left/right)
-    check_y = edge_name in ['top', 'bottom']
-    
-    # Extract the position values
-    vals = np.array([pts[i][1] if check_y else pts[i][0] for i in range(len(pts))])
-    
-    # Apply median filter to smooth out spurious points
-    # Use window size of 3 (current point and its neighbors)
-    from scipy.ndimage import median_filter
-    smoothed_vals = median_filter(vals, size=3, mode='nearest')
-    
-    # Check each point against the median-filtered version
-    # Only fix points that are VERY far off (>max_deviation)
-    for i in range(len(vals)):
-        deviation = abs(vals[i] - smoothed_vals[i])
-        if deviation > max_deviation:
-            # This point is an outlier - replace with smoothed value
-            if check_y:
-                fixed_pts[i] = (fixed_pts[i][0], smoothed_vals[i])
-            else:
-                fixed_pts[i] = (smoothed_vals[i], fixed_pts[i][1])
+    # Find outliers
+    for i in range(len(pts)):
+        # Check against neighbors
+        neighbors = []
+        for j in range(max(0, i-1), min(len(pts), i+2)):
+            if j != i:
+                neighbors.append(pts[j][1] if check_y else pts[j][0])
+        
+        if not neighbors:
+            continue
+        
+        median_neighbor = np.median(neighbors)
+        current_val = pts[i][1] if check_y else pts[i][0]
+        deviation = abs(current_val - median_neighbor)
+        
+        # If this point deviates significantly, try re-detecting at offset positions
+        # Use a lower threshold to catch more subtle issues
+        if deviation > 3.0:
+            # Try sampling at ±2, ±3, ±4 positions along the edge
+            alt_positions = [current_val]  # Start with current
+            
+            if edge_name == 'top':
+                col_center = int(pts[i][0])
+                for col_offset in [-4, -3, -2, 2, 3, 4]:
+                    col = np.clip(col_center + col_offset, 0, W - 1)
+                    r1, r2 = max(0, int(exp_top - srch)), min(H, int(exp_top + srch))
+                    if r1 < r2:
+                        prof = channel[int(r1):int(r2), col].astype(float)
+                        y_pos = r1 + _first_dark_from_frame(prof)
+                        alt_positions.append(y_pos)
+                        
+            elif edge_name == 'bottom':
+                col_center = int(pts[i][0])
+                for col_offset in [-4, -3, -2, 2, 3, 4]:
+                    col = np.clip(col_center + col_offset, 0, W - 1)
+                    r1, r2 = max(0, int(exp_bottom - srch)), min(H, int(exp_bottom + srch))
+                    if r1 < r2:
+                        prof = channel[int(r1):int(r2), col].astype(float)
+                        idx = _first_dark_from_frame(prof[::-1])
+                        y_pos = int(r2 - 1) - idx - (scale - 1)
+                        alt_positions.append(y_pos)
+                        
+            elif edge_name == 'left':
+                row_center = int(pts[i][1])
+                for row_offset in [-4, -3, -2, 2, 3, 4]:
+                    row = np.clip(row_center + row_offset, 0, H - 1)
+                    c1, c2 = max(0, int(exp_left - srch)), min(W, int(exp_left + srch))
+                    if c1 < c2:
+                        prof = channel[row, int(c1):int(c2)].astype(float)
+                        x_pos = c1 + _first_dark_from_frame(prof)
+                        alt_positions.append(x_pos)
+                        
+            elif edge_name == 'right':
+                row_center = int(pts[i][1])
+                for row_offset in [-4, -3, -2, 2, 3, 4]:
+                    row = np.clip(row_center + row_offset, 0, H - 1)
+                    c1, c2 = max(0, int(exp_right - srch)), min(W, int(exp_right + srch))
+                    if c1 < c2:
+                        prof = channel[row, int(c1):int(c2)].astype(float)
+                        idx = _first_dark_from_frame(prof[::-1])
+                        x_pos = int(c2 - 1) - idx - (scale - 1)
+                        alt_positions.append(x_pos)
+            
+            # Use median of all alternative positions
+            if len(alt_positions) > 1:
+                corrected_val = np.median(alt_positions)
+                
+                if check_y:
+                    fixed_pts[i] = (fixed_pts[i][0], corrected_val)
+                else:
+                    fixed_pts[i] = (corrected_val, fixed_pts[i][1])
     
     return fixed_pts
 

@@ -40,7 +40,7 @@ PIPELINE RUN
       left-third: +0.45px
       middle-third: -0.24px
       right-third: -0.43px
-    left: overall=-1.81px, min=-4.35px, max=+1.84px
+    left: overall=-1.81px, min=-4.35px, max=+1.83px
       top-third: -2.58px
       middle-third: -2.37px
       bottom-third: -0.49px
@@ -49,54 +49,54 @@ PIPELINE RUN
       middle-third: +2.07px
       bottom-third: +0.34px
   Pass 1 conservative adjustments: top=+0.00, bot=+0.00, left=+0.00, right=+0.00
-  Pass 1 corners after dynamic adjustment: TL=(118.3,119.5) err=(-1.7,-0.5)  TR=(1154.0,119.8) err=(+2.0,-0.2)  BR=(1153.4,1023.5) err=(+1.4,-0.5)  BL=(118.3,1023.5) err=(-1.7,-0.5)
-  Pass 1 src corners: [[18, 21], [1246, 22], [1218, 1099], [32, 1103]]
+  Pass 1 corners after dynamic adjustment: TL=(118.0,119.6) err=(-2.0,-0.4)  TR=(1153.9,119.7) err=(+1.9,-0.3)  BR=(1153.1,1023.5) err=(+1.1,-0.5)  BL=(118.6,1023.7) err=(-1.4,-0.3)
+  Pass 1 src corners: [[18, 21], [1246, 22], [1218, 1099], [33, 1103]]
     Saved border detection debug: warp_c_pass1_border_detection.png
   Pass 1 inner border validation:
     TL: expected=(120,120) detected=(126,126) error=(+6.0,+6.0) pixels
     TR: expected=(1152,120) detected=(1152,120) error=(+0.0,+0.0) pixels
-    BL: expected=(120,1024) detected=(125,1026) error=(+5.0,+2.0) pixels
+    BL: expected=(120,1024) detected=(125,1027) error=(+5.0,+3.0) pixels
     BR: expected=(1152,1024) detected=(1154,1027) error=(+2.0,+3.0) pixels
-    bottom edge straight: {'range': (np.int64(128), np.int64(1152)), 'variance': 103774.08805325054}
-    right edge straight: {'range': (np.int64(848), np.int64(1026)), 'variance': 2669.387158785083}
+    bottom edge straight: {'range': (np.int64(141), np.int64(1152)), 'variance': 104724.28772320045}
+    right edge straight: {'range': (np.int64(848), np.int64(1026)), 'variance': 3139.753388429752}
   Pass 1 frame edge verification:
     [verify] top      edge: error=105.5 (expect~[165, 255, 255], actual~[214, 193, 184]) [WARN]
     [verify] bottom   edge: error=90.7 (expect~[165, 255, 255], actual~[217, 200, 205]) [WARN]
-    [verify] left     edge: error=88.7 (expect~[165, 255, 255], actual~[207, 191, 209]) [WARN]
+    [verify] left     edge: error=88.7 (expect~[165, 255, 255], actual~[207, 192, 209]) [WARN]
     [verify] right    edge: error=110.5 (expect~[165, 255, 255], actual~[194, 174, 185]) [WARN]
   c -- Refining (pass 2)
   Pass 2 edge analysis (segment deviations):
-    top: overall=-0.32px, min=-2.00px, max=+0.68px
-      left-third: +0.29px
-      middle-third: -1.06px
-      right-third: -0.18px
-    bottom: overall=+0.63px, min=-0.62px, max=+2.06px
-      left-third: +1.23px
-      middle-third: +0.30px
-      right-third: +0.36px
-    left: overall=-0.06px, min=-2.98px, max=+3.99px
-      top-third: -0.99px
-      middle-third: -0.54px
-      bottom-third: +1.34px
-    right: overall=-0.25px, min=-2.03px, max=+1.26px
-      top-third: -0.10px
-      middle-third: +0.41px
-      bottom-third: -1.04px
+    top: overall=-0.31px, min=-1.81px, max=+0.68px
+      left-third: +0.04px
+      middle-third: -0.94px
+      right-third: -0.03px
+    bottom: overall=+0.48px, min=-0.67px, max=+1.32px
+      left-third: +1.02px
+      middle-third: +0.24px
+      right-third: +0.19px
+    left: overall=-0.11px, min=-2.31px, max=+3.21px
+      top-third: -0.74px
+      middle-third: -0.59px
+      bottom-third: +1.00px
+    right: overall=-0.09px, min=-1.80px, max=+1.39px
+      top-third: -0.07px
+      middle-third: +0.60px
+      bottom-third: -0.80px
   Pass 2 conservative adjustments: top=+0.00, bot=+0.00, left=+0.00, right=+0.00
-  Pass 2 corners after dynamic adjustment: TL=(120.0,119.9) err=(+0.0,-0.1)  TR=(1152.1,120.1) err=(+0.1,+0.1)  BR=(1151.8,1024.0) err=(-0.2,+0.0)  BL=(120.0,1024.1) err=(-0.0,+0.1)
-  Pass 2 src corners: [[18, 21], [1246, 22], [1218, 1099], [32, 1103]]
+  Pass 2 corners after dynamic adjustment: TL=(119.9,119.9) err=(-0.1,-0.1)  TR=(1152.1,120.1) err=(+0.1,+0.1)  BR=(1151.8,1024.0) err=(-0.2,-0.0)  BL=(120.1,1024.2) err=(+0.1,+0.2)
+  Pass 2 src corners: [[18, 21], [1246, 22], [1217, 1099], [33, 1103]]
     Saved border detection debug: warp_c_pass2_border_detection.png
   Pass 2 inner border validation:
     TL: expected=(120,120) detected=(126,126) error=(+6.0,+6.0) pixels
     TR: expected=(1152,120) detected=(1152,120) error=(+0.0,+0.0) pixels
     BL: expected=(120,1024) detected=(125,1026) error=(+5.0,+2.0) pixels
     BR: expected=(1152,1024) detected=(1154,1027) error=(+2.0,+3.0) pixels
-    bottom edge straight: {'range': (np.int64(128), np.int64(1152)), 'variance': 105285.06549788543}
-    right edge straight: {'range': (np.int64(847), np.int64(1026)), 'variance': 3304.5175382653065}
+    bottom edge straight: {'range': (np.int64(150), np.int64(1153)), 'variance': 105332.2006839005}
+    right edge straight: {'range': (np.int64(841), np.int64(1026)), 'variance': 3264.953388429752}
   Pass 2 frame edge verification:
     [verify] top      edge: error=105.5 (expect~[165, 255, 255], actual~[214, 193, 184]) [WARN]
     [verify] bottom   edge: error=90.7 (expect~[165, 255, 255], actual~[217, 200, 205]) [WARN]
-    [verify] left     edge: error=88.7 (expect~[165, 255, 255], actual~[207, 191, 209]) [WARN]
+    [verify] left     edge: error=88.6 (expect~[165, 255, 255], actual~[207, 191, 209]) [WARN]
     [verify] right    edge: error=110.6 (expect~[165, 255, 255], actual~[194, 174, 185]) [WARN]
     [debug] test-output\thing-2\debug\thing-2__warp_d_refined_color.png
   Saved -> test-output\thing-2\thing-2_warp.png  (colour BGR)
@@ -105,19 +105,19 @@ PIPELINE RUN
 [correct/color] test-output\thing-2\thing-2_warp.png
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
-    R refinement: 9018 interior DG pixels
-      DG[3,3]: raw=150.6 coons=153.0 corr=146.6
-      DG[3,4]: raw=155.8 coons=152.4 corr=144.7
-      DG[3,5]: raw=154.1 coons=152.1 corr=150.7
-      DG[3,6]: raw=166.1 coons=152.2 corr=161.5
-      DG[3,7]: raw=149.8 coons=151.7 corr=152.5
+    R refinement: 8918 interior DG pixels
+      DG[3,3]: raw=150.8 coons=153.8 corr=146.9
+      DG[3,4]: raw=155.1 coons=153.2 corr=143.6
+      DG[3,5]: raw=154.1 coons=152.8 corr=149.6
+      DG[3,6]: raw=165.6 coons=153.0 corr=160.3
+      DG[3,7]: raw=150.9 coons=152.5 corr=152.7
   G: Coons+poly -> 255 / 148
-    G refinement: 10042 interior DG pixels
+    G refinement: 10050 interior DG pixels
   B: white-surface normalisation -> 165 (no global scaling)
-  Frame p85 before norm: R=255 G=248 B=166
-  Global scales: R=1.0000 G=1.0281 B=1.0000
+  Frame p85 before norm: R=255 G=249 B=167
+  Global scales: R=1.0000 G=1.0235 B=1.0000
   Saved -> test-output\thing-2\thing-2_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=165.1 G=146.7 B=169.3
+  Camera area mean: R=164.3 G=146.3 B=169.8
     [debug] test-output\thing-2\debug\thing-2_warp__correct_color_a_before_after.png
     [debug] test-output\thing-2\debug\thing-2_warp__correct_color_b_white_surf_heatmap.png
     [debug] test-output\thing-2\debug\thing-2_warp__correct_color_c_full.png
@@ -127,7 +127,7 @@ PIPELINE RUN
 [crop] test-output\thing-2\thing-2_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=151.4, white frame mean=222.7 (OK)
+  Validation: inner border mean=151.3, white frame mean=222.1 (OK)
     [debug] test-output\thing-2\debug\thing-2_correct__crop_a_region.png
   Saved -> test-output\thing-2\thing-2_crop.png  (1024×896 px)
 
@@ -137,112 +137,100 @@ PIPELINE RUN
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
   Saved -> test-output\thing-2\thing-2_sample.png  (colour, subpixel-aware, 128×112 px)
-  R: 46–255  G: 0–255  B: 90–204
+  R: 45–255  G: 0–255  B: 91–207
 
 ============================================================
 [quantize/color] test-output\thing-2\thing-2_sample.png
   Loaded 128x112 colour sample
-  Global k-means RG: BK(1335)~(R98,G41,B124)  DG(8937)~(R149,G148,B179)  LG(2329)~(R214,G165,B151)  WH(1735)~(R234,G240,B157)
-  Strip ensemble: 7 strips, changed 514 px
-  G-valley threshold: 215.0  (LG centre 166.0, WH centre 240.8)
-  G-valley refinement (post-strip): threshold=215.0, changed 179 px
-  Final labels: BK(1336)~(R98,G41,B124)  DG(8590)~(R148,G147,B179)  LG(2719)~(R210,G165,B155)  WH(1691)~(R234,G241,B157)
+  Global k-means RG: BK(1333)~(R97,G40,B124)  DG(8942)~(R149,G147,B180)  LG(2351)~(R214,G164,B151)  WH(1710)~(R234,G240,B157)
+  Strip ensemble: 7 strips, changed 459 px
+  G-valley threshold: 215.0  (LG centre 164.6, WH centre 240.7)
+  G-valley refinement (post-strip): threshold=215.0, changed 129 px
+  Final labels: BK(1336)~(R97,G40,B124)  DG(8613)~(R148,G147,B180)  LG(2702)~(R210,G163,B154)  WH(1685)~(R234,G241,B157)
   Classification: strip-kmeans-RG+G-valley
   Saved -> test-output\thing-2\thing-2_gbcam.png
   Saved -> test-output\thing-2\thing-2_gbcam_rgb.png
   BK:  1336 px (  9.3%)
-  DG:  8590 px ( 59.9%)
-  LG:  2719 px ( 19.0%)
-  WH:  1691 px ( 11.8%)
+  DG:  8613 px ( 60.1%)
+  LG:  2702 px ( 18.8%)
+  WH:  1685 px ( 11.8%)
     [debug] test-output\thing-2\debug\thing-2_sample__quantize_color_a_gray_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14253  (99.42%)
-  Different    : 83   (0.58%)
+  Matching     : 14264  (99.50%)
+  Different    : 72   (0.50%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1336        1336        +0
-  DG  #9494FF                 8590        8626       -36
-  LG  #FF9494                 2719        2690       +29
-  WH  #FFFFA5                 1691        1684        +7
+  DG  #9494FF                 8613        8626       -13
+  LG  #FF9494                 2702        2690       +12
+  WH  #FFFFA5                 1685        1684        +1
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1336 v                0                  0                  0      1336
-  DG  #9494FF                       0               8570 v               20 X                0      8590
-  LG  #FF9494                       0                 56 X             2663 v                0      2719
-  WH  #FFFFA5                       0                  0                  7 X             1684 v    1691
+  DG  #9494FF                       0               8584 v               29 X                0      8613
+  LG  #FF9494                       0                 42 X             2660 v                0      2702
+  WH  #FFFFA5                       0                  0                  1 X             1684 v    1685
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  DG  #9494FF  ->  LG  #FF9494 : 20 px
-  LG  #FF9494  ->  DG  #9494FF : 56 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 7 px
+  DG  #9494FF  ->  LG  #FF9494 : 29 px
+  LG  #FF9494  ->  DG  #9494FF : 42 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 1 px
 
 ----------------------------------------------------------------------
 SPATIAL DISTRIBUTION OF ERRORS
 ----------------------------------------------------------------------
   Errors per row (0–111):
-    row   0 :    1  #
-    row   1 :    1  #
-    row   2 :    1  #
     row   3 :    2  ##
-    row   4 :    2  ##
+    row   4 :    1  #
     row   5 :    1  #
-    row   6 :    1  #
-    row   9 :    2  ##
     row  10 :    1  #
     row  11 :    1  #
     row  13 :    1  #
     row  15 :    1  #
     row  17 :    2  ##
-    row  18 :    1  #
     row  19 :    1  #
     row  21 :    3  ###
-    row  23 :    3  ###
-    row  25 :    1  #
+    row  23 :    2  ##
+    row  28 :    1  #
     row  29 :    1  #
-    row  30 :    1  #
-    row  31 :    2  ##
-    row  32 :    2  ##
-    row  33 :    1  #
+    row  30 :    2  ##
+    row  31 :    1  #
+    row  32 :    3  ###
     row  35 :    1  #
     row  36 :    1  #
     row  37 :    1  #
-    row  38 :    2  ##
-    row  39 :    1  #
-    row  40 :    1  #
+    row  38 :    3  ###
+    row  40 :    3  ###
     row  42 :    3  ###
-    row  44 :    5  #####
+    row  44 :    6  ######
     row  45 :    1  #
-    row  46 :    2  ##
-    row  47 :    1  #
+    row  46 :    3  ###
     row  48 :    2  ##
     row  49 :    1  #
     row  50 :    1  #
     row  51 :    1  #
     row  53 :    1  #
     row  55 :    1  #
-    row  59 :    1  #
     row  61 :    2  ##
-    row  63 :    3  ###
+    row  63 :    2  ##
     row  65 :    2  ##
     row  69 :    2  ##
     row  71 :    1  #
     row  73 :    1  #
-    row  75 :    1  #
     row  78 :    1  #
-    row  79 :    2  ##
-    row  80 :    1  #
+    row  79 :    1  #
     row  81 :    2  ##
     row  83 :    1  #
     row  87 :    1  #
@@ -250,77 +238,69 @@ SPATIAL DISTRIBUTION OF ERRORS
     row 103 :    1  #
     row 109 :    1  #
   Errors per column (0–127):
-    col   0 :   26  ##########################
-    col   2 :    3  ###
-    col   4 :    2  ##
-    col   6 :    2  ##
-    col   8 :    1  #
+    col   0 :   21  #####################
+    col   2 :    2  ##
+    col   4 :    3  ###
+    col   6 :    4  ####
+    col   8 :    2  ##
     col  10 :    3  ###
-    col  12 :    4  ####
+    col  12 :    3  ###
     col  14 :    1  #
-    col  18 :    2  ##
+    col  18 :    3  ###
+    col  20 :    1  #
     col  22 :    1  #
-    col  24 :    3  ###
+    col  24 :    4  ####
     col  28 :    1  #
-    col  30 :    3  ###
+    col  30 :    1  #
     col  32 :    2  ##
     col  34 :    1  #
     col  36 :    2  ##
     col  38 :    1  #
     col  40 :    2  ##
     col  42 :    2  ##
-    col  75 :    1  #
     col  77 :    1  #
     col  79 :    2  ##
     col  89 :    1  #
     col  93 :    1  #
-    col 115 :    1  #
-    col 125 :    4  ####
-    col 127 :   10  ##########
+    col 125 :    1  #
+    col 127 :    6  ######
 
 ----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (83 errors, sorted by row then column)
+FULL PIXEL ERROR LIST  (72 errors, sorted by row then column)
 ----------------------------------------------------------------------
    row   col              result           reference
-     0   115         WH  #FFFFA5         LG  #FF9494
-     1    12         LG  #FF9494         DG  #9494FF
-     2   125         WH  #FFFFA5         LG  #FF9494
      3     2         LG  #FF9494         DG  #9494FF
      3    12         LG  #FF9494         DG  #9494FF
      4   125         WH  #FFFFA5         LG  #FF9494
-     4   127         WH  #FFFFA5         LG  #FF9494
      5    30         LG  #FF9494         DG  #9494FF
-     6   125         WH  #FFFFA5         LG  #FF9494
-     9     2         LG  #FF9494         DG  #9494FF
-     9   127         LG  #FF9494         DG  #9494FF
-    10   127         WH  #FFFFA5         LG  #FF9494
+    10     6         DG  #9494FF         LG  #FF9494
     11   127         LG  #FF9494         DG  #9494FF
     13   127         LG  #FF9494         DG  #9494FF
     15   127         LG  #FF9494         DG  #9494FF
     17     8         LG  #FF9494         DG  #9494FF
     17    22         LG  #FF9494         DG  #9494FF
-    18   125         WH  #FFFFA5         LG  #FF9494
     19   127         LG  #FF9494         DG  #9494FF
     21     0         LG  #FF9494         DG  #9494FF
     21    28         LG  #FF9494         DG  #9494FF
     21   127         LG  #FF9494         DG  #9494FF
-    23    24         LG  #FF9494         DG  #9494FF
     23    77         LG  #FF9494         DG  #9494FF
     23   127         LG  #FF9494         DG  #9494FF
-    25   127         LG  #FF9494         DG  #9494FF
+    28     8         DG  #9494FF         LG  #FF9494
     29     0         LG  #FF9494         DG  #9494FF
+    30     4         DG  #9494FF         LG  #FF9494
     30     6         DG  #9494FF         LG  #FF9494
     31     0         LG  #FF9494         DG  #9494FF
-    31    30         LG  #FF9494         DG  #9494FF
+    32     6         DG  #9494FF         LG  #FF9494
     32    36         DG  #9494FF         LG  #FF9494
     32    38         DG  #9494FF         LG  #FF9494
-    33     0         LG  #FF9494         DG  #9494FF
     35     0         LG  #FF9494         DG  #9494FF
     36    42         DG  #9494FF         LG  #FF9494
     37     0         LG  #FF9494         DG  #9494FF
+    38    24         DG  #9494FF         LG  #FF9494
     38    40         DG  #9494FF         LG  #FF9494
     38    42         DG  #9494FF         LG  #FF9494
-    39     0         LG  #FF9494         DG  #9494FF
+    40    20         DG  #9494FF         LG  #FF9494
+    40    24         DG  #9494FF         LG  #FF9494
     40    40         DG  #9494FF         LG  #FF9494
     42     4         DG  #9494FF         LG  #FF9494
     42    18         DG  #9494FF         LG  #FF9494
@@ -328,12 +308,13 @@ FULL PIXEL ERROR LIST  (83 errors, sorted by row then column)
     44     4         DG  #9494FF         LG  #FF9494
     44    10         DG  #9494FF         LG  #FF9494
     44    12         DG  #9494FF         LG  #FF9494
+    44    18         DG  #9494FF         LG  #FF9494
     44    24         DG  #9494FF         LG  #FF9494
     44    34         DG  #9494FF         LG  #FF9494
     45     0         LG  #FF9494         DG  #9494FF
+    46    10         DG  #9494FF         LG  #FF9494
     46    18         DG  #9494FF         LG  #FF9494
     46    32         DG  #9494FF         LG  #FF9494
-    47     0         LG  #FF9494         DG  #9494FF
     48    32         DG  #9494FF         LG  #FF9494
     48    36         DG  #9494FF         LG  #FF9494
     49     0         LG  #FF9494         DG  #9494FF
@@ -341,11 +322,9 @@ FULL PIXEL ERROR LIST  (83 errors, sorted by row then column)
     51     0         LG  #FF9494         DG  #9494FF
     53     0         LG  #FF9494         DG  #9494FF
     55     0         LG  #FF9494         DG  #9494FF
-    59     0         LG  #FF9494         DG  #9494FF
     61     0         LG  #FF9494         DG  #9494FF
     61    93         LG  #FF9494         DG  #9494FF
     63     0         LG  #FF9494         DG  #9494FF
-    63    30         LG  #FF9494         DG  #9494FF
     63    79         LG  #FF9494         DG  #9494FF
     65     0         LG  #FF9494         DG  #9494FF
     65     2         LG  #FF9494         DG  #9494FF
@@ -353,11 +332,8 @@ FULL PIXEL ERROR LIST  (83 errors, sorted by row then column)
     69    10         LG  #FF9494         DG  #9494FF
     71     0         LG  #FF9494         DG  #9494FF
     73     0         LG  #FF9494         DG  #9494FF
-    75     0         LG  #FF9494         DG  #9494FF
     78    89         LG  #FF9494         DG  #9494FF
     79     0         LG  #FF9494         DG  #9494FF
-    79    10         LG  #FF9494         DG  #9494FF
-    80    75         LG  #FF9494         DG  #9494FF
     81     0         LG  #FF9494         DG  #9494FF
     81    79         LG  #FF9494         DG  #9494FF
     83     0         LG  #FF9494         DG  #9494FF
@@ -378,12 +354,12 @@ DIAGNOSTIC IMAGES  (in test-output\thing-2)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14253  (99.42%)
-  Different    : 83   (0.58%)
+  Matching     : 14264  (99.50%)
+  Different    : 72   (0.50%)
   BK  #000000                 1336        1336        +0
-  DG  #9494FF                 8590        8626       -36
-  LG  #FF9494                 2719        2690       +29
-  WH  #FFFFA5                 1691        1684        +7
+  DG  #9494FF                 8613        8626       -13
+  LG  #FF9494                 2702        2690       +12
+  WH  #FFFFA5                 1685        1684        +1
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
