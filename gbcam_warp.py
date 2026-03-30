@@ -683,7 +683,7 @@ def _fix_border_outliers(pts, edge_name, channel, scale):
         
         # If this point deviates significantly, try re-detecting at offset positions
         # Use a lower threshold to catch more subtle issues
-        if deviation > 3.0:
+        if deviation > 2.5:
             # Try sampling at ±2, ±3, ±4 positions along the edge
             alt_positions = [current_val]  # Start with current
             
