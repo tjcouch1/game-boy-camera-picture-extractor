@@ -51,7 +51,7 @@ PIPELINE RUN
       middle-third: +4.13px
       bottom-third: +3.70px
   Pass 1 conservative adjustments: top=-0.80, bot=+0.00, left=-1.50, right=+1.50
-  Pass 1 corners after dynamic adjustment: TL=(115.6,118.3) err=(-4.4,-1.7)  TR=(1157.6,118.4) err=(+5.6,-1.6)  BR=(1157.4,1025.2) err=(+5.4,+1.2)  BL=(116.6,1024.3) err=(-3.4,+0.3)
+  Pass 1 corners after dynamic adjustment: TL=(115.6,118.3) err=(-4.4,-1.7)  TR=(1157.6,118.4) err=(+5.6,-1.6)  BR=(1157.4,1025.2) err=(+5.4,+1.2)  BL=(116.6,1024.2) err=(-3.4,+0.2)
   Pass 1 src corners: [[18, 17], [1276, 31], [1261, 1156], [12, 1152]]
     Saved border detection debug: warp_c_pass1_border_detection.png
   Pass 1 inner border validation:
@@ -59,35 +59,35 @@ PIPELINE RUN
     TR: expected=(1152,120) detected=(1152,121) error=(+0.0,+1.0) pixels
     BL: expected=(120,1024) detected=(123,1031) error=(+3.0,+7.0) pixels
     BR: expected=(1152,1024) detected=(1164,1032) error=(+12.0,+8.0) pixels
-    top edge straight: {'range': (np.int64(121), np.int64(1248)), 'variance': 108340.19270833333}
-    bottom edge straight: {'range': (np.int64(13), np.int64(1267)), 'variance': 176253.40387755103}
+    top edge straight: {'range': (np.int64(121), np.int64(1248)), 'variance': 111075.49305555556}
+    bottom edge straight: {'range': (np.int64(13), np.int64(1267)), 'variance': 178844.87676487828}
     left edge straight: {'range': (np.int64(129), np.int64(1111)), 'variance': 214076.22222222222}
-    right edge straight: {'range': (np.int64(122), np.int64(1151)), 'variance': 47275.54296046888}
+    right edge straight: {'range': (np.int64(122), np.int64(1151)), 'variance': 47441.73427300332}
   Pass 1 frame edge verification:
     [verify] top      edge: error=94.2 (expect~[165, 255, 255], actual~[157, 171, 212]) [WARN]
     [verify] bottom   edge: error=70.6 (expect~[165, 255, 255], actual~[165, 186, 239]) [WARN]
-    [verify] left     edge: error=99.7 (expect~[165, 255, 255], actual~[133, 165, 225]) [WARN]
+    [verify] left     edge: error=99.5 (expect~[165, 255, 255], actual~[133, 165, 225]) [WARN]
     [verify] right    edge: error=101.9 (expect~[165, 255, 255], actual~[148, 161, 217]) [WARN]
   c -- Refining (pass 2)
   Pass 2 edge analysis (segment deviations):
-    top: overall=+1.01px, min=-0.07px, max=+2.49px
-      left-third: +1.24px
-      middle-third: +0.47px
+    top: overall=+1.04px, min=-0.11px, max=+2.80px
+      left-third: +1.33px
+      middle-third: +0.46px
       right-third: +1.32px
-    bottom: overall=-0.02px, min=-0.90px, max=+0.56px
-      left-third: -0.13px
-      middle-third: +0.18px
-      right-third: -0.12px
-    left: overall=+1.59px, min=+0.70px, max=+2.92px
-      top-third: +0.97px
-      middle-third: +2.34px
+    bottom: overall=+0.00px, min=-0.89px, max=+0.56px
+      left-third: -0.09px
+      middle-third: +0.20px
+      right-third: -0.10px
+    left: overall=+1.57px, min=+0.70px, max=+2.91px
+      top-third: +0.94px
+      middle-third: +2.32px
       bottom-third: +1.44px
     right: overall=-1.50px, min=-2.02px, max=-1.01px
       top-third: -1.35px
-      middle-third: -1.44px
+      middle-third: -1.43px
       bottom-third: -1.72px
   Pass 2 conservative adjustments: top=+0.00, bot=+0.00, left=+1.50, right=-1.50
-  Pass 2 corners after dynamic adjustment: TL=(122.8,120.9) err=(+2.8,+0.9)  TR=(1149.0,120.9) err=(-3.0,+0.9)  BR=(1148.9,1024.2) err=(-3.1,+0.2)  BL=(123.2,1023.9) err=(+3.2,-0.1)
+  Pass 2 corners after dynamic adjustment: TL=(122.8,121.0) err=(+2.8,+1.0)  TR=(1149.0,120.9) err=(-3.0,+0.9)  BR=(1148.9,1024.2) err=(-3.1,+0.2)  BL=(123.2,1023.9) err=(+3.2,-0.1)
   Pass 2 src corners: [[21, 18], [1273, 32], [1257, 1156], [16, 1151]]
     Saved border detection debug: warp_c_pass2_border_detection.png
   Pass 2 inner border validation:
@@ -95,14 +95,14 @@ PIPELINE RUN
     TR: expected=(1152,120) detected=(1155,120) error=(+3.0,+0.0) pixels
     BL: expected=(120,1024) detected=(120,1031) error=(+0.0,+7.0) pixels
     BR: expected=(1152,1024) detected=(1167,1032) error=(+15.0,+8.0) pixels
-    top edge straight: {'range': (np.int64(118), np.int64(1252)), 'variance': 104148.81420898438}
-    bottom edge straight: {'range': (np.int64(9), np.int64(1270)), 'variance': 138559.1605764634}
-    left edge straight: {'range': (np.int64(125), np.int64(1103)), 'variance': 39479.55669654348}
-    right edge straight: {'range': (np.int64(130), np.int64(1150)), 'variance': 69686.8775585507}
+    top edge straight: {'range': (np.int64(118), np.int64(1252)), 'variance': 100667.65830449827}
+    bottom edge straight: {'range': (np.int64(9), np.int64(1270)), 'variance': 142816.231936}
+    left edge straight: {'range': (np.int64(125), np.int64(1103)), 'variance': 37915.648411050555}
+    right edge straight: {'range': (np.int64(130), np.int64(1150)), 'variance': 69613.01239533581}
   Pass 2 frame edge verification:
-    [verify] top      edge: error=90.5 (expect~[165, 255, 255], actual~[160, 174, 214]) [WARN]
+    [verify] top      edge: error=90.4 (expect~[165, 255, 255], actual~[160, 174, 214]) [WARN]
     [verify] bottom   edge: error=70.1 (expect~[165, 255, 255], actual~[166, 186, 239]) [WARN]
-    [verify] left     edge: error=92.8 (expect~[165, 255, 255], actual~[145, 168, 226]) [WARN]
+    [verify] left     edge: error=92.9 (expect~[165, 255, 255], actual~[145, 168, 226]) [WARN]
     [verify] right    edge: error=102.5 (expect~[165, 255, 255], actual~[143, 161, 219]) [WARN]
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1__warp_d_refined_color.png
   Saved -> test-output\zelda-poster-1\zelda-poster-1_warp.png  (colour BGR)
@@ -112,18 +112,18 @@ PIPELINE RUN
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
     R refinement: 3559 interior DG pixels
-      DG[4,3]: raw=111.5 coons=87.4 corr=183.1
-      DG[6,21]: raw=75.6 coons=83.5 corr=155.2
-      DG[7,21]: raw=84.5 coons=83.3 corr=181.9
-      DG[7,22]: raw=56.2 coons=82.3 corr=101.9
-      DG[7,25]: raw=89.0 coons=82.0 corr=179.1
+      DG[4,3]: raw=111.2 coons=87.3 corr=182.1
+      DG[6,21]: raw=75.4 coons=83.0 corr=155.8
+      DG[7,21]: raw=84.1 coons=82.8 corr=182.5
+      DG[7,22]: raw=56.1 coons=81.7 corr=102.6
+      DG[7,25]: raw=88.8 coons=81.4 corr=179.7
   G: Coons+poly -> 255 / 148
-    G refinement: 7195 interior DG pixels
+    G refinement: 7194 interior DG pixels
   B: white-surface normalisation -> 165 (no global scaling)
-  Frame p85 before norm: R=255 G=240 B=174
-  Global scales: R=1.0000 G=1.0619 B=1.0000
+  Frame p85 before norm: R=255 G=240 B=173
+  Global scales: R=1.0000 G=1.0611 B=1.0000
   Saved -> test-output\zelda-poster-1\zelda-poster-1_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=180.8 G=152.9 B=158.1
+  Camera area mean: R=180.8 G=152.8 B=158.1
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_a_before_after.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_b_white_surf_heatmap.png
     [debug] test-output\zelda-poster-1\debug\zelda-poster-1_warp__correct_color_c_full.png
@@ -143,16 +143,16 @@ PIPELINE RUN
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
   Saved -> test-output\zelda-poster-1\zelda-poster-1_sample.png  (colour, subpixel-aware, 128×112 px)
-  R: 13–255  G: 0–255  B: 77–178
+  R: 13–255  G: 0–255  B: 76–178
 
 ============================================================
 [quantize/color] test-output\zelda-poster-1\zelda-poster-1_sample.png
   Loaded 128x112 colour sample
-  Global k-means RG: BK(1572)~(R62,G27,B123)  DG(3522)~(R147,G147,B159)  LG(4240)~(R238,G157,B139)  WH(5002)~(R246,G250,B151)
+  Global k-means RG: BK(1572)~(R62,G28,B123)  DG(3522)~(R147,G147,B159)  LG(4239)~(R238,G157,B139)  WH(5003)~(R246,G250,B151)
   Strip ensemble: 7 strips, changed 17 px
-  G-valley threshold: 218.0  (LG centre 157.7, WH centre 250.4)
-  G-valley refinement (post-strip): threshold=218.0, changed 2 px
-  Final labels: BK(1572)~(R62,G27,B123)  DG(3522)~(R147,G147,B159)  LG(4259)~(R238,G157,B139)  WH(4983)~(R246,G250,B151)
+  G-valley threshold: 218.0  (LG centre 157.7, WH centre 250.3)
+  G-valley refinement (post-strip): threshold=218.0, changed 3 px
+  Final labels: BK(1572)~(R62,G28,B123)  DG(3522)~(R147,G147,B159)  LG(4259)~(R238,G157,B139)  WH(4983)~(R246,G250,B151)
   Classification: strip-kmeans-RG+G-valley
   Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam.png
   Saved -> test-output\zelda-poster-1\zelda-poster-1_gbcam_rgb.png

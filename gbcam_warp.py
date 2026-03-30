@@ -277,7 +277,8 @@ def _refine_corners_with_edge_points(TL, TR, BR, BL, channel, scale):
     systematic biases (like edges that bow or corners that are off).
     
     This uses the edge points as a consensus check, and blends the per-corner
-    detection with information from the full edge.
+    detection with information from the full edge. Bottom and right edges
+    often have the most curvature, so we use higher blend ratios there.
     """
     # Get the full edge point detection
     border_points = _find_border_points(channel, scale)
@@ -291,8 +292,7 @@ def _refine_corners_with_edge_points(TL, TR, BR, BL, channel, scale):
         # The last points should be near TR
         tr_y_from_edge = np.mean(top_y_vals[-2:])
         
-        # Blend with per-corner detection (20% from edge, 80% from per-corner)
-        # This gives more weight to edge points while preserving per-corner robustness
+        # Use modest blend ratio for top edge (20% from edge)
         tl_y_new = TL[1] * 0.8 + tl_y_from_edge * 0.2
         tr_y_new = TR[1] * 0.8 + tr_y_from_edge * 0.2
         TL = (TL[0], tl_y_new)
@@ -304,8 +304,10 @@ def _refine_corners_with_edge_points(TL, TR, BR, BL, channel, scale):
         bl_y_from_edge = np.mean(bot_y_vals[:2])
         br_y_from_edge = np.mean(bot_y_vals[-2:])
         
-        bl_y_new = BL[1] * 0.8 + bl_y_from_edge * 0.2
-        br_y_new = BR[1] * 0.8 + br_y_from_edge * 0.2
+        # Use higher blend ratio for bottom edge (25% from edge)
+        # Bottom edge often has most curvature
+        bl_y_new = BL[1] * 0.75 + bl_y_from_edge * 0.25
+        br_y_new = BR[1] * 0.75 + br_y_from_edge * 0.25
         BL = (BL[0], bl_y_new)
         BR = (BR[0], br_y_new)
     
@@ -315,8 +317,9 @@ def _refine_corners_with_edge_points(TL, TR, BR, BL, channel, scale):
         tl_x_from_edge = np.mean(left_x_vals[:2])
         bl_x_from_edge = np.mean(left_x_vals[-2:])
         
-        tl_x_new = TL[0] * 0.8 + tl_x_from_edge * 0.2
-        bl_x_new = BL[0] * 0.8 + bl_x_from_edge * 0.2
+        # Use modest blend ratio for left edge (15% from edge)
+        tl_x_new = TL[0] * 0.85 + tl_x_from_edge * 0.15
+        bl_x_new = BL[0] * 0.85 + bl_x_from_edge * 0.15
         TL = (tl_x_new, TL[1])
         BL = (bl_x_new, BL[1])
     
@@ -326,6 +329,8 @@ def _refine_corners_with_edge_points(TL, TR, BR, BL, channel, scale):
         tr_x_from_edge = np.mean(right_x_vals[:2])
         br_x_from_edge = np.mean(right_x_vals[-2:])
         
+        # Use moderate blend ratio for right edge (20% from edge)
+        # Right edge often has curvature
         tr_x_new = TR[0] * 0.8 + tr_x_from_edge * 0.2
         br_x_new = BR[0] * 0.8 + br_x_from_edge * 0.2
         TR = (tr_x_new, TR[1])
