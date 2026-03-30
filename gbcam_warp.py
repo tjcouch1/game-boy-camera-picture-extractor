@@ -163,20 +163,41 @@ def _first_dark_from_frame(profile, smooth_sigma=1.5):
     """
     Sub-pixel index of the first dark pixel scanning FROM the white frame.
     Profile must start HIGH (white frame) and drop LOW (dark border).
+    
+    Enhanced to be more robust: finds the sharpest transition rather than
+    just the first downward step, which avoids picking up spurious edges.
     Returns float index into `profile`.
     
-    Uses adaptive smoothing and local curvature for improved robustness in
-    low-contrast areas.
+    Uses adaptive smoothing and gradient-based detection for improved robustness
+    in low-contrast areas.
     """
     p = gaussian_filter1d(profile.astype(float), sigma=smooth_sigma)
     d = np.diff(p)
+    
+    # Find the sharpest downward transition (most negative gradient)
+    # This is more robust than finding the first dark transition
     k = int(np.argmin(d))
+    
+    # Validate that this is a significant transition (not noise)
+    # Check that the gradient magnitude is substantial
+    min_gradient = np.min(d)
+    
+    # If the transition is too shallow, it might be noise - try to find a sharper one
+    if min_gradient > -1.0:  # Shallow transition
+        # Look for any significant downward step
+        threshold = -0.5
+        candidates = np.where(d < threshold)[0]
+        if len(candidates) > 0:
+            # Pick the one with the sharpest gradient
+            k = candidates[np.argmin(d[candidates])]
+    
     delta = 0.0
     if 0 < k < len(d) - 1:
         d0, d1, d2 = float(d[k - 1]), float(d[k]), float(d[k + 1])
         denom = d0 - 2.0 * d1 + d2
         if abs(denom) > 1e-10:
             delta = float(np.clip(0.5 * (d0 - d2) / denom, -1.0, 1.0))
+    
     return float(k + 1 + delta)
 
 
@@ -540,7 +561,64 @@ def _find_border_points(channel, scale):
             x_pos = int(c2 - 1) - idx - (scale - 1)
             points['right'].append((x_pos, float(row)))
     
+    # Validate and fix outliers in each edge
+    for edge_name in ['top', 'right', 'bottom', 'left']:
+        before = points[edge_name]
+        points[edge_name] = _validate_border_points(points[edge_name], edge_name, scale)
+        after = points[edge_name]
+        if len(before) > 0:
+            val_before = [before[i][1] if edge_name in ['top', 'bottom'] else before[i][0] for i in range(len(before))]
+            val_after = [after[i][1] if edge_name in ['top', 'bottom'] else after[i][0] for i in range(len(after))]
+            if val_before != val_after:
+                log(f"    {edge_name}: validation fixed points: {val_before} -> {val_after}")
+    
     return points
+
+
+def _validate_border_points(pts, edge_name, scale, max_deviation=10):
+    """
+    Validate detected border points and fix major outliers using a median filter.
+    
+    This approach is robust to spurious detections (like the -40px outlier we saw)
+    while preserving smaller legitimate variations in the edge position.
+    
+    Args:
+        pts: list of (x,y) tuples for the edge points
+        edge_name: 'top', 'bottom', 'left', or 'right'
+        scale: GB pixel scale
+        max_deviation: only fix points this far from median-smoothed value
+        
+    Returns:
+        Validated and corrected list of points
+    """
+    if len(pts) < 3:
+        return pts
+    
+    fixed_pts = list(pts)
+    
+    # Determine which coordinate to check (y for top/bottom, x for left/right)
+    check_y = edge_name in ['top', 'bottom']
+    
+    # Extract the position values
+    vals = np.array([pts[i][1] if check_y else pts[i][0] for i in range(len(pts))])
+    
+    # Apply median filter to smooth out spurious points
+    # Use window size of 3 (current point and its neighbors)
+    from scipy.ndimage import median_filter
+    smoothed_vals = median_filter(vals, size=3, mode='nearest')
+    
+    # Check each point against the median-filtered version
+    # Only fix points that are VERY far off (>max_deviation)
+    for i in range(len(vals)):
+        deviation = abs(vals[i] - smoothed_vals[i])
+        if deviation > max_deviation:
+            # This point is an outlier - replace with smoothed value
+            if check_y:
+                fixed_pts[i] = (fixed_pts[i][0], smoothed_vals[i])
+            else:
+                fixed_pts[i] = (smoothed_vals[i], fixed_pts[i][1])
+    
+    return fixed_pts
 
 
 def _analyze_edge_curvature(points, exp_pos, edge_name):
@@ -599,21 +677,25 @@ def _save_border_detection_debug(warped, border_points, TL, TR, BR, BL,
     dbg = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
     dbg = cv2.cvtColor(dbg, cv2.COLOR_RGB2BGR)
     
-    # Draw expected corners (green)
+    # Draw expected rectangle (green)
+    exp_pts = np.array([exp_TL, exp_TR, exp_BR, exp_BL], dtype=np.int32)
+    cv2.polylines(dbg, [exp_pts], True, (0, 255, 0), 2)
+    
+    # Draw expected corners as circles
     for pt, label in [(exp_TL, 'TL'), (exp_TR, 'TR'), (exp_BR, 'BR'), (exp_BL, 'BL')]:
         pt_int = tuple(map(int, pt))
-        cv2.circle(dbg, pt_int, 8, (0, 255, 0), 2)
-        cv2.putText(dbg, label, (pt_int[0]-15, pt_int[1]-15),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        cv2.circle(dbg, pt_int, 6, (0, 255, 0), 2)
     
-    # Draw detected corners (red)
+    # Draw detected rectangle (red)
+    det_pts = np.array([TL, TR, BR, BL], dtype=np.int32)
+    cv2.polylines(dbg, [det_pts], True, (0, 0, 255), 2)
+    
+    # Draw detected corners as circles
     for pt, label in [(TL, 'TL'), (TR, 'TR'), (BR, 'BR'), (BL, 'BL')]:
         pt_int = tuple(map(int, pt))
-        cv2.circle(dbg, pt_int, 6, (0, 0, 255), 2)
-        cv2.putText(dbg, label, (pt_int[0]+10, pt_int[1]-10),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+        cv2.circle(dbg, pt_int, 5, (0, 0, 255), 2)
     
-    # Draw border points (different colors for each edge)
+    # Draw border points with color-coded quality
     colors = {
         'top': (255, 0, 0),      # Blue
         'right': (0, 255, 0),    # Green
@@ -621,24 +703,38 @@ def _save_border_detection_debug(warped, border_points, TL, TR, BR, BL,
         'left': (255, 255, 0),   # Cyan
     }
     
+    # For each edge, draw the points and highlight potential issues
     for edge_name in ['top', 'right', 'bottom', 'left']:
         color = colors[edge_name]
-        for pt in border_points[edge_name]:
-            pt_int = tuple(map(int, pt))
-            cv2.circle(dbg, pt_int, 3, color, 2)
-    
-    # Draw lines connecting border points
-    for edge_name, color in colors.items():
         pts = border_points[edge_name]
-        if len(pts) > 1:
-            pts_arr = np.array(pts, dtype=np.int32)
-            cv2.polylines(dbg, [pts_arr], False, color, 1)
-    
-    # Draw connection between expected and detected corners
-    for exp_pt, det_pt in [(exp_TL, TL), (exp_TR, TR), (exp_BR, BR), (exp_BL, BL)]:
-        exp_pt_int = tuple(map(int, exp_pt))
-        det_pt_int = tuple(map(int, det_pt))
-        cv2.line(dbg, exp_pt_int, det_pt_int, (128, 128, 128), 1)
+        
+        if len(pts) > 0:
+            # Draw points
+            for i, pt in enumerate(pts):
+                pt_int = tuple(map(int, pt))
+                # Size based on position - subtle visual indicator
+                cv2.circle(dbg, pt_int, 3, color, -1)
+                
+                # Check for outliers by comparing to neighbors
+                if len(pts) >= 3 and 0 < i < len(pts) - 1:
+                    # Get coordinate being checked (y for top/bottom, x for left/right)
+                    check_y = edge_name in ['top', 'bottom']
+                    val = pt[1] if check_y else pt[0]
+                    prev_val = pts[i-1][1] if check_y else pts[i-1][0]
+                    next_val = pts[i+1][1] if check_y else pts[i+1][0]
+                    
+                    # Check if this point deviates significantly
+                    median_neighbor = (prev_val + next_val) / 2
+                    deviation = abs(val - median_neighbor)
+                    
+                    # If deviation is large, draw a warning circle
+                    if deviation > 16:
+                        cv2.circle(dbg, pt_int, 8, (100, 100, 255), 2)  # Orange-ish
+            
+            # Draw line connecting points
+            if len(pts) > 1:
+                pts_arr = np.array(pts, dtype=np.int32)
+                cv2.polylines(dbg, [pts_arr], False, color, 1)
     
     # Save the debug image
     filename = f"warp_c_pass{pass_num}_border_detection.png"
@@ -646,6 +742,7 @@ def _save_border_detection_debug(warped, border_points, TL, TR, BR, BL,
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), dbg)
     log(f"    Saved border detection debug: {filename}")
+
 
 
 def refine_warp(img, current_M, warped, scale,

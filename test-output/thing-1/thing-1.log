@@ -33,15 +33,16 @@ PIPELINE RUN
     [verify] right    edge: error=111.3 (expect~[165, 255, 255], actual~[140, 157, 207]) [WARN]
     [debug] test-output\thing-1\debug\thing-1__warp_b_initial_color.png
   c -- Refining (pass 1)
+    bottom: validation fixed points: [1022.5740572137593, 1023.77707880414, 1023.9128891769008, 1024.60247551422, 1024.9514663511522, 1024.878784523663, 1025.1309729069092, 985.4306245115042, 1025.0223451631073] -> [1022.5740572137593, 1023.77707880414, 1023.9128891769008, 1024.60247551422, 1024.9514663511522, 1024.878784523663, 1025.1309729069092, np.float64(1025.0223451631073), 1025.0223451631073]
   Pass 1 edge analysis (segment deviations):
     top: overall=-1.01px, min=-1.95px, max=-0.54px
       left-third: -1.37px
       middle-third: -1.02px
       right-third: -0.65px
-    bottom: overall=-3.97px, min=-38.57px, max=+1.13px
+    bottom: overall=+0.43px, min=-1.43px, max=+1.13px
       left-third: -0.58px
       middle-third: +0.81px
-      right-third: -12.14px
+      right-third: +1.06px
     left: overall=-2.13px, min=-4.16px, max=-0.66px
       top-third: -3.06px
       middle-third: -1.57px
@@ -68,14 +69,15 @@ PIPELINE RUN
     [verify] left     edge: error=101.0 (expect~[165, 255, 255], actual~[138, 165, 216]) [WARN]
     [verify] right    edge: error=101.8 (expect~[165, 255, 255], actual~[155, 164, 209]) [WARN]
   c -- Refining (pass 2)
+    bottom: validation fixed points: [980.0811376573947, 1023.8195045191019, 1023.8338646110121, 1024.1439859724803, 1024.2640260894418, 1000.8338754536779, 1024.1871763565323, 1024.1482711012145, 1023.6588192597044] -> [980.0811376573947, 1023.8195045191019, 1023.8338646110121, 1024.1439859724803, 1024.2640260894418, np.float64(1024.1871763565323), 1024.1871763565323, 1024.1482711012145, 1023.6588192597044]
   Pass 2 edge analysis (segment deviations):
     top: overall=+0.88px, min=-0.15px, max=+2.27px
       left-third: +0.41px
       middle-third: +0.72px
       right-third: +1.51px
-    bottom: overall=-7.45px, min=-43.92px, max=+0.26px
+    bottom: overall=-4.85px, min=-43.92px, max=+0.26px
       left-third: -14.76px
-      middle-third: -7.59px
+      middle-third: +0.20px
       right-third: -0.00px
     left: overall=+1.61px, min=-0.13px, max=+2.95px
       top-third: +0.92px
