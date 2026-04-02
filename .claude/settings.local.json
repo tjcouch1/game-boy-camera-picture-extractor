@@ -16,7 +16,13 @@
       "Bash(do echo:*)",
       "Read(//c/Users/tj_co/source/repos-p/game-boy-camera-picture-extractor/**)",
       "Bash(done)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "mcp__context7__resolve-library-id",
+      "WebFetch(domain:docs.opencv.org)",
+      "WebSearch",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
