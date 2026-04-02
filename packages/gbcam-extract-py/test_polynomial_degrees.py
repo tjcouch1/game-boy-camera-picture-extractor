@@ -203,19 +203,20 @@ def main():
 
     if args.all_tests:
         # Find test images and their references
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent)
         test_configs = []
 
         # thing tests
         for i in [1, 2, 3]:
-            warp_path = Path(f"test-output/thing-{i}/thing-{i}_warp.png")
-            ref_path = Path("test-input/thing-output-corrected.png")
+            warp_path = Path(f"{_repo_root}/test-output/thing-{i}/thing-{i}_warp.png")
+            ref_path = Path(f"{_repo_root}/test-input/thing-output-corrected.png")
             if warp_path.exists() and ref_path.exists():
                 test_configs.append((str(warp_path), str(ref_path)))
 
         # zelda-poster tests
         for i in [1, 2, 3]:
-            warp_path = Path(f"test-output/zelda-poster-{i}/zelda-poster-{i}_warp.png")
-            ref_path = Path("test-input/zelda-poster-output-corrected.png")
+            warp_path = Path(f"{_repo_root}/test-output/zelda-poster-{i}/zelda-poster-{i}_warp.png")
+            ref_path = Path(f"{_repo_root}/test-input/zelda-poster-output-corrected.png")
             if warp_path.exists() and ref_path.exists():
                 test_configs.append((str(warp_path), str(ref_path)))
 

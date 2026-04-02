@@ -340,7 +340,8 @@ def main():
         print("Install with: pip install matplotlib", file=sys.stderr)
 
     if args.all_tests:
-        test_dirs = glob.glob("test-output/*/")
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent)
+        test_dirs = glob.glob(_repo_root + "/test-output/*/")
         if not test_dirs:
             print("No test outputs found in test-output/", file=sys.stderr)
             sys.exit(1)

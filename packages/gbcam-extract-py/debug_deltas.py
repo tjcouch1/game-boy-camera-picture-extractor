@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _load_frame_ascii():
     """Load frame_ascii.txt and return a 160×144 grid with color indices (0-3)."""
-    frame_path = Path('supporting-materials/frame_ascii.txt')
+    frame_path = Path(__file__).resolve().parent.parent.parent / 'supporting-materials' / 'frame_ascii.txt'
     if not frame_path.exists():
         return None
     try:
@@ -45,7 +45,8 @@ FRAME_TARGETS = {
 }
 
 frame = _load_frame_ascii()
-warp_path = "test-output/zelda-poster-3/zelda-poster-3_warp.png"
+_repo_root = str(Path(__file__).resolve().parent.parent.parent)
+warp_path = _repo_root + "/test-output/zelda-poster-3/zelda-poster-3_warp.png"
 
 bgr = cv2.imread(str(warp_path))
 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32)

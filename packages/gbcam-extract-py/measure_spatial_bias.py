@@ -112,7 +112,8 @@ def main():
     args = parser.parse_args()
 
     if args.all_tests:
-        test_dirs = glob.glob("test-output/*/")
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent)
+        test_dirs = glob.glob(_repo_root + "/test-output/*/")
         for test_dir in sorted(test_dirs):
             test_name = Path(test_dir).name
             correct_path = Path(test_dir) / f"{test_name}_correct.png"

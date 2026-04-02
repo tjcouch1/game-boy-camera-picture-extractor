@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import cv2
 import numpy as np
+from pathlib import Path
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 
 tests = ['thing-1', 'thing-2', 'thing-3', 'zelda-poster-1', 'zelda-poster-2', 'zelda-poster-3']
 print('Per-image color variation (std dev) in corrected camera area:\n')
@@ -8,7 +11,7 @@ print('Test            | R-std | G-std | B-std | Total Variation')
 print('-' * 70)
 
 for t in tests:
-    path = f'test-output/{t}/{t}_correct.png'
+    path = f'{_REPO_ROOT}/test-output/{t}/{t}_correct.png'
     img = cv2.imread(path)
     if img is None:
         continue

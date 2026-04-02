@@ -21,7 +21,7 @@ FRAME_TARGETS = {
 
 def _load_frame_ascii():
     """Load frame_ascii.txt and return a 160×144 character grid with color indices."""
-    frame_path = Path('supporting-materials/frame_ascii.txt')
+    frame_path = Path(__file__).resolve().parent.parent.parent / 'supporting-materials' / 'frame_ascii.txt'
     if not frame_path.exists():
         return None
     try:
@@ -174,7 +174,8 @@ def main():
         warp_path = sys.argv[1]
     else:
         # Use a test image
-        warp_path = "test-output/zelda-poster-3/zelda-poster-3_warp.png"
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent)
+        warp_path = _repo_root + "/test-output/zelda-poster-3/zelda-poster-3_warp.png"
     
     result = analyze_frame_colors(warp_path)
     

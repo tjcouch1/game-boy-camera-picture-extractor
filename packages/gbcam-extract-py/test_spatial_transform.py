@@ -33,7 +33,7 @@ FRAME_TARGETS = {
 
 def _load_frame_ascii():
     """Load frame_ascii.txt and return a 160×144 grid with color indices (0-3)."""
-    frame_path = Path('supporting-materials/frame_ascii.txt')
+    frame_path = Path(__file__).resolve().parent.parent.parent / 'supporting-materials' / 'frame_ascii.txt'
     if not frame_path.exists():
         return None
     try:
@@ -228,7 +228,8 @@ def main():
     if len(sys.argv) > 1:
         warp_path = sys.argv[1]
     else:
-        warp_path = "test-output/zelda-poster-3/zelda-poster-3_warp.png"
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent)
+        warp_path = _repo_root + "/test-output/zelda-poster-3/zelda-poster-3_warp.png"
     
     print(f"Loading {warp_path}")
     bgr = cv2.imread(str(warp_path))

@@ -126,7 +126,8 @@ def debug_transform(input_path, scale=8):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         # Test on zelda-poster-3 warped image
-        test_path = "test-output/zelda-poster-3/zelda-poster-3_warp.png"
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent)
+        test_path = _repo_root + "/test-output/zelda-poster-3/zelda-poster-3_warp.png"
     else:
         test_path = sys.argv[1]
     

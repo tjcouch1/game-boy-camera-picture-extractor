@@ -7,8 +7,9 @@ import numpy as np
 import os
 from pathlib import Path
 
-TEST_INPUT_DIR = "test-input"
-TEST_OUTPUT_DIR = "test-output"
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+TEST_INPUT_DIR = os.path.join(_REPO_ROOT, "test-input")
+TEST_OUTPUT_DIR = os.path.join(_REPO_ROOT, "test-output")
 REFERENCE_SUFFIX = "-output-corrected.png"
 
 tests = []
@@ -29,8 +30,8 @@ print('Test            | BK (target 0,0,0)  | DG (target 148,148,255) | LG (targ
 print('-' * 135)
 
 for test_name, ref_name in tests:
-    sample_path = f'test-output/{test_name}/{test_name}_sample.png'
-    ref_path = f'test-input/{ref_name}'
+    sample_path = os.path.join(_REPO_ROOT, f'test-output/{test_name}/{test_name}_sample.png')
+    ref_path = os.path.join(_REPO_ROOT, f'test-input/{ref_name}')
 
     if not Path(sample_path).exists() or not Path(ref_path).exists():
         continue

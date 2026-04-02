@@ -6,8 +6,13 @@ import re
 import subprocess
 import sys
 import glob
-TEST_INPUT_DIR = "test-input"
-TEST_OUTPUT_DIR = "test-output"
+from pathlib import Path
+
+# Resolve repo root relative to this script (packages/gbcam-extract-py/run_tests.py)
+REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+SCRIPT_DIR = str(Path(__file__).resolve().parent)
+TEST_INPUT_DIR = os.path.join(REPO_ROOT, "test-input")
+TEST_OUTPUT_DIR = os.path.join(REPO_ROOT, "test-output")
 REFERENCE_SUFFIX = "-output-corrected.png"
 SUMMARY_LOG = os.path.join(TEST_OUTPUT_DIR, "test-summary.log")
 
@@ -91,9 +96,9 @@ def main():
 
     # Run gbcam_extract on sample pictures
     gbcam_exit = run([
-        sys.executable, "gbcam_extract.py",
-        "--dir", "sample-pictures",
-        "--output-dir", "./sample-pictures-out",
+        sys.executable, os.path.join(SCRIPT_DIR, "gbcam_extract.py"),
+        "--dir", os.path.join(REPO_ROOT, "sample-pictures"),
+        "--output-dir", os.path.join(REPO_ROOT, "sample-pictures-out"),
         "--clean-steps",
         "--debug",
     ])
@@ -119,7 +124,7 @@ def main():
             output_dir = os.path.join(TEST_OUTPUT_DIR, stem)
 
             rc = run([
-                sys.executable, "test_pipeline.py",
+                sys.executable, os.path.join(SCRIPT_DIR, "test_pipeline.py"),
                 "--input", input_path,
                 "--reference", reference_path,
                 "--output-dir", output_dir,

@@ -33,19 +33,22 @@ CHAR_TO_COLOR = {
 class FrameASCII:
     """Load and query frame_ascii.txt for expected colors at GB pixels."""
     
-    def __init__(self, ascii_file='supporting-materials/frame_ascii.txt'):
+    def __init__(self, ascii_file=None):
         self.frame = None
+        if ascii_file is None:
+            ascii_file = str(Path(__file__).resolve().parent.parent.parent / 'supporting-materials' / 'frame_ascii.txt')
         self.load(ascii_file)
-    
+
     def load(self, ascii_file):
         """Load frame_ascii.txt and parse it."""
         try:
             with open(ascii_file, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
         except FileNotFoundError:
-            # Try relative path
+            # Try repo-root-relative path as fallback
             try:
-                with open(Path('supporting-materials') / 'frame_ascii.txt', 'r', encoding='utf-8') as f:
+                repo_root = Path(__file__).resolve().parent.parent.parent
+                with open(repo_root / 'supporting-materials' / 'frame_ascii.txt', 'r', encoding='utf-8') as f:
                     lines = f.readlines()
             except FileNotFoundError:
                 print(f"Warning: Could not find {ascii_file}")

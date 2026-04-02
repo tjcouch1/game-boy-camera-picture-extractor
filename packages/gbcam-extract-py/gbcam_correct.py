@@ -480,7 +480,7 @@ def collect_white_samples_ch_color(img_rgb, scale, ch, pct=85):
 
 def _load_frame_ascii():
     """Load frame_ascii.txt and return a 160×144 character grid."""
-    frame_path = Path('supporting-materials/frame_ascii.txt')
+    frame_path = Path(__file__).resolve().parent.parent.parent / 'supporting-materials' / 'frame_ascii.txt'
     if not frame_path.exists():
         return None
     try:

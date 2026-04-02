@@ -30,7 +30,8 @@ INNER_BOT = SCREEN_H - FRAME_THICK - 1
 
 def read_frame_ascii():
     """Read frame_ascii.txt and return a 160x144 array of color characters."""
-    with open('supporting-materials/frame_ascii.txt', 'r', encoding='utf-8') as f:
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    with open(repo_root / 'supporting-materials' / 'frame_ascii.txt', 'r', encoding='utf-8') as f:
         lines = f.readlines()
     
     # Pad/trim to exactly 144 lines
@@ -168,9 +169,10 @@ def diagnose_file(correct_png_path, scale=8):
 
 def main():
     # Find all _correct.png files in test-output
-    test_output = Path('test-output')
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    test_output = repo_root / 'test-output'
     correct_files = list(test_output.rglob('*_correct.png'))
-    
+
     if not correct_files:
         print("No _correct.png files found in test-output/")
         return

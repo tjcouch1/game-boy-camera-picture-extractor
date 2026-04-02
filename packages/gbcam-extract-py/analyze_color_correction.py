@@ -123,9 +123,9 @@ def analyze_image(img_path):
 
 def main():
     # Find all test output corrected images
-    test_dir = Path("test-output")
+    test_dir = Path(__file__).resolve().parent.parent.parent / "test-output"
     corrected_images = sorted(test_dir.glob("*/*_correct.png"))
-    
+
     if not corrected_images:
         print("No corrected images found in test-output/*/*_correct.png")
         return

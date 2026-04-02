@@ -2,6 +2,16 @@
 
 **You MUST execute python scripts in the `.venv`. ALWAYS RUN ALL PYTHON SCRIPTS IN THE `.venv`. IF YOU SEE THAT SOME PYTHON SCRIPT EXECUTIONS ARE NOT WORKING BECAUSE PACKAGES ARE NOT INSTALLED, TRY RUNNING IN THE `.venv` BEFORE TAKING FURTHER STEPS. DO NOT RUN PYTHON OUTSIDE OF THE `.venv`!**
 
+# Repository Structure
+
+This is a pnpm monorepo with the following packages:
+
+- `packages/gbcam-extract-py/` - The original Python extraction pipeline
+- `packages/gbcam-extract/` - (future) TypeScript port of the pipeline
+- `packages/gbcam-extract-web/` - (future) React PWA web app
+
+Shared assets live at the repo root: `supporting-materials/`, `sample-pictures/`, `test-input/`, `test-output/`.
+
 # Overview
 
 You are working on a script that transforms a phone picture taken of a Game Boy Camera Image on a Game Boy Advance SP screen into a 128x112 image of the actual Game Boy Camera image.
@@ -11,7 +21,7 @@ You are working on a script that transforms a phone picture taken of a Game Boy 
 You can run the script itself with something along the following lines:
 
 ```
-python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
+python packages/gbcam-extract-py/gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
 ```
 
 ## Running the test suite
@@ -19,7 +29,7 @@ python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out
 To run the test suite that runs the script on a set of pictures in `sample-pictures` and also runs the unit tests on images in the `test-input` folder (including reference images named the same thing as the tests with `-output-corrected.png` e.g. `zelda-poster-1.png` and `zelda-poster-output-corrected.png`) with a nice output that summarizes all the test results, run the following:
 
 ```
-python run_tests.py
+python packages/gbcam-extract-py/run_tests.py
 ```
 
 There will be lots of debug output in the `test-output` folder you can use to consider how to make improvements. For example, the test results summary will be at `test-output\test-summary.log`.
@@ -34,7 +44,7 @@ To run a unit test to test the accuracy of the output, gather the following:
 Then run the following:
 
 ```bash
-python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
+python packages/gbcam-extract-py/test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
 ```
 
 # Goal
@@ -45,7 +55,7 @@ Your goal is to improve the script to increase the accuracy of the transformatio
 
 The following are important files and directories to note in the repository/directory:
 
-- `.venv` - the python venv you must use to execute python scripts
+- `packages/gbcam-extract-py/.venv` - the python venv you must use to execute python scripts (may need to be recreated after the monorepo restructure)
 - `sample-pictures/` - contains sample input images that get run through the transformation script in the test suite
 - `sample-pictures-out/` - contains the output of the transformation script from the pictures in `sample-pictures/`
 - `supporting-materials/` - contains some helpful reference files
@@ -53,11 +63,11 @@ The following are important files and directories to note in the repository/dire
   - `supporting-materials/frame_ascii.txt` - a 1-to-1 translation of the Game Boy Camera frame into ascii art for ease of analysis and comparison. See below for more details including character-to-palette mapping.
 - `test-input/` - contains multiple input images of the same Game Boy Camera picture named `<image_name>-<number>.jpg` and a reference image `<image_name>-output-corrected.png` containing the intended output Game Boy Camera picture for that set of input images. Note that these reference images use the same grayscale color palette as `supporting-materials/Frame 02.png` as detailed below, not the RGB color palette.
 - `test-output/` - Contains the output of the transformation script from the pictures in `test-input/` as a result of [running the test suite](#running-the-test-suite). Each test input image has its own folder with all its output, and there is a summary of test results at `test-input/test-summary.log`.
-- `gbcam_extract.py` - the main transformation script that orchestrates the transformation process by calling scripts that handle various steps of the process
-- `gbcam_<step>.py` - various step scripts that do one part of the transformation process
-- `run_tests.py` - runs the test suite
-- `test_pipeline.py` - runs the transformation script on one test file
-- Various other `.py` files - analysis files that can be run to gather additional info in particular situations
+- `packages/gbcam-extract-py/gbcam_extract.py` - the main transformation script that orchestrates the transformation process by calling scripts that handle various steps of the process
+- `packages/gbcam-extract-py/gbcam_<step>.py` - various step scripts that do one part of the transformation process
+- `packages/gbcam-extract-py/run_tests.py` - runs the test suite
+- `packages/gbcam-extract-py/test_pipeline.py` - runs the transformation script on one test file
+- Various other `.py` files in `packages/gbcam-extract-py/` - analysis files that can be run to gather additional info in particular situations
 
 # Explanation of the input image
 

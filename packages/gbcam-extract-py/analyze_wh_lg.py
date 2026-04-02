@@ -122,8 +122,9 @@ def analyze_wh_lg_confusion(corrected_png_path, reference_png_path, scale=8):
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         # Default to zelda-poster-3
-        corrected = "test-output/zelda-poster-3-test-fix/zelda-poster-3_correct.png"
-        reference = "test-input/zelda-poster-output-corrected.png"
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent)
+        corrected = _repo_root + "/test-output/zelda-poster-3-test-fix/zelda-poster-3_correct.png"
+        reference = _repo_root + "/test-input/zelda-poster-output-corrected.png"
     else:
         corrected = sys.argv[1]
         reference = sys.argv[2]

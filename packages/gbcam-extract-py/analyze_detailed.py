@@ -89,6 +89,6 @@ def analyze_detailed(img_path):
 
 
 if __name__ == "__main__":
-    test_dir = Path("test-output")
+    test_dir = Path(__file__).resolve().parent.parent.parent / "test-output"
     for img_path in sorted(test_dir.glob("zelda-poster-3/*_correct.png")):
         analyze_detailed(img_path)

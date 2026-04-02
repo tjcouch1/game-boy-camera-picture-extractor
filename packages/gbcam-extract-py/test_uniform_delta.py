@@ -8,6 +8,9 @@ import numpy as np
 import cv2
 from pathlib import Path
 
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 from gbcam_common import INNER_TOP, INNER_BOT, INNER_LEFT, INNER_RIGHT, SCREEN_H, SCREEN_W
 
@@ -15,14 +18,14 @@ def test_uniform_delta():
     """Test if uniform global color correction works better."""
     
     # Load warped image
-    input_path = "test-output/zelda-poster-3/zelda-poster-3_warp.png"
+    input_path = _REPO_ROOT + "/test-output/zelda-poster-3/zelda-poster-3_warp.png"
     img_bgr = cv2.imread(input_path)
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).astype(np.float32)
     H, W = img_rgb.shape[:2]
     scale = 8
     
     # Load frame_ascii
-    frame_ascii_path = "supporting-materials/frame_ascii.txt"
+    frame_ascii_path = _REPO_ROOT + "/supporting-materials/frame_ascii.txt"
     with open(frame_ascii_path, 'r', encoding='utf-8') as f:
         frame_lines = f.readlines()
     
@@ -91,7 +94,7 @@ def test_uniform_delta():
     )
     
     # Save output
-    output_path = "test-output/zelda-poster-3-uniform-delta.png"
+    output_path = _REPO_ROOT + "/test-output/zelda-poster-3-uniform-delta.png"
     img_corrected_uint8 = img_corrected.astype(np.uint8)
     img_corrected_bgr = cv2.cvtColor(img_corrected_uint8, cv2.COLOR_RGB2BGR)
     cv2.imwrite(output_path, img_corrected_bgr)
