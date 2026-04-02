@@ -219,3 +219,6 @@ test-output/**/*
 !test-output/**/*.log
 !test-output/**/*_gbcam.png
 !test-output/**/*_gbcam_rgb.png
+
+# Claude superpowers plugin
+.superpowers/
