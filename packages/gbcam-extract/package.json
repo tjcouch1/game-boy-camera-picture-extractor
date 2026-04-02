@@ -1,0 +1,30 @@
+{
+  "name": "gbcam-extract",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ml-regression-polynomial": "^3.0.0"
+  },
+  "devDependencies": {
+    "@techstark/opencv-js": "^4.10.0-release.1",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

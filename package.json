@@ -6,5 +6,9 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "dev": "pnpm --filter gbcam-extract-web dev"
+  },
+  "volta": {
+    "node": "24.14.1",
+    "pnpm": "10.33.0"
   }
 }
