@@ -10,6 +10,9 @@
       "Bash(findstr:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Bash(git rev-parse:*)",
       "Bash(grep -E \"\\\\.py$|^d\")",
       "Bash(.venv/Scripts/pip.exe list:*)",
       "Bash(for f:*)",
@@ -22,7 +25,23 @@
       "mcp__context7__resolve-library-id",
       "WebFetch(domain:docs.opencv.org)",
       "WebSearch",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(pnpm install:*)",
+      "Bash(npx vitest:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf /*)",
+      "Bash(mkfs:*)",
+      "Bash(chmod -R 777 /)",
+      "Bash(git push origin main)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin master)",
+      "Bash(git push origin master:*)",
+      "Bash(git checkout main && git push)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
     ]
   }
 }
