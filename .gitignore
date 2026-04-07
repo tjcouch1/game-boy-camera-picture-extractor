@@ -223,6 +223,7 @@ test-output/**/*
 # Node
 node_modules/
 packages/*/dist/
+packages/*/dist-test/
 
 # pnpm
 .pnpm-store/

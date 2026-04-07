@@ -152,8 +152,7 @@ function runKmeans(
       const g = samplesRG[i * 2 + 1];
       let bestK = 0;
       let bestD = Infinity;
-      const ic =
-        initCenters instanceof Float32Array ? initCenters : null;
+      const ic = initCenters instanceof Float32Array ? initCenters : null;
       for (let k = 0; k < 4; k++) {
         let cr: number, cg: number;
         if (ic) {

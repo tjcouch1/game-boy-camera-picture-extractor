@@ -1,42 +1,6 @@
-let cv: any = null;
+import { getCV, initOpenCV } from "./init-opencv.js";
 
-export function getCV(): any {
-  if (!cv) {
-    throw new Error("OpenCV not initialized. Call initOpenCV() before using pipeline functions.");
-  }
-  return cv;
-}
-
-export async function initOpenCV(
-  wasmPathOrModule?: string | any,
-  onProgress?: (pct: number) => void,
-): Promise<void> {
-  if (cv) return;
-
-  if (typeof wasmPathOrModule === "object" && wasmPathOrModule !== null) {
-    cv = wasmPathOrModule;
-    onProgress?.(100);
-    return;
-  }
-
-  const path = wasmPathOrModule ?? "/opencv.js";
-
-  return new Promise<void>((resolve, reject) => {
-    (globalThis as any).Module = {
-      onRuntimeInitialized: () => {
-        cv = (globalThis as any).cv;
-        onProgress?.(100);
-        resolve();
-      },
-    };
-
-    const script = document.createElement("script");
-    script.src = path;
-    script.async = true;
-    script.onerror = () => reject(new Error(`Failed to load opencv.js from ${path}`));
-    document.head.appendChild(script);
-  });
-}
+export { getCV, initOpenCV };
 
 export function withMats<T>(
   fn: (
@@ -62,14 +26,22 @@ export function withMats<T>(
   }
 }
 
-export function imageDataToMat(img: { data: Uint8ClampedArray; width: number; height: number }): any {
+export function imageDataToMat(img: {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+}): any {
   const c = getCV();
   const mat = new c.Mat(img.height, img.width, c.CV_8UC4);
   mat.data.set(img.data);
   return mat;
 }
 
-export function matToImageData(mat: any): { data: Uint8ClampedArray; width: number; height: number } {
+export function matToImageData(mat: any): {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+} {
   const c = getCV();
   let rgba: any;
   const channels = mat.channels();

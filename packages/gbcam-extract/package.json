@@ -13,13 +13,15 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:opencv-init-node": "tsup test-opencv-init-node.ts --format esm --out-dir dist-test --clean && node dist-test/test-opencv-init-node.js"
   },
   "dependencies": {
+    "@techstark/opencv-js": "^4.10.0-release.1",
     "ml-regression-polynomial": "^3.0.0"
   },
   "devDependencies": {
-    "@techstark/opencv-js": "^4.10.0-release.1",
+    "@types/node": "^25.5.2",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
