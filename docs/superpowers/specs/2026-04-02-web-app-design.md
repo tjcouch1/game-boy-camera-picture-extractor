@@ -109,9 +109,9 @@ function applyPalette(
   palette: [string, string, string, string]  // 4 hex colors, lightest to darkest
 ): GBImageData;
 
-// Must be called once before any processing
+// Must be called once before any processing.
+// Loading is handled internally — no path or module argument needed.
 async function initOpenCV(
-  wasmPath: string,
   onProgress?: (pct: number) => void
 ): Promise<void>;
 ```
