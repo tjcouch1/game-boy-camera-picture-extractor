@@ -40,7 +40,7 @@ See `sample-pictures` for more examples of what the pictures need to look like.
 
 After processing, the output picture should look like the following:
 
-![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out/20260313_213430_gbcam.png)
+![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out-py/20260313_213430_gbcam.png)
 
 # Contents
 
@@ -54,7 +54,7 @@ This repository is a pnpm monorepo that contains multiple packages in `/packages
 
 TODO: expand
 
-## Setup
+## TypeScript Setup
 
 ```bash
 pnpm i
@@ -70,11 +70,14 @@ pnpm build
 
 ```bash
 pnpm test
+pnpm test:pipeline
 ```
 
 ## To run the extraction pipeline locally in Node
 
-TODO: implement
+```bash
+pnpm extract --dir ../../sample-pictures --output-dir ../../sample-pictures-out --clean-steps
+```
 
 ## To run the website locally
 
@@ -92,11 +95,12 @@ pnpm dev:host
 
 # Python development instructions
 
-## Setup
+## Python Setup
 
 TODO: Update with the latest instructions as of mono-repo
 
 ```bash
+cd packages/gbcam-extract-py
 python -m venv .venv
 # Unix-based
 source .venv/bin/activate
@@ -107,23 +111,27 @@ pip install -r requirements.txt
 
 ### To regenerate `requirements.txt`
 
+Inside `packages/gbcam-extract-py` after [activating the `.venv`](#python-setup):
+
 ```bash
 pip install pipreqs
 pipreqs . --ignore=.venv --encoding=utf8 --force
 ```
 
-## To run
+## To run the extraction pipeline locally in Python
+
+Inside `packages/gbcam-extract-py` after [activating the `.venv`](#python-setup):
 
 To generate the sample output pictures from the sample input pictures, run the script as follows:
 
 ```bash
-python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps
+python gbcam_extract.py --dir ../../sample-pictures --output-dir ../../sample-pictures-out-py --clean-steps
 ```
 
 To generate the sample images for each step for just one sample input picture, run the script as follows:
 
 ```bash
-python gbcam_extract.py sample-pictures/20260313_213430.jpg --output-dir ./sample-pictures-out
+python gbcam_extract.py ../../sample-pictures/20260313_213430.jpg --output-dir ../../sample-pictures-out-py
 ```
 
 The following command-line arguments are reasonably useful:
@@ -145,6 +153,8 @@ python gbcam_extract.py --help
 
 ## To Test
 
+Inside `packages/gbcam-extract-py` after [activating the `.venv`](#python-setup):
+
 To run the full test suite that regenerates all the images checked into this repo, run the following:
 
 ```bash
@@ -154,11 +164,11 @@ python run_tests.py
 This will run commands like the following:
 
 ```bash
-python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
-python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
-python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
-python test_pipeline.py --input "test-input/thing-1.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-1 --keep-intermediates
-python test_pipeline.py --input "test-input/thing-2.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-2 --keep-intermediates
+python gbcam_extract.py --dir ../../sample-pictures --output-dir ../../sample-pictures-out-py --clean-steps --debug
+python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --reference "../../test-input/zelda-poster-output-corrected.png" --output-dir ../../test-output-py/zelda-poster-1 --keep-intermediates
+python test_pipeline.py --input "../../test-input/zelda-poster-2.jpg" --reference "../../test-input/zelda-poster-output-corrected.png" --output-dir ../../test-output-py/zelda-poster-2 --keep-intermediates
+python test_pipeline.py --input "../../test-input/thing-1.jpg" --reference "../../test-input/thing-output-corrected.png" --output-dir ../../test-output-py/thing-1 --keep-intermediates
+python test_pipeline.py --input "../../test-input/thing-2.jpg" --reference "../../test-input/thing-output-corrected.png" --output-dir ../../test-output-py/thing-2 --keep-intermediates
 ```
 
 To run a unit test to test the accuracy of the output, gather the following:
@@ -169,7 +179,7 @@ To run a unit test to test the accuracy of the output, gather the following:
 Then run the following:
 
 ```bash
-python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
+python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --reference "../../test-input/zelda-poster-output-corrected.png" --output-dir ../../test-output-py/zelda-poster-1 --keep-intermediates
 ```
 
 # Roadmap

@@ -60,7 +60,7 @@ The TypeScript port of the pipeline. This is what we develop going forward.
 
 Python:
 ```bash
-cd packages/gbcam-extract-py && python gbcam_extract.py --dir ../../sample-pictures --output-dir ../../sample-pictures-out
+cd packages/gbcam-extract-py && python gbcam_extract.py --dir ../../sample-pictures --output-dir ../../sample-pictures-out-py
 ```
 
 TypeScript:
@@ -199,3 +199,8 @@ Maps 128x112 brightness samples to the four GB palette colors (0/82/165/255). Us
 ## Goal
 
 The primary goal is to improve the pipeline's accuracy at transforming phone photos into faithful Game Boy Camera images. Run the test suite to track progress — it compares output pixel-by-pixel against hand-corrected reference images and reports per-color accuracy and confusion matrices.
+
+
+8. Save the Game Boy Camera picture file as a png.
+
+9. Palette swap the Game Boy Camera picture to the grayscale palette and save as a png.

@@ -16,16 +16,16 @@
     "test:watch": "vitest",
     "test:opencv-init-node": "tsup test-opencv-init-node.ts --format esm --out-dir dist-test --clean && node dist-test/test-opencv-init-node.js",
     "typecheck": "tsc --noEmit",
-    "extract": "tsup scripts/extract.ts --format esm --out-dir dist-scripts --clean --external @techstark/opencv-js --external sharp --external ml-regression-polynomial && node dist-scripts/extract.js",
-    "test:pipeline": "tsup scripts/run-tests.ts --format esm --out-dir dist-scripts --clean --external @techstark/opencv-js --external sharp --external ml-regression-polynomial && node dist-scripts/run-tests.js"
+    "extract": "tsup scripts/extract.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/extract.js",
+    "test:pipeline": "tsup scripts/run-tests.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/run-tests.js"
   },
   "dependencies": {
     "@techstark/opencv-js": "^4.10.0-release.1",
-    "ml-regression-polynomial": "^3.0.0"
+    "ml-regression-polynomial": "^3.0.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
-    "sharp": "^0.34.5",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
