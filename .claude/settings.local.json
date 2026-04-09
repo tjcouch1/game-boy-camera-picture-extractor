@@ -12,6 +12,8 @@
       "Bash(git commit:*)",
       "Bash(git log:*)",
       "Bash(git status:*)",
+      "Bash(git -C /c/Users/tj_co/source/repos-p/game-boy-camera-picture-extractor status)",
+      "Bash(git diff:*)",
       "Bash(git rev-parse:*)",
       "Bash(grep -E \"\\\\.py$|^d\")",
       "Bash(.venv/Scripts/pip.exe list:*)",
@@ -27,7 +29,9 @@
       "WebSearch",
       "WebFetch(domain:github.com)",
       "Bash(pnpm install:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "mcp__context7__query-docs",
+      "Bash(volta run:*)"
     ],
     "deny": [
       "Bash(rm -rf /)",

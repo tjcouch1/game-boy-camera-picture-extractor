@@ -7,6 +7,9 @@
     "test": "pnpm -r run test",
     "dev": "pnpm --filter gbcam-extract-web dev"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["sharp"]
+  },
   "volta": {
     "node": "24.14.1",
     "pnpm": "10.33.0"
