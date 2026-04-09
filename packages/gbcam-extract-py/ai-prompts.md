@@ -571,3 +571,6 @@ Change the algorithm so it detects an appropriate scale instead of using 8 hard-
 Put the palette name in the file name
 Edit custom palettes
 Favorite palettes
+Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
+Move md files etc. from py into right places 
+Update instructions files
