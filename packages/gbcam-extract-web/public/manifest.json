@@ -1,0 +1,10 @@
+{
+  "name": "GB Camera Picture Extractor",
+  "short_name": "GB Camera",
+  "description": "Extract Game Boy Camera pictures from phone photos",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "icons": []
+}
