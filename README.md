@@ -8,7 +8,7 @@ WARNING: This script is not fully successful yet. Please back up your Game Boy C
 
 This repository contains a script that accepts a picture of a Game Boy Camera screen displaying a Game Boy Camera image and outputs the GameBoy Camera image in 128x112 in four colors. This script is intended to clean Game Boy Camera images retrieved via taking a picture, but it probably would also work with relatively high-quality [Video Capture](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera#video_capture) (I tried using my [Dazzle DVC100](https://www.pinnaclesys.com/en/products/dazzle/dvd-recorder-hd/), notorious for its low quality video capture, but it did not work). Please note that this is admittedly probably the lowest-quality method of transferring Game Boy Camera images; if you do not have the hardware needed to use this script, you will likely find more success at a more affordable price by pursuing [other avenues](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera) for transferring your Game Boy Camera images. This script aims to accomplish the goal of transferring Game Boy Camera images with specific hardware that I already own.
 
-DISCLAIMER: Though this `README.md` is mostly not AI-generated, the code in this repo is almost exclusively AI-generated. It likely contains errors, bad code quality and standards, and does not satisfy the need perfectly.
+DISCLAIMER: Though this `README.md` is not AI-generated, the code in this repo is almost exclusively AI-generated. It likely contains errors, bad code quality and standards, and does not satisfy the need perfectly.
 
 # Taking pictures that work with this script
 
@@ -42,7 +42,59 @@ After processing, the output picture should look like the following:
 
 ![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out/20260313_213430_gbcam.png)
 
-# Setup
+# Contents
+
+This repository is a pnpm monorepo that contains multiple packages in `/packages`:
+
+- `gbcam-extract` - TypeScript Game Boy Camera image processing pipeline
+- `gbcam-extract-web` - Static site hosting the TypeScript Game Boy Camera image processing pipeline for portable and offline use
+- `gbcam-extract-py` - original Python Game Boy Camera image processing pipeline (included for historical reasons but will not be updated)
+
+# TypeScript development instructions
+
+TODO: expand
+
+## Setup
+
+```bash
+pnpm i
+```
+
+## To build the TypeScript packages
+
+```bash
+pnpm build
+```
+
+## To run TypeScript tests
+
+```bash
+pnpm test
+```
+
+## To run the extraction pipeline locally in Node
+
+TODO: implement
+
+## To run the website locally
+
+To run just on your computer:
+
+```bash
+pnpm dev
+```
+
+To run on your network:
+
+```bash
+pnpm dev:host
+```
+
+# Python development instructions
+
+## Setup
+
+TODO: Update with the latest instructions as of mono-repo
 
 ```bash
 python -m venv .venv
@@ -53,14 +105,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## To regenerate `requirements.txt`
+### To regenerate `requirements.txt`
 
 ```bash
 pip install pipreqs
 pipreqs . --ignore=.venv --encoding=utf8 --force
 ```
 
-# To run
+## To run
 
 To generate the sample output pictures from the sample input pictures, run the script as follows:
 
@@ -91,7 +143,7 @@ See the help information for additional details like usage examples (please note
 python gbcam_extract.py --help
 ```
 
-# To Test
+## To Test
 
 To run the full test suite that regenerates all the images checked into this repo, run the following:
 
@@ -118,23 +170,6 @@ Then run the following:
 
 ```bash
 python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
-```
-
-## Project Structure
-
-This is a pnpm monorepo:
-
-- `packages/gbcam-extract-py/` — Original Python extraction pipeline
-- `packages/gbcam-extract/` — TypeScript port of the pipeline (opencv.js)
-- `packages/gbcam-extract-web/` — React PWA frontend (Vite + Tailwind)
-
-### Development
-
-```bash
-pnpm install
-pnpm dev          # Start web app dev server
-pnpm build        # Build all packages
-pnpm test         # Run pipeline tests
 ```
 
 # Roadmap
