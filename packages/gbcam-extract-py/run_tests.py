@@ -10,6 +10,13 @@ from pathlib import Path
 
 # Resolve repo root relative to this script (packages/gbcam-extract-py/run_tests.py)
 REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+
+
+def _rel(path):
+    """Return *path* relative to the repo root for display purposes."""
+    return os.path.relpath(path, REPO_ROOT)
+
+
 SCRIPT_DIR = str(Path(__file__).resolve().parent)
 TEST_INPUT_DIR = os.path.join(REPO_ROOT, "test-input")
 TEST_OUTPUT_DIR = os.path.join(REPO_ROOT, "test-output")
@@ -18,7 +25,8 @@ SUMMARY_LOG = os.path.join(TEST_OUTPUT_DIR, "test-summary.log")
 
 
 def run(cmd):
-    print(f"\n>>> {' '.join(cmd)}")
+    display_cmd = [_rel(c) if os.path.isabs(c) else c for c in cmd]
+    print(f"\n>>> {' '.join(display_cmd)}")
     result = subprocess.run(cmd)
     if result.returncode != 0:
         print(f"Command failed with exit code {result.returncode}", file=sys.stderr)
@@ -87,7 +95,7 @@ def write_summary(gbcam_exit, test_results):
     os.makedirs(TEST_OUTPUT_DIR, exist_ok=True)
     with open(SUMMARY_LOG, "w") as f:
         f.write(text)
-    print(f"Summary written to {SUMMARY_LOG}")
+    print(f"Summary written to {_rel(SUMMARY_LOG)}")
 
 
 def main():
