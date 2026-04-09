@@ -1,7 +1,7 @@
 
 PIPELINE RUN
-  Input:      C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-input\thing-2.jpg
-  Output dir: C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output\thing-2
+  Input:      test-input\thing-2.jpg
+  Output dir: test-output\thing-2
 
 ======================================================================
 COMPARISON SUMMARY

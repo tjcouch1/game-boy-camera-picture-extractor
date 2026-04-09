@@ -1,19 +1,19 @@
 
 ======================================================================
 PIPELINE RUN
-  Input:      C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-input\zelda-poster-3.jpg
-  Output dir: C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3
+  Input:      test-input\zelda-poster-3.jpg
+  Output dir: test-output-py\zelda-poster-3
   scale=8  threshold=180  poly_degree=2  dark_smooth=13
 ======================================================================
 
 
 ============================================================
-[warp] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-input\zelda-poster-3.jpg
+[warp] test-input\zelda-poster-3.jpg
   Loaded 1260x1145 px
   a -- Detecting screen corners
   Contour: area=1324985  aspect=1.119 (expected~1.111)  thresh=175  quad_score=0.0494
   Corners (TL TR BR BL): [[27, 13], [1236, 23], [1229, 1106], [28, 1121]]
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3__warp_a_corners.png
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3__warp_a_corners.png
   b -- Initial perspective warp
   Initial warp -> 1280x1152  (scale=8)
   Initial border validation:
@@ -27,7 +27,7 @@ PIPELINE RUN
     [verify] bottom   edge: error=79.8 (expect~[165, 255, 255], actual~[196, 198, 208]) [WARN]
     [verify] left     edge: error=91.1 (expect~[165, 255, 255], actual~[184, 184, 200]) [WARN]
     [verify] right    edge: error=105.0 (expect~[165, 255, 255], actual~[174, 176, 185]) [WARN]
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3__warp_b_initial_color.png
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3__warp_b_initial_color.png
   c -- Refining (pass 1)
   Pass 1 edge curvatures: top=-1.05, bot=-0.17, left=-1.79, right=+3.75
   Pass 1 corners: TL=(118.6,119.4) err=(-1.4,-0.6)  TR=(1154.4,119.4) err=(+2.4,-0.6)  BR=(1153.2,1024.7) err=(+1.2,+0.7)  BL=(119.1,1022.7) err=(-0.9,-1.3)
@@ -58,11 +58,11 @@ PIPELINE RUN
     [verify] bottom   edge: error=79.2 (expect~[165, 255, 255], actual~[198, 200, 208]) [WARN]
     [verify] left     edge: error=86.6 (expect~[165, 255, 255], actual~[183, 187, 203]) [WARN]
     [verify] right    edge: error=103.0 (expect~[165, 255, 255], actual~[180, 179, 186]) [WARN]
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3__warp_d_refined_color.png
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_warp.png  (colour BGR)
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3__warp_d_refined_color.png
+  Saved -> test-output-py\zelda-poster-3\zelda-poster-3_warp.png  (colour BGR)
 
 ============================================================
-[correct/color] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_warp.png
+[correct/color] test-output-py\zelda-poster-3\zelda-poster-3_warp.png
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
     R refinement: 3479 interior DG pixels
@@ -76,31 +76,31 @@ PIPELINE RUN
   B: white-surface normalisation -> 165 (no global scaling)
   Frame p85 before norm: R=255 G=244 B=198
   Global scales: R=1.0000 G=1.0438 B=1.0000
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_correct.png  (colour, frame normalised to #FFFFA5)
+  Saved -> test-output-py\zelda-poster-3\zelda-poster-3_correct.png  (colour, frame normalised to #FFFFA5)
   Camera area mean: R=178.0 G=153.5 B=164.8
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3_warp__correct_color_a_before_after.png
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3_warp__correct_color_b_white_surf_heatmap.png
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3_warp__correct_color_c_full.png
-  Metadata -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_correct.json
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3_warp__correct_color_a_before_after.png
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3_warp__correct_color_b_white_surf_heatmap.png
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3_warp__correct_color_c_full.png
+  Metadata -> test-output-py\zelda-poster-3\zelda-poster-3_correct.json
 
 ============================================================
-[crop] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_correct.png
+[crop] test-output-py\zelda-poster-3\zelda-poster-3_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
   Validation: inner border mean=132.3, white frame mean=195.8 (OK)
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3_correct__crop_a_region.png
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_crop.png  (1024×896 px)
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3_correct__crop_a_region.png
+  Saved -> test-output-py\zelda-poster-3\zelda-poster-3_crop.png  (1024×896 px)
 
 ============================================================
-[sample] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_crop.png
+[sample] test-output-py\zelda-poster-3\zelda-poster-3_crop.png
   Loaded 1024×896 px  (128×112 GB pixels at scale=8)
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_sample.png  (colour, subpixel-aware, 128×112 px)
+  Saved -> test-output-py\zelda-poster-3\zelda-poster-3_sample.png  (colour, subpixel-aware, 128×112 px)
   R: 1–255  G: 0–255  B: 70–223
 
 ============================================================
-[quantize/color] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_sample.png
+[quantize/color] test-output-py\zelda-poster-3\zelda-poster-3_sample.png
   Loaded 128x112 colour sample
   Global k-means RG: BK(1572)~(R53,G28,B121)  DG(3525)~(R146,G151,B178)  LG(4189)~(R238,G152,B128)  WH(5050)~(R247,G246,B145)
   Strip ensemble: 7 strips, changed 31 px
@@ -108,13 +108,13 @@ PIPELINE RUN
   G-valley refinement (post-strip): threshold=205.0, changed 23 px
   Final labels: BK(1572)~(R53,G28,B121)  DG(3525)~(R146,G151,B178)  LG(4201)~(R238,G152,B128)  WH(5038)~(R247,G246,B145)
   Classification: strip-kmeans-RG+G-valley
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_gbcam.png
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\zelda-poster-3_gbcam_rgb.png
+  Saved -> test-output-py\zelda-poster-3\zelda-poster-3_gbcam.png
+  Saved -> test-output-py\zelda-poster-3\zelda-poster-3_gbcam_rgb.png
   BK:  1572 px ( 11.0%)
   DG:  3525 px ( 24.6%)
   LG:  4201 px ( 29.3%)
   WH:  5038 px ( 35.1%)
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3\debug\zelda-poster-3_sample__quantize_color_a_gray_8x.png
+    [debug] test-output-py\zelda-poster-3\debug\zelda-poster-3_sample__quantize_color_a_gray_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
@@ -287,7 +287,7 @@ FULL PIXEL ERROR LIST  (62 errors, sorted by row then column)
    110   127         WH  #FFFFA5         LG  #FF9494
 
 ----------------------------------------------------------------------
-DIAGNOSTIC IMAGES  (in C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\zelda-poster-3)
+DIAGNOSTIC IMAGES  (in test-output-py\zelda-poster-3)
 ----------------------------------------------------------------------
   zelda-poster-3_diag_result.png     — pipeline output (colour palette)
   zelda-poster-3_diag_reference.png  — reference image (colour palette)

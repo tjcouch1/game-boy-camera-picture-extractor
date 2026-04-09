@@ -25,9 +25,17 @@ Exit code:
 """
 
 import argparse
+import os
 import sys
 import traceback
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _rel(path):
+    """Return *path* relative to the repo root for display purposes."""
+    return os.path.relpath(path, REPO_ROOT)
 
 import cv2
 import numpy as np
@@ -79,8 +87,8 @@ def run_pipeline(input_path, output_dir, scale=8, thresh_val=180, poly_degree=2,
 
     print(f"\n{'='*70}")
     print(f"PIPELINE RUN")
-    print(f"  Input:      {input_path}")
-    print(f"  Output dir: {output_dir}")
+    print(f"  Input:      {_rel(input_path)}")
+    print(f"  Output dir: {_rel(output_dir)}")
     print(f"  scale={scale}  threshold={thresh_val}  poly_degree={poly_degree}"
           f"  dark_smooth={dark_smooth}")
     print(f"{'='*70}\n")
@@ -249,7 +257,7 @@ def compare(result, reference, output_dir, stem):
 
     # -- Diagnostic images -------------------------------------
     print(f"\n{'-'*70}")
-    print(f"DIAGNOSTIC IMAGES  (in {output_dir})")
+    print(f"DIAGNOSTIC IMAGES  (in {_rel(output_dir)})")
     print(f"{'-'*70}")
 
     result_bgr    = render_palette(result)

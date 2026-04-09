@@ -9,7 +9,7 @@
  *   pnpm test:pipeline
  */
 
-import { resolve, join, basename, extname } from "path";
+import { resolve, join, basename, extname, relative } from "path";
 import {
   existsSync,
   mkdirSync,
@@ -573,8 +573,8 @@ async function main() {
 
         try {
           log(`\nPIPELINE RUN`);
-          log(`  Input:      ${inputPath}`);
-          log(`  Output dir: ${outputDir}`);
+          log(`  Input:      ${relative(REPO_ROOT, inputPath)}`);
+          log(`  Output dir: ${relative(REPO_ROOT, outputDir)}`);
 
           const pipelineResult = await runPipeline(
             inputPath,

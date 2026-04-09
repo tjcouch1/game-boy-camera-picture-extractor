@@ -36,7 +36,7 @@ from pathlib import Path
 from gbcam_common import (
     SCREEN_W, SCREEN_H, FRAME_THICK, CAM_W, CAM_H,
     STEP_SUFFIX,
-    log, set_verbose, save_debug, collect_inputs, make_output_path,
+    log, set_verbose, save_debug, collect_inputs, make_output_path, _rel,
 )
 
 SUFFIX = STEP_SUFFIX["crop"]
@@ -46,7 +46,7 @@ def process_file(input_path, output_path, scale=8,
                  debug=False, debug_dir=None):
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
-    log(f"[crop] {input_path}", always=True)
+    log(f"[crop] {_rel(input_path)}", always=True)
 
     raw = cv2.imread(str(input_path))
     if raw is None:
@@ -93,7 +93,7 @@ def process_file(input_path, output_path, scale=8,
         save_debug(dbg, debug_dir, stem, "crop_a_region")
 
     cv2.imwrite(str(output_path), crop)
-    log(f"  Saved -> {output_path}  ({crop.shape[1]}×{crop.shape[0]} px)", always=True)
+    log(f"  Saved -> {_rel(output_path)}  ({crop.shape[1]}×{crop.shape[0]} px)", always=True)
 
 
 def main():

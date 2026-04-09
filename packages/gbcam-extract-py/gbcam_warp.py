@@ -41,7 +41,7 @@ from pathlib import Path
 from gbcam_common import (
     SCREEN_W, SCREEN_H, INNER_TOP, INNER_BOT, INNER_LEFT, INNER_RIGHT,
     STEP_SUFFIX,
-    log, set_verbose, save_debug, collect_inputs, make_output_path,
+    log, set_verbose, save_debug, collect_inputs, make_output_path, _rel,
 )
 
 SUFFIX = STEP_SUFFIX["warp"]
@@ -697,7 +697,7 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
                  debug=False, debug_dir=None):
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
-    log(f"[warp] {input_path}", always=True)
+    log(f"[warp] {_rel(input_path)}", always=True)
 
     img = cv2.imread(str(input_path))
     if img is None:
@@ -731,7 +731,7 @@ def process_file(input_path, output_path, scale=8, thresh_val=180,
                      0, 255).astype(np.uint8)
 
     cv2.imwrite(str(output_path), warped)
-    log(f"  Saved -> {output_path}  (colour BGR)", always=True)
+    log(f"  Saved -> {_rel(output_path)}  (colour BGR)", always=True)
 
 
 # ---------------------------------------------------------------------------

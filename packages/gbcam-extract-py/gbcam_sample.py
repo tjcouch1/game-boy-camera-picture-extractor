@@ -52,7 +52,7 @@ from pathlib import Path
 
 from gbcam_common import (
     CAM_W, CAM_H, STEP_SUFFIX,
-    log, set_verbose, save_debug, collect_inputs, make_output_path,
+    log, set_verbose, save_debug, collect_inputs, make_output_path, _rel,
 )
 
 SUFFIX = STEP_SUFFIX["sample"]
@@ -107,7 +107,7 @@ def process_file(input_path, output_path, scale=8,
     """
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
-    log(f"[sample] {input_path}", always=True)
+    log(f"[sample] {_rel(input_path)}", always=True)
 
     _raw = cv2.imread(str(input_path), cv2.IMREAD_UNCHANGED)
     if _raw is None:
@@ -212,7 +212,7 @@ def process_file(input_path, output_path, scale=8,
         np.clip(np.stack([samp_r, samp_g, samp_b], axis=-1), 0, 255).astype(np.uint8),
         cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(output_path), out_bgr)
-    log(f"  Saved -> {output_path}  (colour, subpixel-aware, 128×112 px)", always=True)
+    log(f"  Saved -> {_rel(output_path)}  (colour, subpixel-aware, 128×112 px)", always=True)
     log(f"  R: {samp_r.min():.0f}–{samp_r.max():.0f}  "
         f"G: {samp_g.min():.0f}–{samp_g.max():.0f}  "
         f"B: {samp_b.min():.0f}–{samp_b.max():.0f}")

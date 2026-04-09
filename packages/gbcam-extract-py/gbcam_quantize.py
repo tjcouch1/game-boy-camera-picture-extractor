@@ -48,7 +48,7 @@ from pathlib import Path
 from itertools import permutations
 from gbcam_common import (GB_COLORS, CAM_W, CAM_H, STEP_SUFFIX,
                            log, set_verbose, save_debug, collect_inputs,
-                           make_output_path, strip_step_suffix)
+                           make_output_path, strip_step_suffix, _rel)
 SUFFIX = STEP_SUFFIX["quantize"]
 
 COLOR_PALETTE_RGB = np.array([
@@ -230,7 +230,7 @@ def _process_file_color(input_path, output_path, smooth=True, debug=False, debug
     from pathlib import Path as _Path
     stem_p=_Path(input_path); stem=stem_p.stem
     log("\n" + "="*60, always=True)
-    log(f"[quantize/color] {input_path}", always=True)
+    log(f"[quantize/color] {_rel(input_path)}", always=True)
     bgr=cv2.imread(str(input_path))
     if bgr is None: raise RuntimeError(f"Cannot read: {input_path}")
     if bgr.shape[:2]!=(CAM_H,CAM_W):
@@ -244,11 +244,11 @@ def _process_file_color(input_path, output_path, smooth=True, debug=False, debug
     out_gray=GRAY_VALS[labels]
     out_rgb=COLOR_PALETTE_RGB[labels]
     Image.fromarray(out_gray,"L").save(str(output_path))
-    log(f"  Saved -> {output_path}",always=True)
+    log(f"  Saved -> {_rel(output_path)}",always=True)
     out_path=_Path(output_path)
     rgb_path=out_path.parent/(strip_step_suffix(out_path.stem)+STEP_SUFFIX["quantize"]+"_rgb.png")
     cv2.imwrite(str(rgb_path),cv2.cvtColor(out_rgb,cv2.COLOR_RGB2BGR))
-    log(f"  Saved -> {rgb_path}",always=True)
+    log(f"  Saved -> {_rel(rgb_path)}",always=True)
     names=["BK","DG","LG","WH"]
     for i,(gv,name) in enumerate(zip([0,82,165,255],names)):
         cnt=int((labels==i).sum()); log(f"  {name}: {cnt:5d} px ({100*cnt/labels.size:5.1f}%)")

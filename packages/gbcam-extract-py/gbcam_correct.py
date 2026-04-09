@@ -72,7 +72,7 @@ from gbcam_common import (
     SCREEN_W, SCREEN_H, FRAME_THICK, CAM_W, CAM_H,
     INNER_TOP, INNER_BOT, INNER_LEFT, INNER_RIGHT,
     STEP_SUFFIX,
-    log, set_verbose, save_debug, collect_inputs, make_output_path,
+    log, set_verbose, save_debug, collect_inputs, make_output_path, _rel,
 )
 
 SUFFIX = STEP_SUFFIX["correct"]
@@ -539,7 +539,7 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     from pathlib import Path as _Path
     stem = _Path(input_path).stem
     log(f"\n{'='*60}", always=True)
-    log(f"[correct/color] {input_path}", always=True)
+    log(f"[correct/color] {_rel(input_path)}", always=True)
 
     bgr = cv2.imread(str(input_path))
     if bgr is None:
@@ -804,7 +804,7 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
     out_bgr = cv2.cvtColor(np.clip(corrected_rgb, 0, 255).astype(np.uint8),
                             cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(output_path), out_bgr)
-    log(f"  Saved -> {output_path}  (colour, frame normalised to #FFFFA5)", always=True)
+    log(f"  Saved -> {_rel(output_path)}  (colour, frame normalised to #FFFFA5)", always=True)
 
     # Verify: sample the camera area and check inner border
     cam_rgb = corrected_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
@@ -841,7 +841,7 @@ def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
                 "frame_p85_G": float(frame_p85[1]),
                 "frame_p85_B": float(frame_p85[2])},
                open(str(meta_path), 'w'))
-    log(f"  Metadata -> {meta_path}")
+    log(f"  Metadata -> {_rel(meta_path)}")
 
 
 def _fit_surface_poly(ys, xs, vals, H, W, degree=4):

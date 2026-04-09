@@ -6,6 +6,14 @@ import cv2
 import numpy as np
 import os
 import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _rel(path) -> str:
+    """Return *path* relative to the repo root for display purposes."""
+    return os.path.relpath(str(path), _REPO_ROOT)
 
 # ─────────────────────────────────────────────────────────────
 # Game Boy Camera palette (grayscale values)
@@ -121,7 +129,7 @@ def save_debug(data, debug_dir: str, stem: str, tag: str):
         data.save(path)
     elif isinstance(data, np.ndarray):
         cv2.imwrite(path, data)
-    log(f"    [debug] {path}")
+    log(f"    [debug] {_rel(path)}")
 
 
 # ─────────────────────────────────────────────────────────────

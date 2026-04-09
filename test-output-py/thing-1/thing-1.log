@@ -1,19 +1,19 @@
 
 ======================================================================
 PIPELINE RUN
-  Input:      C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-input\thing-1.jpg
-  Output dir: C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1
+  Input:      test-input\thing-1.jpg
+  Output dir: test-output-py\thing-1
   scale=8  threshold=180  poly_degree=2  dark_smooth=13
 ======================================================================
 
 
 ============================================================
-[warp] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-input\thing-1.jpg
+[warp] test-input\thing-1.jpg
   Loaded 1299x1186 px
   a -- Detecting screen corners
   Contour: area=1393862  aspect=1.108 (expected~1.111)  thresh=180  quad_score=0.0345
   Corners (TL TR BR BL): [[25, 21], [1269, 38], [1250, 1153], [17, 1150]]
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1__warp_a_corners.png
+    [debug] test-output-py\thing-1\debug\thing-1__warp_a_corners.png
   b -- Initial perspective warp
   Initial warp -> 1280x1152  (scale=8)
   Initial border validation:
@@ -31,7 +31,7 @@ PIPELINE RUN
     [verify] bottom   edge: error=68.8 (expect~[165, 255, 255], actual~[173, 189, 234]) [WARN]
     [verify] left     edge: error=96.6 (expect~[165, 255, 255], actual~[151, 167, 216]) [WARN]
     [verify] right    edge: error=111.3 (expect~[165, 255, 255], actual~[140, 157, 207]) [WARN]
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1__warp_b_initial_color.png
+    [debug] test-output-py\thing-1\debug\thing-1__warp_b_initial_color.png
   c -- Refining (pass 1)
   Pass 1 edge curvatures: top=-1.01, bot=-3.97, left=-2.13, right=+2.58
   Pass 1 corners: TL=(118.3,119.4) err=(-1.7,-0.6)  TR=(1154.2,119.6) err=(+2.2,-0.4)  BR=(1154.1,1026.8) err=(+2.1,+2.8)  BL=(119.0,1026.1) err=(-1.0,+2.1)
@@ -70,11 +70,11 @@ PIPELINE RUN
     [verify] bottom   edge: error=76.3 (expect~[165, 255, 255], actual~[164, 182, 231]) [WARN]
     [verify] left     edge: error=90.6 (expect~[165, 255, 255], actual~[149, 172, 220]) [WARN]
     [verify] right    edge: error=101.5 (expect~[165, 255, 255], actual~[152, 164, 210]) [WARN]
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1__warp_d_refined_color.png
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_warp.png  (colour BGR)
+    [debug] test-output-py\thing-1\debug\thing-1__warp_d_refined_color.png
+  Saved -> test-output-py\thing-1\thing-1_warp.png  (colour BGR)
 
 ============================================================
-[correct/color] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_warp.png
+[correct/color] test-output-py\thing-1\thing-1_warp.png
   Loaded 1280×1152 px (colour, scale=8)
   R: Coons+poly -> 255 / 148
     R refinement: 8116 interior DG pixels
@@ -88,31 +88,31 @@ PIPELINE RUN
   B: white-surface normalisation -> 165 (no global scaling)
   Frame p85 before norm: R=255 G=249 B=172
   Global scales: R=1.0000 G=1.0246 B=1.0000
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_correct.png  (colour, frame normalised to #FFFFA5)
+  Saved -> test-output-py\thing-1\thing-1_correct.png  (colour, frame normalised to #FFFFA5)
   Camera area mean: R=160.0 G=133.3 B=153.6
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1_warp__correct_color_a_before_after.png
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1_warp__correct_color_b_white_surf_heatmap.png
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1_warp__correct_color_c_full.png
-  Metadata -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_correct.json
+    [debug] test-output-py\thing-1\debug\thing-1_warp__correct_color_a_before_after.png
+    [debug] test-output-py\thing-1\debug\thing-1_warp__correct_color_b_white_surf_heatmap.png
+    [debug] test-output-py\thing-1\debug\thing-1_warp__correct_color_c_full.png
+  Metadata -> test-output-py\thing-1\thing-1_correct.json
 
 ============================================================
-[crop] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_correct.png
+[crop] test-output-py\thing-1\thing-1_correct.png
   Loaded 1280×1152 px (scale=8)
   Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
   Validation: inner border mean=148.1, white frame mean=207.7 (OK)
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1_correct__crop_a_region.png
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_crop.png  (1024×896 px)
+    [debug] test-output-py\thing-1\debug\thing-1_correct__crop_a_region.png
+  Saved -> test-output-py\thing-1\thing-1_crop.png  (1024×896 px)
 
 ============================================================
-[sample] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_crop.png
+[sample] test-output-py\thing-1\thing-1_crop.png
   Loaded 1024×896 px  (128×112 GB pixels at scale=8)
   Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
   Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_sample.png  (colour, subpixel-aware, 128×112 px)
+  Saved -> test-output-py\thing-1\thing-1_sample.png  (colour, subpixel-aware, 128×112 px)
   R: 40–255  G: 0–255  B: 67–182
 
 ============================================================
-[quantize/color] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_sample.png
+[quantize/color] test-output-py\thing-1\thing-1_sample.png
   Loaded 128x112 colour sample
   Global k-means RG: BK(1332)~(R86,G22,B100)  DG(8593)~(R149,G146,B157)  LG(2569)~(R238,G176,B136)  WH(1842)~(R248,G250,B138)
   Strip ensemble: 7 strips, changed 201 px
@@ -120,13 +120,13 @@ PIPELINE RUN
   G-valley refinement (post-strip): threshold=236.0, changed 336 px
   Final labels: BK(1335)~(R86,G22,B100)  DG(8610)~(R149,G146,B157)  LG(2707)~(R238,G179,B136)  WH(1684)~(R249,G252,B137)
   Classification: strip-kmeans-RG+G-valley
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_gbcam.png
-  Saved -> C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\thing-1_gbcam_rgb.png
+  Saved -> test-output-py\thing-1\thing-1_gbcam.png
+  Saved -> test-output-py\thing-1\thing-1_gbcam_rgb.png
   BK:  1335 px (  9.3%)
   DG:  8610 px ( 60.1%)
   LG:  2707 px ( 18.9%)
   WH:  1684 px ( 11.7%)
-    [debug] C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1\debug\thing-1_sample__quantize_color_a_gray_8x.png
+    [debug] test-output-py\thing-1\debug\thing-1_sample__quantize_color_a_gray_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
@@ -248,7 +248,7 @@ FULL PIXEL ERROR LIST  (30 errors, sorted by row then column)
     92   120         DG  #9494FF         BK  #000000
 
 ----------------------------------------------------------------------
-DIAGNOSTIC IMAGES  (in C:\Users\tj_co\source\repos-p\game-boy-camera-picture-extractor\test-output-py\thing-1)
+DIAGNOSTIC IMAGES  (in test-output-py\thing-1)
 ----------------------------------------------------------------------
   thing-1_diag_result.png     — pipeline output (colour palette)
   thing-1_diag_reference.png  — reference image (colour palette)
