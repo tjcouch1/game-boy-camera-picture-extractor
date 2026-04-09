@@ -224,6 +224,7 @@ test-output/**/*
 node_modules/
 packages/*/dist/
 packages/*/dist-test/
+tsconfig.tsbuildinfo
 
 # pnpm
 .pnpm-store/

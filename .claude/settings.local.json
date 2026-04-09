@@ -31,7 +31,11 @@
       "Bash(pnpm install:*)",
       "Bash(npx vitest:*)",
       "mcp__context7__query-docs",
-      "Bash(volta run:*)"
+      "Bash(volta run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm build:*)",
+      "Bash(node.exe \"/c/Users/tj_co/AppData/Local/Volta/tools/image/pnpm/10.33.0/bin/pnpm.cjs\" build)",
+      "Bash(node.exe \"/c/Users/tj_co/AppData/Local/Volta/tools/image/pnpm/10.33.0/bin/pnpm.cjs\" test)"
     ],
     "deny": [
       "Bash(rm -rf /)",

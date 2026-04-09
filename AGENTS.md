@@ -55,7 +55,7 @@ Your goal is to improve the script to increase the accuracy of the transformatio
 
 The following are important files and directories to note in the repository/directory:
 
-- `packages/gbcam-extract-py/.venv` - the python venv you must use to execute python scripts (may need to be recreated after the monorepo restructure)
+- `packages/gbcam-extract-py/.venv` - the python venv you must use to execute python scripts
 - `sample-pictures/` - contains sample input images that get run through the transformation script in the test suite
 - `sample-pictures-out/` - contains the output of the transformation script from the pictures in `sample-pictures/`
 - `supporting-materials/` - contains some helpful reference files
