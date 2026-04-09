@@ -19,7 +19,7 @@ def _rel(path):
 
 SCRIPT_DIR = str(Path(__file__).resolve().parent)
 TEST_INPUT_DIR = os.path.join(REPO_ROOT, "test-input")
-TEST_OUTPUT_DIR = os.path.join(REPO_ROOT, "test-output")
+TEST_OUTPUT_DIR = os.path.join(REPO_ROOT, "test-output-py")
 REFERENCE_SUFFIX = "-output-corrected.png"
 SUMMARY_LOG = os.path.join(TEST_OUTPUT_DIR, "test-summary.log")
 

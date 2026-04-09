@@ -98,12 +98,12 @@ TypeScript pipeline tests (accuracy comparison against reference images):
 cd packages/gbcam-extract && pnpm test:pipeline
 ```
 
-Both test runners produce output in `test-output/` with a `test-summary.log`.
+Python test runner outputs to `test-output-py/`, TypeScript to `test-output/`. Both produce a `test-summary.log`. You can compare them side by side.
 
 ### Inspecting test results
 
-- `test-output/<test-name>/` contains the pipeline output and debug images
-- `test-output/test-summary.log` has accuracy numbers (matching/different pixel counts and percentages)
+- `test-output/<test-name>/` (TypeScript) or `test-output-py/<test-name>/` (Python) contains the pipeline output and debug images
+- `test-output/test-summary.log` / `test-output-py/test-summary.log` has accuracy numbers (matching/different pixel counts and percentages)
 - Debug images show where pixels differ from the reference (error maps, side-by-side comparisons)
 - `test-output/<test-name>/debug/` contains intermediate step images when run with debug enabled
 

@@ -220,6 +220,12 @@ test-output/**/*
 !test-output/**/*_gbcam.png
 !test-output/**/*_gbcam_rgb.png
 
+test-output-py/**/*
+!test-output-py/*/
+!test-output-py/**/*.log
+!test-output-py/**/*_gbcam.png
+!test-output-py/**/*_gbcam_rgb.png
+
 # Node
 node_modules/
 packages/*/dist/
