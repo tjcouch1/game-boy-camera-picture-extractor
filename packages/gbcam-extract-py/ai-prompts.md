@@ -546,3 +546,28 @@ Run the tests with the attached `zelda-poster-1.jpg` and `zelda-poster-2.jpg` wi
 Once you have made the script, split up the script into steps so there is an overall script that accepts the command-line args, collects the source images, runs the step scripts, then outputs the transformed images to be input into the next step script. I want to be able to run the overall script and tell it which step in the process to start on (in this case, the input images will be the output from the previous step), then it finishes the process. Make sure the steps are referred to by names, not just step numbers.
 
 Add command-line help -h and --help that explains the overall process including each step in order. Each step should include a description of what it does.
+
+# Recent work on website and TypeScript improvements
+
+/brainstorming The python pipeline is *significantly* more accurate than the typescript pipeline. Something must have gone wrong in the porting effort. Make a plan to go back and revise the typescript port code to more accurately mirror the python code. Compare the debug output between the typescript and python code to check your work. It may be helpful to write a script that can interweave python and typescript steps then analyze the output so you can isolate individual typescript steps 
+
+/brainstorming make a plan to implement the following:
+- script that runs a local test of the built website files (simulate GitHub Pages locally - want to be able to test PWA, offline, etc)
+- in the website:
+  - rewrite the palette colors (`palettes.ts`) to be derived directly from the color tables (`supporting-materials\color-tables`). there are some additional palettes in there that aren't from those color tables; move them into a new "Fun" section instead of mixing it with the others
+  - show some indication of progress when processing the images - right now, it just shows you how many are done but doesn't indicate how many there are total or how far along the images are in processing
+  - while the user is updating their custom color palette, show the images with the custom palette immediately in the previews. Save their color palette as a draft while they're editing so they can refresh the page or change to other palettes and still have the same draft color palette. Show an indication that the custom palette is a draft. Allow the user to delete their draft custom palette.
+    - when there is not a draft custom palette, when the user clicks a color palette, set the new custom color palette to have those colors so the user can easily modify an existing palette. When there is a draft custom palette, don't change it when the user changes palettes
+  - add a share button to the images
+
+
+offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
+
+
+Download all button
+Keep old output files
+Not touching frame_ascii.txt in correct.ts - why?
+Change the algorithm so it detects an appropriate scale instead of using 8 hard-coded
+Put the palette name in the file name
+Edit custom palettes
+Favorite palettes

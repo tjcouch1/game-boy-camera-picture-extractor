@@ -184,8 +184,8 @@ python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --referenc
 
 # Roadmap
 
+- Accuracy improvements
 - Initial crop from phone picture to cropped and rotated image that is input to "warp" step
-- Add color palette selection
-- WebAssembly
-- Make a GitHub Pages frontend
-- PWA for offline use
+- Add color palette selection (pipeline - already implemented in website)
+- Publish the GitHub Pages frontend
+  - Verify PWA works for offline use
