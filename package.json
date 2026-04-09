@@ -6,7 +6,8 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "dev": "pnpm --filter gbcam-extract-web dev",
-    "dev:host": "pnpm --filter gbcam-extract-web dev --host"
+    "dev:host": "pnpm --filter gbcam-extract-web dev --host",
+    "typecheck": "pnpm -r run typecheck"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["sharp"]

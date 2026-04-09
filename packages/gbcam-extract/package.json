@@ -14,7 +14,8 @@
     "build": "tsup src/index.ts --format esm --dts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:opencv-init-node": "tsup test-opencv-init-node.ts --format esm --out-dir dist-test --clean && node dist-test/test-opencv-init-node.js"
+    "test:opencv-init-node": "tsup test-opencv-init-node.ts --format esm --out-dir dist-test --clean && node dist-test/test-opencv-init-node.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@techstark/opencv-js": "^4.10.0-release.1",
