@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:opencv-init-node": "tsup test-opencv-init-node.ts --format esm --out-dir dist-test --clean && node dist-test/test-opencv-init-node.js",
     "typecheck": "tsc --noEmit",
-    "extract": "tsup scripts/extract.ts --format esm --out-dir dist-scripts --clean --external @techstark/opencv-js --external sharp --external ml-regression-polynomial && node dist-scripts/extract.js"
+    "extract": "tsup scripts/extract.ts --format esm --out-dir dist-scripts --clean --external @techstark/opencv-js --external sharp --external ml-regression-polynomial && node dist-scripts/extract.js",
+    "test:pipeline": "tsup scripts/run-tests.ts --format esm --out-dir dist-scripts --clean --external @techstark/opencv-js --external sharp --external ml-regression-polynomial && node dist-scripts/run-tests.js"
   },
   "dependencies": {
     "@techstark/opencv-js": "^4.10.0-release.1",

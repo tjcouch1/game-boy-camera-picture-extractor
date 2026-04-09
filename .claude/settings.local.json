@@ -35,7 +35,8 @@
       "Bash(npx tsc:*)",
       "Bash(pnpm build:*)",
       "Bash(node.exe \"/c/Users/tj_co/AppData/Local/Volta/tools/image/pnpm/10.33.0/bin/pnpm.cjs\" build)",
-      "Bash(node.exe \"/c/Users/tj_co/AppData/Local/Volta/tools/image/pnpm/10.33.0/bin/pnpm.cjs\" test)"
+      "Bash(node.exe \"/c/Users/tj_co/AppData/Local/Volta/tools/image/pnpm/10.33.0/bin/pnpm.cjs\" test)",
+      "Bash(pnpm typecheck:*)"
     ],
     "deny": [
       "Bash(rm -rf /)",
