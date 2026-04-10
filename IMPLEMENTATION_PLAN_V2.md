@@ -13,9 +13,9 @@
 **Root Cause:** `useProcessing.ts` calculates `overallProgress` as `(completedImages / totalImages)`, which jumps from 0 to 100% when moving between files.  
 **Solution:** Track per-file pipeline step progress and blend it with file-level progress to show smooth overall progress.
 
-### 2. Palette Names in Filenames Should Use Underscores
-**Problem:** Downloaded files include palette names with spaces (e.g., `"0x01 custom 1_gb.png"`).  
-**Solution:** Replace spaces with underscores when constructing download filenames.
+### 2. Add Palette Name to Downloaded Filenames
+**Problem:** Downloaded filenames don't include the palette used (e.g., `"photo_gb.png"` instead of `"photo_0x01_gb.png"`). This makes it hard to track which palette was applied to which output file.  
+**Solution:** Add sanitized palette name to the filename before the `_gb.png` suffix. Replace spaces with underscores in palette names.
 
 ### 3. User Palette Management Needs Edit Mode
 **Problem:** Current system has hardcoded "draft" palette workflow. Need flexible edit mode for any user palette.  
@@ -61,7 +61,7 @@
 
 ---
 
-### Phase 2: Palette Naming in Filenames
+### Phase 2: Add Palette Name to Downloaded Filenames
 **Files to Modify:**
 - `packages/gbcam-extract-web/src/App.tsx` (downloadResult function)
 - `packages/gbcam-extract-web/src/components/ResultCard.tsx` (handleDownload)
@@ -69,12 +69,18 @@
 **Steps:**
 1. Create helper function: `sanitizePaletteName(name: string): string`
    - Replace spaces with underscores
-   - Handle other special characters if needed
-2. Apply to both single-image and batch download functions
-3. Test with palette names containing spaces (e.g., "0x01 custom 1")
+   - Remove special characters if needed (keeping alphanumerics, underscores, hyphens)
+2. Update `downloadResult()` signature to accept palette name parameter
+3. Update download filename format: `{original_name}_{sanitized_palette_name}_gb.png`
+   - Example: `photo.jpg` + `"0x01 custom 1"` → `photo_0x01_custom_1_gb.png`
+4. Update ResultCard's `handleDownload()` to pass palette name
+5. Update batch download in App.tsx to use new downloadResult signature
+6. Test with various palette names including spaces and special characters
 
 **Expected Outcome:**
-- Downloaded files like `thing_1_0x01_custom_1_gb.png`
+- Downloaded files include palette name: `thing_1_0x01_custom_1_gb.png`
+- Palette name is sanitized (underscores instead of spaces)
+- Works for both single and batch downloads
 
 ---
 
