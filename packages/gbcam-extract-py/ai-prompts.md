@@ -561,18 +561,33 @@ Add command-line help -h and --help that explains the overall process including 
     - when there is not a draft custom palette, when the user clicks a color palette, set the new custom color palette to have those colors so the user can easily modify an existing palette. When there is a draft custom palette, don't change it when the user changes palettes
   - add a share button to the images
 
-offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
+Investigate the following issues and create a plan for implementing:
 
-Download all button
+- The progress bar is very unhelpful now. It just shows 100% on an image. It needs to show the overall progress for all images in the pipeline
+- Put the palette name in the file name with underscores instead of spaces
+- Instead of tracking a draft palette, just make the +Custom button create a new user palette in "edit mode" with colors based on the currently selected palette and with name based on the currently selected palette name (e.g. if the palette selected is `0x01`, the starting title should be `0x01 custom #` where `#` is a number that makes the title unique - starting at 1 and increasing until it finds a number that makes the title unique). Now, user palettes should be able to be in "edit mode"
+  - Any number of user palettes can be in edit mode at once
+  - In "edit mode", the user can set the palette's colors and name (just like it is now when the user is in the process of creating a palette)
+  - In "edit mode", clicking in the blank space in the palette selects the palette (meaning the files change to that palette)
+  - In "edit mode", the save button should be grayed out and there should be a short description of the problem if the palette name is blank or if the palette name is the same as an existing palette's name
+  - In "edit mode", when the palette has previously been saved, there is a cancel button that closes the palette without saving and restores its previously saved values. This means you will have to track the current values and the saved values. But if a palette in edit mode is selected, it should use the current colors, not the saved colors
+  - In "edit mode", clicking the save button closes edit mode
+  - In "edit mode", there is a delete button that permanently deletes the palette
+  - When not in "edit mode", the user palette should have an edit button instead of the current X button that deletes it. There should not be a delete button on the user palettes when they are not in edit mode
+- Change the palette generation so the name of the palettes with a button combo do not contain the button combo (e.g. instead of "0x1A (B + Down)" it should just be "0x1A")
+- Move the palette generation to gbcam-extract's build step and export the generated palettes from that package. Import it from `gbcam-extract` in `palettes.ts`.
+
+offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
+The offline-available features don't seem to be working. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
+Download all zipped button
 Keep old output files
 Not touching frame_ascii.txt in correct.ts - why?
 Change the algorithm so it detects an appropriate scale instead of using 8 hard-coded
-Put the palette name in the file name
 Edit custom palettes
 Favorite palettes
 Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
 Move md files etc. from py into right places
 Update instructions files
-Move the prompt generation to gbcam-extract and export it from that package.
 Scale output images to preferred scale
 Remove http-server? Maybe vite preview does everything
+Localization
