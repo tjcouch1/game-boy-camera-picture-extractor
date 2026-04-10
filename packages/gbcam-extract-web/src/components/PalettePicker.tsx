@@ -10,33 +10,33 @@ import { useUserPalettes } from "../hooks/useUserPalettes.js";
 import { useDraftPalette } from "../hooks/useDraftPalette.js";
 
 interface PalettePickerProps {
-  selected: [string, string, string, string];
-  onSelect: (palette: [string, string, string, string]) => void;
-  onSelectWithName?: (
-    palette: [string, string, string, string],
-    name: string,
-  ) => void;
+  selected: PaletteEntry;
+  onSelectWithName: (entry: PaletteEntry) => void;
 }
 
 function PaletteSwatch({
   entry,
   isSelected,
+  doesMatchColors,
   onClick,
   onDelete,
 }: {
   entry: PaletteEntry;
   isSelected: boolean;
+  doesMatchColors: boolean;
   onClick: () => void;
   onDelete?: () => void;
 }) {
+  const bgClass = isSelected
+    ? "bg-blue-600 ring-2 ring-blue-400"
+    : doesMatchColors
+      ? "bg-blue-800 hover:bg-blue-700"
+      : "bg-gray-700 hover:bg-gray-600";
+
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
-        isSelected
-          ? "bg-blue-600 ring-2 ring-blue-400"
-          : "bg-gray-700 hover:bg-gray-600"
-      }`}
+      className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${bgClass}`}
     >
       <div className="flex shrink-0">
         {entry.colors.map((c, i) => (
@@ -67,18 +67,13 @@ function PaletteSection({
   title,
   entries,
   selected,
-  onSelect,
   onSelectWithName,
   onDelete,
 }: {
   title: string;
   entries: PaletteEntry[];
-  selected: [string, string, string, string];
-  onSelect: (colors: [string, string, string, string]) => void;
-  onSelectWithName?: (
-    colors: [string, string, string, string],
-    name: string,
-  ) => void;
+  selected: PaletteEntry;
+  onSelectWithName: (entry: PaletteEntry) => void;
   onDelete?: (index: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -100,12 +95,10 @@ function PaletteSection({
             <PaletteSwatch
               key={i}
               entry={entry}
-              isSelected={entry.colors.every((c, j) => c === selected[j])}
+              isSelected={entry.name === selected.name && entry.colors.every((c, j) => c === selected.colors[j])}
+              doesMatchColors={entry.colors.every((c, j) => c === selected.colors[j])}
               onClick={() => {
-                onSelect(entry.colors);
-                if (onSelectWithName) {
-                  onSelectWithName(entry.colors, entry.name);
-                }
+                onSelectWithName(entry);
               }}
               onDelete={onDelete ? () => onDelete(i) : undefined}
             />
@@ -118,7 +111,6 @@ function PaletteSection({
 
 export function PalettePicker({
   selected,
-  onSelect,
   onSelectWithName,
 }: PalettePickerProps) {
   const {
@@ -280,73 +272,67 @@ export function PalettePicker({
             title="✏️ Draft"
             entries={draft ? [{ name: "Draft", colors: draft }] : []}
             selected={selected}
-            onSelect={(colors) => {
-              onSelect(colors);
-              recordNonDraftPalette(colors);
+            onSelectWithName={(entry) => {
+              recordNonDraftPalette(entry.colors);
+              onSelectWithName(entry);
             }}
-            onSelectWithName={onSelectWithName}
           />
         )}
         <PaletteSection
           title="User Palettes"
           entries={userPalettes}
           selected={selected}
-          onSelect={(colors) => {
-            onSelect(colors);
+          onSelectWithName={(entry) => {
             if (hasDraft) {
-              recordNonDraftPalette(colors);
+              recordNonDraftPalette(entry.colors);
             }
+            onSelectWithName(entry);
           }}
-          onSelectWithName={onSelectWithName}
           onDelete={removePalette}
         />
         <PaletteSection
           title="Button Combos"
           entries={BUTTON_COMBO_PALETTES}
           selected={selected}
-          onSelect={(colors) => {
-            onSelect(colors);
+          onSelectWithName={(entry) => {
             if (hasDraft) {
-              recordNonDraftPalette(colors);
+              recordNonDraftPalette(entry.colors);
             }
+            onSelectWithName(entry);
           }}
-          onSelectWithName={onSelectWithName}
         />
         <PaletteSection
           title="BG Presets"
           entries={BG_PRESETS}
           selected={selected}
-          onSelect={(colors) => {
-            onSelect(colors);
+          onSelectWithName={(entry) => {
             if (hasDraft) {
-              recordNonDraftPalette(colors);
+              recordNonDraftPalette(entry.colors);
             }
+            onSelectWithName(entry);
           }}
-          onSelectWithName={onSelectWithName}
         />
         <PaletteSection
           title="Additional"
           entries={ADDITIONAL_PALETTES}
           selected={selected}
-          onSelect={(colors) => {
-            onSelect(colors);
+          onSelectWithName={(entry) => {
             if (hasDraft) {
-              recordNonDraftPalette(colors);
+              recordNonDraftPalette(entry.colors);
             }
+            onSelectWithName(entry);
           }}
-          onSelectWithName={onSelectWithName}
         />
         <PaletteSection
           title="Fun"
           entries={FUN_PALETTES_EXPORT}
           selected={selected}
-          onSelect={(colors) => {
-            onSelect(colors);
+          onSelectWithName={(entry) => {
             if (hasDraft) {
-              recordNonDraftPalette(colors);
+              recordNonDraftPalette(entry.colors);
             }
+            onSelectWithName(entry);
           }}
-          onSelectWithName={onSelectWithName}
         />
       </div>
     </div>

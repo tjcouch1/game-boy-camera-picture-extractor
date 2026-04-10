@@ -10,6 +10,7 @@ import { PalettePicker } from "./components/PalettePicker.js";
 import { IntermediateViewer } from "./components/IntermediateViewer.js";
 import { useDraftPalette } from "./hooks/useDraftPalette.js";
 import { sanitizePaletteName } from "./utils/filenames.js";
+import type { PaletteEntry } from "./data/palettes.js";
 
 function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
   if (!progress.currentImageProgress) return null;
@@ -42,25 +43,19 @@ export default function App() {
   const { status, progress: cvProgress, error } = useOpenCV();
   const { processFiles, processing, progress, results } = useProcessing();
   const { draft, hasDraft } = useDraftPalette();
-  const [palette, setPalette] = useState<[string, string, string, string]>([
-    "#FFFFFF",
-    "#A5A5A5",
-    "#525252",
-    "#000000",
-  ]);
-  const [paletteName, setPaletteName] = useState("Custom");
+  const [paletteEntry, setPaletteEntry] = useState<PaletteEntry>({
+    name: "B + Left",
+    colors: [
+      "#FFFFFF",
+      "#A5A5A5",
+      "#525252",
+      "#000000",
+    ],
+  });
   const [debug, setDebug] = useState(false);
 
   // Use draft palette if it exists, otherwise use selected palette
-  const effectivePalette = hasDraft && draft ? draft : palette;
-
-  const handlePaletteSelect = (
-    colors: [string, string, string, string],
-    name: string,
-  ) => {
-    setPalette(colors);
-    setPaletteName(name);
-  };
+  const effectivePalette = hasDraft && draft ? draft : paletteEntry.colors;
 
   const handleImagesSelected = (files: File[]) => {
     processFiles(files, debug);
@@ -108,9 +103,8 @@ export default function App() {
               <>
                 <div className="mt-6 mb-4">
                   <PalettePicker
-                    selected={effectivePalette}
-                    onSelect={setPalette}
-                    onSelectWithName={handlePaletteSelect}
+                    selected={paletteEntry}
+                    onSelectWithName={setPaletteEntry}
                   />
                 </div>
 
@@ -123,7 +117,7 @@ export default function App() {
                             r.filename,
                             r.result,
                             effectivePalette,
-                            paletteName,
+                            paletteEntry.name,
                           );
                         });
                       }}
@@ -142,7 +136,7 @@ export default function App() {
                         filename={r.filename}
                         processingTime={r.processingTime}
                         palette={effectivePalette}
-                        paletteName={paletteName}
+                        paletteName={paletteEntry.name}
                       />
                       {r.result.intermediates && (
                         <IntermediateViewer
