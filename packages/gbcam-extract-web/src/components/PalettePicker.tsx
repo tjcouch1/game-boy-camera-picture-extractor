@@ -3,9 +3,11 @@ import {
   BUTTON_COMBO_PALETTES,
   BG_PRESETS,
   ADDITIONAL_PALETTES,
+  FUN_PALETTES_EXPORT,
 } from "../data/palettes.js";
 import type { PaletteEntry } from "../data/palettes.js";
 import { useUserPalettes } from "../hooks/useUserPalettes.js";
+import { useDraftPalette } from "../hooks/useDraftPalette.js";
 
 interface PalettePickerProps {
   selected: [string, string, string, string];
@@ -101,8 +103,22 @@ function PaletteSection({
 }
 
 export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
-  const { palettes: userPalettes, addPalette, removePalette } = useUserPalettes();
+  const {
+    palettes: userPalettes,
+    addPalette,
+    removePalette,
+  } = useUserPalettes();
+  const {
+    draft,
+    hasDraft,
+    lastNonDraftPalette,
+    initializeDraft,
+    updateDraftColors,
+    recordNonDraftPalette,
+    clearDraft,
+  } = useDraftPalette();
   const [showCreate, setShowCreate] = useState(false);
+  const [editingDraft, setEditingDraft] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColors, setNewColors] = useState<[string, string, string, string]>([
     "#FFFFFF",
@@ -111,11 +127,27 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
     "#000000",
   ]);
 
+  // Check if current selection matches draft
+  const isDraftSelected =
+    hasDraft && draft && selected.every((c, i) => c === draft[i]);
+
   const handleSave = () => {
     if (!newName.trim()) return;
-    addPalette({ name: newName.trim(), colors: [...newColors] });
+
+    if (editingDraft) {
+      // Saving draft as permanent palette
+      addPalette({ name: newName.trim(), colors: [...newColors] });
+      clearDraft();
+      setEditingDraft(false);
+      setShowCreate(false);
+    } else {
+      // Creating new custom palette from scratch
+      addPalette({ name: newName.trim(), colors: [...newColors] });
+      setShowCreate(false);
+    }
+
     setNewName("");
-    setShowCreate(false);
+    setNewColors(["#FFFFFF", "#AAAAAA", "#555555", "#000000"]);
   };
 
   return (
@@ -133,7 +165,21 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
             ))}
           </div>
           <button
-            onClick={() => setShowCreate(!showCreate)}
+            onClick={() => {
+              if (editingDraft) {
+                setEditingDraft(false);
+              } else if (showCreate) {
+                setShowCreate(false);
+              } else {
+                if (hasDraft && draft) {
+                  setNewColors([...draft]);
+                  setEditingDraft(true);
+                } else {
+                  setNewColors(["#FFFFFF", "#AAAAAA", "#555555", "#000000"]);
+                }
+                setShowCreate(true);
+              }
+            }}
             className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
           >
             {showCreate ? "Cancel" : "+ Custom"}
@@ -143,6 +189,25 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
 
       {showCreate && (
         <div className="mb-3 p-3 bg-gray-900 rounded">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-400">
+              {editingDraft ? "Edit Draft" : "New Palette"}
+            </span>
+            {editingDraft && (
+              <button
+                onClick={() => {
+                  clearDraft();
+                  setEditingDraft(false);
+                  setShowCreate(false);
+                  setNewName("");
+                  setNewColors(["#FFFFFF", "#AAAAAA", "#555555", "#000000"]);
+                }}
+                className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs text-white transition-colors"
+              >
+                Delete Draft
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2 mb-2">
             {newColors.map((c, i) => (
               <label key={i} className="flex flex-col items-center gap-1">
@@ -150,9 +215,17 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
                   type="color"
                   value={c}
                   onChange={(e) => {
-                    const updated = [...newColors] as [string, string, string, string];
+                    const updated = [...newColors] as [
+                      string,
+                      string,
+                      string,
+                      string,
+                    ];
                     updated[i] = e.target.value;
                     setNewColors(updated);
+                    if (editingDraft) {
+                      updateDraftColors(updated);
+                    }
                   }}
                   className="w-8 h-8 rounded cursor-pointer bg-transparent"
                 />
@@ -167,7 +240,9 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Palette name"
+              placeholder={
+                editingDraft ? "Palette name to save draft as" : "Palette name"
+              }
               className="flex-1 px-2 py-1 bg-gray-700 rounded text-xs text-white placeholder-gray-500 border border-gray-600 focus:border-blue-500 outline-none"
             />
             <button
@@ -175,37 +250,79 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               disabled={!newName.trim()}
               className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-xs font-medium transition-colors"
             >
-              Save
+              {editingDraft ? "Save" : "Save"}
             </button>
           </div>
         </div>
       )}
 
       <div className="space-y-2">
+        {hasDraft && (
+          <PaletteSection
+            title="✏️ Draft"
+            entries={draft ? [{ name: "Draft", colors: draft }] : []}
+            selected={selected}
+            onSelect={(colors) => {
+              onSelect(colors);
+              recordNonDraftPalette(colors);
+            }}
+          />
+        )}
         <PaletteSection
           title="User Palettes"
           entries={userPalettes}
           selected={selected}
-          onSelect={onSelect}
+          onSelect={(colors) => {
+            onSelect(colors);
+            if (hasDraft) {
+              recordNonDraftPalette(colors);
+            }
+          }}
           onDelete={removePalette}
         />
         <PaletteSection
           title="Button Combos"
           entries={BUTTON_COMBO_PALETTES}
           selected={selected}
-          onSelect={onSelect}
+          onSelect={(colors) => {
+            onSelect(colors);
+            if (hasDraft) {
+              recordNonDraftPalette(colors);
+            }
+          }}
         />
         <PaletteSection
           title="BG Presets"
           entries={BG_PRESETS}
           selected={selected}
-          onSelect={onSelect}
+          onSelect={(colors) => {
+            onSelect(colors);
+            if (hasDraft) {
+              recordNonDraftPalette(colors);
+            }
+          }}
         />
         <PaletteSection
           title="Additional"
           entries={ADDITIONAL_PALETTES}
           selected={selected}
-          onSelect={onSelect}
+          onSelect={(colors) => {
+            onSelect(colors);
+            if (hasDraft) {
+              recordNonDraftPalette(colors);
+            }
+          }}
+        />
+        <PaletteSection
+          title="Fun"
+          entries={FUN_PALETTES_EXPORT}
+          selected={selected}
+          onSelect={(colors) => {
+            onSelect(colors);
+            if (hasDraft) {
+              recordNonDraftPalette(colors);
+            }
+          }}
         />
       </div>
     </div>

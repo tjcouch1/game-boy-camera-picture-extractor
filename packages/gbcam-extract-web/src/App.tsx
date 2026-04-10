@@ -4,13 +4,43 @@ import { useOpenCV } from "./hooks/useOpenCV.js";
 import { LoadingBar } from "./components/LoadingBar.js";
 import { ImageInput } from "./components/ImageInput.js";
 import { useProcessing } from "./hooks/useProcessing.js";
+import type { ProcessingProgress } from "./hooks/useProcessing.js";
 import { ResultCard } from "./components/ResultCard.js";
 import { PalettePicker } from "./components/PalettePicker.js";
 import { IntermediateViewer } from "./components/IntermediateViewer.js";
+import { useDraftPalette } from "./hooks/useDraftPalette.js";
+
+function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
+  if (!progress.currentImageProgress) return null;
+
+  return (
+    <div className="mt-4 space-y-2">
+      <div>
+        <div className="flex justify-between text-xs text-gray-400 mb-1">
+          <span>
+            Image {progress.currentImageProgress.index + 1} of{" "}
+            {progress.totalImages}: {progress.currentImageProgress.filename}
+          </span>
+          <span>{progress.overallProgress}%</span>
+        </div>
+        <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+          <div
+            className="bg-blue-500 h-full transition-all"
+            style={{ width: `${progress.overallProgress}%` }}
+          />
+        </div>
+      </div>
+      <div className="text-xs text-gray-400">
+        Step: {progress.currentImageProgress.currentStep || "Starting..."}
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
-  const { status, progress, error } = useOpenCV();
-  const { processFiles, processing, results, currentStep } = useProcessing();
+  const { status, progress: cvProgress, error } = useOpenCV();
+  const { processFiles, processing, progress, results } = useProcessing();
+  const { draft, hasDraft } = useDraftPalette();
   const [palette, setPalette] = useState<[string, string, string, string]>([
     "#FFFFFF",
     "#A5A5A5",
@@ -18,6 +48,9 @@ export default function App() {
     "#000000",
   ]);
   const [debug, setDebug] = useState(false);
+
+  // Use draft palette if it exists, otherwise use selected palette
+  const effectivePalette = hasDraft && draft ? draft : palette;
 
   const handleImagesSelected = (files: File[]) => {
     processFiles(files, debug);
@@ -30,7 +63,7 @@ export default function App() {
 
         {status === "loading" && (
           <div className="mb-6">
-            <LoadingBar progress={progress} label="Loading OpenCV.js..." />
+            <LoadingBar progress={cvProgress} label="Loading OpenCV.js..." />
           </div>
         )}
 
@@ -59,16 +92,15 @@ export default function App() {
               disabled={processing}
             />
 
-            {processing && (
-              <div className="mt-4">
-                <LoadingBar progress={-1} label={`Processing: ${currentStep}...`} />
-              </div>
-            )}
+            {processing && <ProgressDisplay progress={progress} />}
 
             {results.length > 0 && (
               <>
                 <div className="mt-6 mb-4">
-                  <PalettePicker selected={palette} onSelect={setPalette} />
+                  <PalettePicker
+                    selected={effectivePalette}
+                    onSelect={setPalette}
+                  />
                 </div>
 
                 {results.length > 1 && (
@@ -76,7 +108,11 @@ export default function App() {
                     <button
                       onClick={() => {
                         results.forEach((r) => {
-                          downloadResult(r.filename, r.result, palette);
+                          downloadResult(
+                            r.filename,
+                            r.result,
+                            effectivePalette,
+                          );
                         });
                       }}
                       className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
@@ -93,10 +129,12 @@ export default function App() {
                         result={r.result}
                         filename={r.filename}
                         processingTime={r.processingTime}
-                        palette={palette}
+                        palette={effectivePalette}
                       />
                       {r.result.intermediates && (
-                        <IntermediateViewer intermediates={r.result.intermediates} />
+                        <IntermediateViewer
+                          intermediates={r.result.intermediates}
+                        />
                       )}
                     </div>
                   ))}
