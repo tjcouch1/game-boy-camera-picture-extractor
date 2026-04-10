@@ -578,7 +578,8 @@ Investigate the following issues and create a plan for implementing:
 - Move the palette generation to gbcam-extract's build step and export the generated palettes from that package. Import it from `gbcam-extract` in `palettes.ts`.
 
 offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
-The offline-available features don't seem to be working. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
+The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
+Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
 Download all zipped button
 Keep old output files
 Not touching frame_ascii.txt in correct.ts - why?
