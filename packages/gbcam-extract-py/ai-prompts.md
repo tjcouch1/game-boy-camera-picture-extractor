@@ -577,6 +577,27 @@ Investigate the following issues and create a plan for implementing:
 - Change the palette generation so the name of the palettes with a button combo do not contain the button combo (e.g. instead of "0x1A (B + Down)" it should just be "0x1A")
 - Move the palette generation to gbcam-extract's build step and export the generated palettes from that package. Import it from `gbcam-extract` in `palettes.ts`.
 
+Make a plan to fix the following problems with palette edit mode. Write that plan to a markdown file in repo root. Then commit. Then implement the plan:
+
+- There should not be an X button on Palette swatches.
+- You should not be able to edit built-in palettes. They should not have an edit button.
+- Palette editing needs work
+  - Instead of tracking a draft palette, make the +Custom button create a new user palette in "edit mode" with colors based on the currently selected palette and with name based on the currently selected palette name (e.g. if the palette selected is `0x01`, the starting title should be `0x01 custom #` where `#` is a number that makes the title unique - starting at 1 and increasing until it finds a number that makes the title unique).
+  - Any number of user palettes should be able to be in edit mode at once
+  - The palettes in edit mode should show up at the top of the user palettes section instead of above it. Don't show the palette swatch if the palette is in edit mode because it is already represented by the edit mode palette.
+  - If a palette in edit mode is selected, its background should be brighter blue like the palette swatch. It should also have somewhat brighter blue if its colors match the selected color but it isn't selected.
+  - The "+ Custom" button should no longer switch to a "Cancel" button because "+ Custom" should now just create a new user palette in edit mode immediately. No more draft palette
+  - In "edit mode", the save button should be grayed out and there should be a short description of the problem if the palette name is blank or if the palette name is the same as an existing palette's name
+  - In "edit mode", when the palette has previously been saved, there should be a cancel button that closes the palette without saving and restores its previously saved values. This means you will have to track the current values and the saved values. But if a palette in edit mode is selected, it should use the current colors, not the saved colors. Make sure all of this data is tracked so it does not get lost on refreshing the page
+  - In "edit mode", make it so clicking the save button closes edit mode and shows the palette swatch in the list again
+  - In "edit mode", there is a delete button that permanently deletes the palette
+  - In "edit mode", clicking in the blank space in the palette editor should select the palette (meaning the files change to that palette). When a palette editor is selected, changing the colors in that palette should immediately change the palette colors in the pictures.
+- Delete the unused palette generation code in `gbcam-extract-web`
+- Remove `palettes.ts` from `gbcam-extract`; instead, just export directly from `palettes-generated.ts`
+- Write tests for gbcam-extract's `generate-palettes.ts`
+
+Think deeply. Do not skip any parts of this list; make sure everything is represented in the implementation plan and gets implemented.
+
 offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
 The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
 Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
