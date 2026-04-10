@@ -75,68 +75,100 @@ export function correct(
   const W = input.width;
   const H = input.height;
 
-  // Convert RGBA to grayscale using standard luminance formula
+  // Extract RGB channels from RGBA input
   // The warp output is color RGBA from the input photo
-  const gray = new Float32Array(H * W);
-  for (let i = 0; i < gray.length; i++) {
+  const chR = new Float32Array(H * W);
+  const chG = new Float32Array(H * W);
+  const chB = new Float32Array(H * W);
+  for (let i = 0; i < H * W; i++) {
     const idx = i * 4;
-    const r = input.data[idx];
-    const g = input.data[idx + 1];
-    const b = input.data[idx + 2];
-    // Standard grayscale formula: 0.299*R + 0.587*G + 0.114*B
-    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+    chR[i] = input.data[idx];
+    chG[i] = input.data[idx + 1];
+    chB[i] = input.data[idx + 2];
   }
 
-  // ── Step 1: White surface estimation ──
+  // ── Perform per-channel correction ──
+
+  // R channel: white=255, dark=148 (DG.R)
   const {
-    ys: whiteYs,
-    xs: whiteXs,
-    vs: whiteVs,
-  } = collectWhiteSamples(gray, W, H, scale);
-  const whiteSurface = fitSurface(whiteYs, whiteXs, whiteVs, H, W, polyDegree);
-
-  // ── Step 2: Dark surface estimation (Coons bilinear patch) ──
-  const { left, right, top, bot } = collectDarkSamples(gray, W, H, scale);
-  let darkSurface = buildDarkSurface(
-    left,
-    right,
-    top,
-    bot,
-    H,
+    ys: whiteYsR,
+    xs: whiteXsR,
+    vs: whiteVsR,
+  } = collectWhiteSamples(chR, W, H, scale);
+  const whiteSurfaceR = fitSurface(whiteYsR, whiteXsR, whiteVsR, H, W, polyDegree);
+  const { left: leftR, right: rightR, top: topR, bot: botR } = collectDarkSamples(
+    chR,
     W,
+    H,
     scale,
-    darkSmooth,
   );
+  let darkSurfaceR = buildDarkSurface(leftR, rightR, topR, botR, H, W, scale, darkSmooth);
+  let correctedR = applyCorrectionChannel(chR, whiteSurfaceR, darkSurfaceR, W, H, 255, 148);
 
-  // ── Step 3: Per-pixel affine correction ──
-  let corrected = applyCorrection(gray, whiteSurface, darkSurface, W, H);
+  // G channel: white=255, dark=148 (DG.G)
+  const {
+    ys: whiteYsG,
+    xs: whiteXsG,
+    vs: whiteVsG,
+  } = collectWhiteSamples(chG, W, H, scale);
+  const whiteSurfaceG = fitSurface(whiteYsG, whiteXsG, whiteVsG, H, W, polyDegree);
+  const { left: leftG, right: rightG, top: topG, bot: botG } = collectDarkSamples(
+    chG,
+    W,
+    H,
+    scale,
+  );
+  let darkSurfaceG = buildDarkSurface(leftG, rightG, topG, botG, H, W, scale, darkSmooth);
+  let correctedG = applyCorrectionChannel(chG, whiteSurfaceG, darkSurfaceG, W, H, 255, 148);
 
-  // ── Step 4: Iterative refinement ──
+  // B channel: white=dark (no correction, both are close to ~200)
+  // For simplicity, keep B as-is or apply light correction
+  let correctedB = new Float32Array(chB);
+
+  // ── Iterative refinement (optional: can apply per channel) ──
   for (let pass = 0; pass < refinePasses; pass++) {
-    const refined = refinePass(
-      corrected,
-      gray,
-      whiteSurface,
-      darkSurface,
+    const refinedR = refinePassChannel(
+      correctedR,
+      chR,
+      whiteSurfaceR,
+      darkSurfaceR,
       W,
       H,
       scale,
       darkSmooth,
+      255,
+      148,
     );
-    if (refined !== null) {
-      darkSurface = refined.darkSurface;
-      corrected = refined.corrected;
+    if (refinedR !== null) {
+      darkSurfaceR = refinedR.darkSurface;
+      correctedR = refinedR.corrected;
+    }
+
+    const refinedG = refinePassChannel(
+      correctedG,
+      chG,
+      whiteSurfaceG,
+      darkSurfaceG,
+      W,
+      H,
+      scale,
+      darkSmooth,
+      255,
+      148,
+    );
+    if (refinedG !== null) {
+      darkSurfaceG = refinedG.darkSurface;
+      correctedG = refinedG.corrected;
     }
   }
 
   // ── Build output RGBA ──
   const output = createGBImageData(W, H);
-  for (let i = 0; i < corrected.length; i++) {
-    const v = Math.max(0, Math.min(255, Math.round(corrected[i])));
+  for (let i = 0; i < H * W; i++) {
     const j = i * 4;
-    output.data[j] = v;
-    output.data[j + 1] = v;
-    output.data[j + 2] = v;
+    output.data[j] = Math.max(0, Math.min(255, Math.round(correctedR[i])));
+    output.data[j + 1] = Math.max(0, Math.min(255, Math.round(correctedG[i])));
+    output.data[j + 2] = Math.max(0, Math.min(255, Math.round(correctedB[i])));
     output.data[j + 3] = 255;
   }
 
@@ -601,29 +633,33 @@ function fitSurface(
   return surface;
 }
 
-// ─── Per-pixel affine correction ───
+// ─── Per-pixel affine correction (per-channel) ───
 
-function applyCorrection(
-  gray: Float32Array,
+function applyCorrectionChannel(
+  channel: Float32Array,
   whiteSurface: Float32Array,
   darkSurface: Float32Array,
   W: number,
   H: number,
+  whiteTarget: number,
+  darkTarget: number,
 ): Float32Array {
   const corrected = new Float32Array(H * W);
-  const span = TRUE_WHITE - TRUE_DARK; // 255 - 82 = 173
+  const span = whiteTarget - darkTarget;
 
   for (let i = 0; i < H * W; i++) {
     const ws = whiteSurface[i];
     const ds = darkSurface[i];
     const gain = Math.max(ws - ds, 5) / span;
-    const offset = ds - gain * TRUE_DARK;
-    const val = (gray[i] - offset) / gain;
+    const offset = ds - gain * darkTarget;
+    const val = (channel[i] - offset) / gain;
     corrected[i] = Math.max(0, Math.min(255, Math.round(val)));
   }
 
   return corrected;
 }
+
+// ─── Per-pixel affine correction (original grayscale version - deprecated) ───
 
 // ─── Quick sample (inline sampling of camera area) ───
 
@@ -666,13 +702,13 @@ function quickSample(
 // ─── Collect border dark samples for polynomial fitting ───
 
 function collectBorderDarkForPoly(
-  gray: Float32Array,
+  channel: Float32Array,
   W: number,
   _H: number,
   scale: number,
   darkSmooth: number,
 ): { borderY: number[]; borderX: number[]; borderV: number[] } {
-  const { left, right, top, bot } = collectDarkSamples(gray, W, _H, scale);
+  const { left, right, top, bot } = collectDarkSamples(channel, W, _H, scale);
 
   const ld = uniformFilter1d(new Float64Array(left), darkSmooth);
   const rd = uniformFilter1d(new Float64Array(right), darkSmooth);
@@ -713,17 +749,19 @@ function collectBorderDarkForPoly(
   return { borderY, borderX, borderV };
 }
 
-// ─── Iterative refinement ───
+// ─── Iterative refinement (per-channel) ───
 
-function refinePass(
+function refinePassChannel(
   corrected: Float32Array,
-  gray: Float32Array,
+  channel: Float32Array,
   whiteSurface: Float32Array,
   darkSurface: Float32Array,
   W: number,
   H: number,
   scale: number,
   darkSmooth: number,
+  whiteTarget: number,
+  darkTarget: number,
 ): { darkSurface: Float32Array; corrected: Float32Array } | null {
   // Quick-sample the corrected image to get per-GB-pixel brightness
   const sampled = quickSample(corrected, W, scale);
@@ -738,7 +776,12 @@ function refinePass(
   for (let gy = edgeMargin; gy < CAM_H - edgeMargin; gy++) {
     for (let gx = edgeMargin; gx < CAM_W - edgeMargin; gx++) {
       const val = sampled[gy * CAM_W + gx];
-      if (val >= 60 && val <= 110) {
+      // For R and G channels, dark target is 148 (DG.R = DG.G)
+      // For B channel, dark target is different
+      // Classify as dark if corrected value is close to darkTarget ± 30
+      const darkMin = Math.max(0, darkTarget - 30);
+      const darkMax = Math.min(255, darkTarget + 30);
+      if (val >= darkMin && val <= darkMax) {
         // Use the uncorrected value at the block centre as interior calibration
         const py = (FRAME_THICK + gy) * scale + half;
         const px = (FRAME_THICK + gx) * scale + half;
@@ -752,11 +795,11 @@ function refinePass(
         const x2 = (FRAME_THICK + gx + 1) * scale - 2;
         for (let y = y1; y < y2; y++) {
           for (let x = x1; x < x2; x++) {
-            values.push(gray[y * W + x]);
+            values.push(channel[y * W + x]);
           }
         }
         calV.push(
-          values.length > 0 ? computePercentile(values, 50) : gray[py * W + px],
+          values.length > 0 ? computePercentile(values, 50) : channel[py * W + px],
         );
       }
     }
@@ -765,13 +808,7 @@ function refinePass(
   if (calY.length < 50) return null;
 
   // Collect border dark samples
-  const { borderY, borderX, borderV } = collectBorderDarkForPoly(
-    gray,
-    W,
-    H,
-    scale,
-    darkSmooth,
-  );
+  const { borderY, borderX, borderV } = collectBorderDarkForPoly(channel, W, H, scale, darkSmooth);
 
   // Combine border + interior calibration points
   const allY = borderY.concat(calY);
@@ -812,12 +849,14 @@ function refinePass(
   }
 
   // Re-correct with refined dark surface
-  const newCorrected = applyCorrection(
-    gray,
+  const newCorrected = applyCorrectionChannel(
+    channel,
     whiteSurface,
     newDarkSurface,
     W,
     H,
+    whiteTarget,
+    darkTarget,
   );
 
   return { darkSurface: newDarkSurface, corrected: newCorrected };
