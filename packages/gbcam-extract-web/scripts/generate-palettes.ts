@@ -54,7 +54,7 @@ function generatePaletteModule() {
 
   // Generate main palettes
   const mainPalettes: RawPaletteEntry[] = mainEntries.map((row) => ({
-    name: `${row["Table Entry"]} ${row["Button Combo"] ? `(${row["Button Combo"]})` : ""}`.trim(),
+    name: row["Table Entry"],
     colors: [
       row["BG Color 0x00"],
       row["BG Color 0x01"],

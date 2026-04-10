@@ -55,7 +55,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     ]
   },
   {
-    "name": "0x05 (Right)",
+    "name": "0x05",
     "colors": [
       "#FFFFFF",
       "#52FF00",
@@ -74,7 +74,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     ]
   },
   {
-    "name": "0x07 (A + Down)",
+    "name": "0x07",
     "colors": [
       "#FFFFFF",
       "#FFFF00",
@@ -129,7 +129,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     ]
   },
   {
-    "name": "0x0D (A + Left)",
+    "name": "0x0D",
     "colors": [
       "#FFFFFF",
       "#8C8CDE",
@@ -157,7 +157,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     ]
   },
   {
-    "name": "0x10 (A + Up)",
+    "name": "0x10",
     "colors": [
       "#FFFFFF",
       "#FF8484",
@@ -176,7 +176,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     ]
   },
   {
-    "name": "0x12 (Up)",
+    "name": "0x12",
     "colors": [
       "#FFFFFF",
       "#FFAD63",
@@ -186,7 +186,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     "buttonCombo": "Up"
   },
   {
-    "name": "0x13 (B + Right)",
+    "name": "0x13",
     "colors": [
       "#000000",
       "#008484",
@@ -214,7 +214,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     ]
   },
   {
-    "name": "0x16 (B + Left)",
+    "name": "0x16",
     "colors": [
       "#FFFFFF",
       "#A5A5A5",
@@ -224,7 +224,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     "buttonCombo": "B + Left"
   },
   {
-    "name": "0x17 (Down)",
+    "name": "0x17",
     "colors": [
       "#FFFFA5",
       "#FF9494",
@@ -234,7 +234,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     "buttonCombo": "Down"
   },
   {
-    "name": "0x18 (Left)",
+    "name": "0x18",
     "colors": [
       "#FFFFFF",
       "#63A5FF",
@@ -244,7 +244,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     "buttonCombo": "Left"
   },
   {
-    "name": "0x19 (B + Up)",
+    "name": "0x19",
     "colors": [
       "#FFE6C5",
       "#CE9C84",
@@ -254,7 +254,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     "buttonCombo": "B + Up"
   },
   {
-    "name": "0x1A (B + Down)",
+    "name": "0x1A",
     "colors": [
       "#FFFFFF",
       "#FFFF00",
@@ -273,7 +273,7 @@ export const MAIN_PALETTES: PaletteEntry[] = [
     ]
   },
   {
-    "name": "0x1C (A + Right)",
+    "name": "0x1C",
     "colors": [
       "#FFFFFF",
       "#7BFF31",
