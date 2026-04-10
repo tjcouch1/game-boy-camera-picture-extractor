@@ -6,8 +6,7 @@ import {
   FUN_PALETTES_EXPORT,
 } from "../data/palettes.js";
 import type { PaletteEntry } from "../data/palettes.js";
-import { useUserPalettes } from "../hooks/useUserPalettes.js";
-import { useDraftPalette } from "../hooks/useDraftPalette.js";
+import { useUserPalettes, type UserPaletteEntry } from "../hooks/useUserPalettes.js";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
@@ -18,22 +17,26 @@ function PaletteSwatch({
   entry,
   isSelected,
   doesMatchColors,
+  isBuiltIn,
+  isEditing,
   onClick,
-  onDelete,
   onEdit,
 }: {
-  entry: PaletteEntry;
+  entry: PaletteEntry | UserPaletteEntry;
   isSelected: boolean;
   doesMatchColors: boolean;
+  isBuiltIn: boolean;
+  isEditing?: boolean;
   onClick: () => void;
-  onDelete?: () => void;
   onEdit?: () => void;
 }) {
   const bgClass = isSelected
     ? "bg-blue-600 ring-2 ring-blue-400"
-    : doesMatchColors
-      ? "bg-blue-800 hover:bg-blue-700"
-      : "bg-gray-700 hover:bg-gray-600";
+    : doesMatchColors && isEditing
+      ? "bg-blue-500 hover:bg-blue-400"
+      : doesMatchColors
+        ? "bg-blue-800 hover:bg-blue-700"
+        : "bg-gray-700 hover:bg-gray-600";
 
   return (
     <button
@@ -50,32 +53,18 @@ function PaletteSwatch({
         ))}
       </div>
       <span className="truncate">{entry.name}</span>
-      <div className="ml-auto flex gap-1">
-        {onEdit && (
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            className="text-blue-400 hover:text-blue-300 cursor-pointer"
-            title="Edit palette"
-          >
-            ✏️
-          </span>
-        )}
-        {onDelete && (
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="text-red-400 hover:text-red-300 cursor-pointer"
-            title="Delete palette"
-          >
-            x
-          </span>
-        )}
-      </div>
+      {!isBuiltIn && onEdit && (
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          className="ml-auto text-blue-400 hover:text-blue-300 cursor-pointer"
+          title="Edit palette"
+        >
+          ✏️
+        </span>
+      )}
     </button>
   );
 }
@@ -84,16 +73,18 @@ function PaletteSection({
   title,
   entries,
   selected,
+  selectedEditingPaletteId,
   onSelectWithName,
-  onDelete,
   onEdit,
+  isBuiltIn,
 }: {
   title: string;
-  entries: PaletteEntry[];
+  entries: (PaletteEntry | UserPaletteEntry)[];
   selected: PaletteEntry;
+  selectedEditingPaletteId?: string;
   onSelectWithName: (entry: PaletteEntry) => void;
-  onDelete?: (index: number) => void;
-  onEdit?: (index: number, entry: PaletteEntry) => void;
+  onEdit?: (id: string, entry: UserPaletteEntry) => void;
+  isBuiltIn?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -110,24 +101,42 @@ function PaletteSection({
       </button>
       {expanded && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 ml-3">
-          {entries.map((entry, i) => (
-            <PaletteSwatch
-              key={i}
-              entry={entry}
-              isSelected={
-                entry.name === selected.name &&
-                entry.colors.every((c, j) => c === selected.colors[j])
-              }
-              doesMatchColors={entry.colors.every(
-                (c, j) => c === selected.colors[j],
-              )}
-              onClick={() => {
-                onSelectWithName(entry);
-              }}
-              onEdit={onEdit ? () => onEdit(i, entry) : undefined}
-              onDelete={onDelete ? () => onDelete(i) : undefined}
-            />
-          ))}
+          {entries.map((entry, i) => {
+            const isUserPalette = "id" in entry;
+            const isSelected =
+              "id" in entry
+                ? selectedEditingPaletteId === entry.id
+                : entry.name === selected.name &&
+                  entry.colors.every((c, j) => c === selected.colors[j]);
+            const doesMatchColors = entry.colors.every(
+              (c, j) => c === selected.colors[j],
+            );
+            const isEditing =
+              isUserPalette && "isEditing" in entry && entry.isEditing;
+
+            return (
+              <PaletteSwatch
+                key={isUserPalette ? (entry as UserPaletteEntry).id : i}
+                entry={entry}
+                isSelected={isSelected}
+                doesMatchColors={doesMatchColors}
+                isBuiltIn={!!isBuiltIn}
+                isEditing={isEditing}
+                onClick={() => {
+                  onSelectWithName(
+                    "id" in entry
+                      ? { name: entry.name, colors: entry.colors }
+                      : entry,
+                  );
+                }}
+                onEdit={
+                  isUserPalette && onEdit && !isBuiltIn
+                    ? () => onEdit(i.toString(), entry as UserPaletteEntry)
+                    : undefined
+                }
+              />
+            );
+          })}
         </div>
       )}
     </div>
@@ -140,66 +149,106 @@ export function PalettePicker({
 }: PalettePickerProps) {
   const {
     palettes: userPalettes,
-    addPalette,
-    removePalette,
+    createPaletteInEditMode,
+    updatePalette,
+    savePalette,
+    cancelPaletteEdit,
+    deletePalette,
+    startEditingPalette,
   } = useUserPalettes();
-  const {
-    draft,
-    hasDraft,
-    lastNonDraftPalette,
-    initializeDraft,
-    updateDraftColors,
-    recordNonDraftPalette,
-    clearDraft,
-  } = useDraftPalette();
-  const [showCreate, setShowCreate] = useState(false);
-  const [editingDraft, setEditingDraft] = useState(false);
-  const [editingPalette, setEditingPalette] = useState<{
-    index: number;
-    entry: PaletteEntry;
-  } | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newColors, setNewColors] = useState<[string, string, string, string]>([
-    "#FFFFFF",
-    "#AAAAAA",
-    "#555555",
-    "#000000",
-  ]);
 
-  // Check if current selection matches draft
-  const isDraftSelected =
-    hasDraft && draft && selected.colors.every((c, i) => c === draft[i]);
+  const [selectedEditingPaletteId, setSelectedEditingPaletteId] = useState<
+    string | undefined
+  >();
+  const [editingPaletteErrors, setEditingPaletteErrors] = useState<string>("");
 
-  const handleSave = () => {
-    if (!newName.trim()) return;
+  // Get the currently editing palette (if any)
+  const editingPalette =
+    selectedEditingPaletteId &&
+    userPalettes.find((p) => p.id === selectedEditingPaletteId);
 
-    if (editingDraft) {
-      // Saving draft as permanent palette
-      addPalette({ name: newName.trim(), colors: [...newColors] });
-      clearDraft();
-      setEditingDraft(false);
-      setShowCreate(false);
-    } else if (editingPalette) {
-      // Saving edited palette as new user palette
-      addPalette({ name: newName.trim(), colors: [...newColors] });
-      setEditingPalette(null);
-      setShowCreate(false);
-    } else {
-      // Creating new custom palette from scratch
-      addPalette({ name: newName.trim(), colors: [...newColors] });
-      setShowCreate(false);
+  // Validate palette edits
+  const validatePaletteName = (id: string, name: string): string => {
+    if (!name.trim()) {
+      return "Palette name cannot be empty";
     }
-
-    setNewName("");
-    setNewColors(["#FFFFFF", "#AAAAAA", "#555555", "#000000"]);
+    const isDuplicate = userPalettes.some(
+      (p) => p.id !== id && p.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (isDuplicate) {
+      return "A palette with this name already exists";
+    }
+    return "";
   };
 
-  const handleEditPalette = (index: number, entry: PaletteEntry) => {
-    setEditingPalette({ index, entry });
-    setNewName("");
-    setNewColors([...entry.colors]);
-    setShowCreate(true);
+  const handleCreateCustom = () => {
+    const newId = createPaletteInEditMode(selected.name, selected.colors);
+    setSelectedEditingPaletteId(newId);
   };
+
+  const handleStartEdit = (paletteId: string) => {
+    startEditingPalette(paletteId);
+    setSelectedEditingPaletteId(paletteId);
+  };
+
+  const handleSavePalette = (id: string) => {
+    if (editingPalette) {
+      const error = validatePaletteName(id, editingPalette.name);
+      if (error) {
+        setEditingPaletteErrors(error);
+        return;
+      }
+    }
+    savePalette(id);
+    setSelectedEditingPaletteId(undefined);
+    setEditingPaletteErrors("");
+  };
+
+  const handleCancelEdit = (id: string) => {
+    cancelPaletteEdit(id);
+    setSelectedEditingPaletteId(undefined);
+    setEditingPaletteErrors("");
+  };
+
+  const handleDeletePalette = (id: string) => {
+    deletePalette(id);
+    setSelectedEditingPaletteId(undefined);
+    setEditingPaletteErrors("");
+  };
+
+  const handlePaletteNameChange = (id: string, newName: string) => {
+    updatePalette(id, { name: newName });
+    const error = validatePaletteName(id, newName);
+    setEditingPaletteErrors(error);
+  };
+
+  const handlePaletteColorChange = (
+    id: string,
+    colorIndex: number,
+    newColor: string,
+  ) => {
+    if (editingPalette) {
+      const newColors = [...editingPalette.colors] as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      newColors[colorIndex] = newColor;
+      updatePalette(id, { colors: newColors });
+    }
+  };
+
+  const handleSelectEditingPalette = (id: string) => {
+    const palette = userPalettes.find((p) => p.id === id);
+    if (palette) {
+      onSelectWithName({ name: palette.name, colors: palette.colors });
+      setSelectedEditingPaletteId(id);
+    }
+  };
+
+  const editingPalettes = userPalettes.filter((p) => p.isEditing);
+  const savedUserPalettes = userPalettes.filter((p) => !p.isEditing);
 
   return (
     <div className="bg-gray-800 rounded-lg p-4">
@@ -216,181 +265,161 @@ export function PalettePicker({
             ))}
           </div>
           <button
-            onClick={() => {
-              if (editingDraft) {
-                setEditingDraft(false);
-              } else if (editingPalette) {
-                setEditingPalette(null);
-              } else if (showCreate) {
-                setShowCreate(false);
-              } else {
-                if (hasDraft && draft) {
-                  setNewColors([...draft]);
-                  setEditingDraft(true);
-                } else {
-                  setNewColors(["#FFFFFF", "#AAAAAA", "#555555", "#000000"]);
-                }
-                setShowCreate(true);
-              }
-            }}
+            onClick={handleCreateCustom}
             className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
           >
-            {editingDraft || editingPalette || showCreate
-              ? "Cancel"
-              : "+ Custom"}
+            + Custom
           </button>
         </div>
       </div>
 
-      {(showCreate || editingDraft || editingPalette) && (
-        <div className="mb-3 p-3 bg-gray-900 rounded">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400">
-              {editingDraft
-                ? "Edit Draft"
-                : editingPalette
-                  ? "Edit Palette"
-                  : "New Palette"}
-            </span>
-            {editingDraft && (
-              <button
-                onClick={() => {
-                  clearDraft();
-                  setEditingDraft(false);
-                  setShowCreate(false);
-                  setNewName("");
-                  setNewColors(["#FFFFFF", "#AAAAAA", "#555555", "#000000"]);
-                }}
-                className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs text-white transition-colors"
-              >
-                Delete Draft
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mb-2">
-            {newColors.map((c, i) => (
-              <label key={i} className="flex flex-col items-center gap-1">
-                <input
-                  type="color"
-                  value={c}
-                  onChange={(e) => {
-                    const updated = [...newColors] as [
-                      string,
-                      string,
-                      string,
-                      string,
-                    ];
-                    updated[i] = e.target.value;
-                    setNewColors(updated);
-                    if (editingDraft) {
-                      updateDraftColors(updated);
-                    }
-                  }}
-                  className="w-8 h-8 rounded cursor-pointer bg-transparent"
-                />
-                <span className="text-[10px] text-gray-500">
-                  {["Light", "Mid-L", "Mid-D", "Dark"][i]}
-                </span>
-              </label>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder={
-                editingDraft
-                  ? "Palette name to save draft as"
-                  : editingPalette
-                    ? "New palette name"
-                    : "Palette name"
-              }
-              className="flex-1 px-2 py-1 bg-gray-700 rounded text-xs text-white placeholder-gray-500 border border-gray-600 focus:border-blue-500 outline-none"
-            />
-            <button
-              onClick={handleSave}
-              disabled={!newName.trim()}
-              className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-xs font-medium transition-colors"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="space-y-2">
-        {hasDraft && (
-          <PaletteSection
-            title="✏️ Draft"
-            entries={draft ? [{ name: "Draft", colors: draft }] : []}
-            selected={selected}
-            onSelectWithName={(entry) => {
-              recordNonDraftPalette(entry.colors);
-              onSelectWithName(entry);
-            }}
-          />
+        {/* Editing Palettes Section */}
+        {editingPalettes.length > 0 && (
+          <div>
+            <div className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+              <span className="text-xs">v</span>
+              ✏️ EDITING ({editingPalettes.length})
+            </div>
+            <div className="ml-3 space-y-2">
+              {editingPalettes.map((palette) => (
+                <div
+                  key={palette.id}
+                  className={`p-3 rounded border-2 ${
+                    selectedEditingPaletteId === palette.id
+                      ? "border-blue-500 bg-blue-900"
+                      : "border-gray-600 bg-gray-900"
+                  } cursor-pointer transition-colors`}
+                  onClick={() => handleSelectEditingPalette(palette.id)}
+                >
+                  {/* Color pickers */}
+                  <div className="flex items-center gap-2 mb-2">
+                    {palette.colors.map((c, i) => (
+                      <label key={i} className="flex flex-col items-center gap-1">
+                        <input
+                          type="color"
+                          value={c}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handlePaletteColorChange(
+                              palette.id,
+                              i,
+                              e.target.value,
+                            );
+                          }}
+                          className="w-8 h-8 rounded cursor-pointer bg-transparent"
+                        />
+                        <span className="text-[10px] text-gray-500">
+                          {["Light", "Mid-L", "Mid-D", "Dark"][i]}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Name input */}
+                  <input
+                    type="text"
+                    value={palette.name}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handlePaletteNameChange(palette.id, e.target.value);
+                    }}
+                    placeholder="Palette name"
+                    className="w-full px-2 py-1 bg-gray-700 rounded text-xs text-white placeholder-gray-500 border border-gray-600 focus:border-blue-500 outline-none mb-2"
+                  />
+
+                  {/* Error message */}
+                  {selectedEditingPaletteId === palette.id &&
+                    editingPaletteErrors && (
+                      <p className="text-red-400 text-[10px] mb-2">
+                        {editingPaletteErrors}
+                      </p>
+                    )}
+
+                  {/* Action buttons */}
+                  <div className="flex gap-1 justify-end">
+                    {palette.savedName && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCancelEdit(palette.id);
+                        }}
+                        className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-[10px] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePalette(palette.id);
+                      }}
+                      className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-[10px] text-white transition-colors"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSavePalette(palette.id);
+                      }}
+                      disabled={!!editingPaletteErrors}
+                      className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-[10px] text-white font-medium transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
+
+        {/* User Palettes Section */}
         <PaletteSection
           title="User Palettes"
-          entries={userPalettes}
+          entries={savedUserPalettes}
           selected={selected}
-          onSelectWithName={(entry) => {
-            if (hasDraft) {
-              recordNonDraftPalette(entry.colors);
-            }
-            onSelectWithName(entry);
+          selectedEditingPaletteId={selectedEditingPaletteId}
+          onSelectWithName={onSelectWithName}
+          onEdit={(_, palette) => {
+            const userPalette = palette as UserPaletteEntry;
+            handleStartEdit(userPalette.id);
           }}
-          onDelete={removePalette}
-          onEdit={handleEditPalette}
         />
+
+        {/* Built-in Palettes Sections */}
         <PaletteSection
           title="Button Combos"
           entries={BUTTON_COMBO_PALETTES}
           selected={selected}
-          onSelectWithName={(entry) => {
-            if (hasDraft) {
-              recordNonDraftPalette(entry.colors);
-            }
-            onSelectWithName(entry);
-          }}
-          onEdit={handleEditPalette}
+          selectedEditingPaletteId={selectedEditingPaletteId}
+          onSelectWithName={onSelectWithName}
+          isBuiltIn={true}
         />
         <PaletteSection
           title="BG Presets"
           entries={BG_PRESETS}
           selected={selected}
-          onSelectWithName={(entry) => {
-            if (hasDraft) {
-              recordNonDraftPalette(entry.colors);
-            }
-            onSelectWithName(entry);
-          }}
-          onEdit={handleEditPalette}
+          selectedEditingPaletteId={selectedEditingPaletteId}
+          onSelectWithName={onSelectWithName}
+          isBuiltIn={true}
         />
         <PaletteSection
           title="Additional"
           entries={ADDITIONAL_PALETTES}
           selected={selected}
-          onSelectWithName={(entry) => {
-            if (hasDraft) {
-              recordNonDraftPalette(entry.colors);
-            }
-            onSelectWithName(entry);
-          }}
-          onEdit={handleEditPalette}
+          selectedEditingPaletteId={selectedEditingPaletteId}
+          onSelectWithName={onSelectWithName}
+          isBuiltIn={true}
         />
         <PaletteSection
           title="Fun"
           entries={FUN_PALETTES_EXPORT}
           selected={selected}
-          onSelectWithName={(entry) => {
-            if (hasDraft) {
-              recordNonDraftPalette(entry.colors);
-            }
-            onSelectWithName(entry);
-          }}
-          onEdit={handleEditPalette}
+          selectedEditingPaletteId={selectedEditingPaletteId}
+          onSelectWithName={onSelectWithName}
+          isBuiltIn={true}
         />
       </div>
     </div>

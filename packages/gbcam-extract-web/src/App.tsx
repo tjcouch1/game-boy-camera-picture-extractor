@@ -8,7 +8,6 @@ import type { ProcessingProgress } from "./hooks/useProcessing.js";
 import { ResultCard } from "./components/ResultCard.js";
 import { PalettePicker } from "./components/PalettePicker.js";
 import { IntermediateViewer } from "./components/IntermediateViewer.js";
-import { useDraftPalette } from "./hooks/useDraftPalette.js";
 import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
 
@@ -42,15 +41,11 @@ function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
 export default function App() {
   const { status, progress: cvProgress, error } = useOpenCV();
   const { processFiles, processing, progress, results } = useProcessing();
-  const { draft, hasDraft } = useDraftPalette();
   const [paletteEntry, setPaletteEntry] = useState<PaletteEntry>({
     name: "B + Left",
     colors: ["#FFFFFF", "#A5A5A5", "#525252", "#000000"],
   });
   const [debug, setDebug] = useState(false);
-
-  // Use draft palette if it exists, otherwise use selected palette
-  const effectivePalette = hasDraft && draft ? draft : paletteEntry.colors;
 
   const handleImagesSelected = (files: File[]) => {
     processFiles(files, debug);
@@ -111,7 +106,7 @@ export default function App() {
                           downloadResult(
                             r.filename,
                             r.result,
-                            effectivePalette,
+                            paletteEntry.colors,
                             paletteEntry.name,
                           );
                         });
@@ -130,7 +125,7 @@ export default function App() {
                         result={r.result}
                         filename={r.filename}
                         processingTime={r.processingTime}
-                        palette={effectivePalette}
+                        palette={paletteEntry.colors}
                         paletteName={paletteEntry.name}
                       />
                       {r.result.intermediates && (

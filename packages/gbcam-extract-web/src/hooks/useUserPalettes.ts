@@ -1,35 +1,156 @@
 import { useState, useCallback, useEffect } from "react";
-import type { PaletteEntry } from "../data/palettes.js";
 
 const STORAGE_KEY = "gbcam-user-palettes";
+const STORAGE_VERSION = "1";
+const STORAGE_VERSION_KEY = "gbcam-user-palettes-version";
 
-function loadFromStorage(): PaletteEntry[] {
+export interface UserPaletteEntry {
+  id: string;
+  name: string;
+  colors: [string, string, string, string];
+  isEditing?: boolean;
+  savedColors?: [string, string, string, string];
+  savedName?: string;
+}
+
+function generateId(): string {
+  return `palette-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function loadFromStorage(): UserPaletteEntry[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const version = localStorage.getItem(STORAGE_VERSION_KEY);
+
+    if (!stored || version !== STORAGE_VERSION) {
+      return [];
+    }
+
+    return JSON.parse(stored);
   } catch {
     return [];
   }
 }
 
-function saveToStorage(palettes: PaletteEntry[]) {
+function saveToStorage(palettes: UserPaletteEntry[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(palettes));
+  localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
 }
 
 export function useUserPalettes() {
-  const [palettes, setPalettes] = useState<PaletteEntry[]>(loadFromStorage);
+  const [palettes, setPalettes] = useState<UserPaletteEntry[]>(loadFromStorage);
 
   useEffect(() => {
     saveToStorage(palettes);
   }, [palettes]);
 
-  const addPalette = useCallback((entry: PaletteEntry) => {
-    setPalettes((prev) => [...prev, entry]);
+  // Create a new palette in edit mode with auto-generated unique name
+  const createPaletteInEditMode = useCallback(
+    (fromName: string, fromColors: [string, string, string, string]) => {
+      // Find the highest number for "<fromName> custom #" pattern
+      const pattern = `${fromName} custom`;
+      const existingNumbers = palettes
+        .map((p) => {
+          if (p.name.startsWith(pattern)) {
+            const match = p.name.match(new RegExp(`^${pattern} (\\d+)$`));
+            return match ? parseInt(match[1], 10) : 0;
+          }
+          return 0;
+        })
+        .filter((n) => n > 0);
+
+      const nextNumber =
+        existingNumbers.length > 0
+          ? Math.max(...existingNumbers) + 1
+          : 1;
+
+      const newPalette: UserPaletteEntry = {
+        id: generateId(),
+        name: `${fromName} custom ${nextNumber}`,
+        colors: [...fromColors],
+        isEditing: true,
+      };
+
+      setPalettes((prev) => [...prev, newPalette]);
+      return newPalette.id;
+    },
+    [palettes],
+  );
+
+  // Update a palette's properties
+  const updatePalette = useCallback(
+    (id: string, changes: Partial<UserPaletteEntry>) => {
+      setPalettes((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...changes } : p)),
+      );
+    },
+    [],
+  );
+
+  // Save a palette and exit edit mode
+  const savePalette = useCallback((id: string) => {
+    setPalettes((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              isEditing: false,
+              savedColors: undefined,
+              savedName: undefined,
+            }
+          : p,
+      ),
+    );
   }, []);
 
-  const removePalette = useCallback((index: number) => {
-    setPalettes((prev) => prev.filter((_, i) => i !== index));
+  // Cancel editing and restore previous values (only for previously saved palettes)
+  const cancelPaletteEdit = useCallback((id: string) => {
+    setPalettes((prev) =>
+      prev.map((p) => {
+        if (p.id === id && p.savedName && p.savedColors) {
+          return {
+            ...p,
+            name: p.savedName,
+            colors: p.savedColors,
+            isEditing: false,
+            savedName: undefined,
+            savedColors: undefined,
+          };
+        }
+        return p;
+      }),
+    );
   }, []);
 
-  return { palettes, addPalette, removePalette };
+  // Delete a palette permanently
+  const deletePalette = useCallback((id: string) => {
+    setPalettes((prev) => prev.filter((p) => p.id !== id));
+  }, []);
+
+  // Start editing a palette (used when clicking edit button)
+  const startEditingPalette = useCallback((id: string) => {
+    setPalettes((prev) =>
+      prev.map((p) => {
+        if (p.id === id) {
+          return {
+            ...p,
+            isEditing: true,
+            savedName: p.name,
+            savedColors: [...p.colors],
+          };
+        }
+        return p;
+      }),
+    );
+  }, []);
+
+  return {
+    palettes,
+    createPaletteInEditMode,
+    updatePalette,
+    savePalette,
+    cancelPaletteEdit,
+    deletePalette,
+    startEditingPalette,
+  };
 }
