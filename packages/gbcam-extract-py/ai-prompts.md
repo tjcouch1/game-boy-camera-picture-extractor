@@ -574,3 +574,5 @@ Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md,
 Move md files etc. from py into right places
 Update instructions files
 Move the prompt generation to gbcam-extract and export it from that package.
+Scale output images to preferred scale
+Remove http-server? Maybe vite preview does everything
