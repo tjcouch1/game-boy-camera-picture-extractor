@@ -12,6 +12,10 @@ import { useDraftPalette } from "../hooks/useDraftPalette.js";
 interface PalettePickerProps {
   selected: [string, string, string, string];
   onSelect: (palette: [string, string, string, string]) => void;
+  onSelectWithName?: (
+    palette: [string, string, string, string],
+    name: string,
+  ) => void;
 }
 
 function PaletteSwatch({
@@ -64,12 +68,17 @@ function PaletteSection({
   entries,
   selected,
   onSelect,
+  onSelectWithName,
   onDelete,
 }: {
   title: string;
   entries: PaletteEntry[];
   selected: [string, string, string, string];
   onSelect: (colors: [string, string, string, string]) => void;
+  onSelectWithName?: (
+    colors: [string, string, string, string],
+    name: string,
+  ) => void;
   onDelete?: (index: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -92,7 +101,12 @@ function PaletteSection({
               key={i}
               entry={entry}
               isSelected={entry.colors.every((c, j) => c === selected[j])}
-              onClick={() => onSelect(entry.colors)}
+              onClick={() => {
+                onSelect(entry.colors);
+                if (onSelectWithName) {
+                  onSelectWithName(entry.colors, entry.name);
+                }
+              }}
               onDelete={onDelete ? () => onDelete(i) : undefined}
             />
           ))}
@@ -102,7 +116,11 @@ function PaletteSection({
   );
 }
 
-export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
+export function PalettePicker({
+  selected,
+  onSelect,
+  onSelectWithName,
+}: PalettePickerProps) {
   const {
     palettes: userPalettes,
     addPalette,
@@ -266,6 +284,7 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               onSelect(colors);
               recordNonDraftPalette(colors);
             }}
+            onSelectWithName={onSelectWithName}
           />
         )}
         <PaletteSection
@@ -278,6 +297,7 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               recordNonDraftPalette(colors);
             }
           }}
+          onSelectWithName={onSelectWithName}
           onDelete={removePalette}
         />
         <PaletteSection
@@ -290,6 +310,7 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               recordNonDraftPalette(colors);
             }
           }}
+          onSelectWithName={onSelectWithName}
         />
         <PaletteSection
           title="BG Presets"
@@ -301,6 +322,7 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               recordNonDraftPalette(colors);
             }
           }}
+          onSelectWithName={onSelectWithName}
         />
         <PaletteSection
           title="Additional"
@@ -312,6 +334,7 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               recordNonDraftPalette(colors);
             }
           }}
+          onSelectWithName={onSelectWithName}
         />
         <PaletteSection
           title="Fun"
@@ -323,6 +346,7 @@ export function PalettePicker({ selected, onSelect }: PalettePickerProps) {
               recordNonDraftPalette(colors);
             }
           }}
+          onSelectWithName={onSelectWithName}
         />
       </div>
     </div>

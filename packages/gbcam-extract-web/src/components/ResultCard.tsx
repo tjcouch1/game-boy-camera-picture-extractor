@@ -6,12 +6,14 @@ import {
   shareImage,
   copyImageToClipboard,
 } from "../utils/shareImage.js";
+import { sanitizePaletteName } from "../utils/filenames.js";
 
 interface ResultCardProps {
   result: PipelineResult;
   filename: string;
   processingTime: number;
   palette: [string, string, string, string];
+  paletteName: string;
 }
 
 export function ResultCard({
@@ -19,6 +21,7 @@ export function ResultCard({
   filename,
   processingTime,
   palette,
+  paletteName,
 }: ResultCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [showCopyFeedback, setShowCopyFeedback] = useState(false);
@@ -51,7 +54,12 @@ export function ResultCard({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const link = document.createElement("a");
-    link.download = filename.replace(/\.[^.]+$/, "") + "_gb.png";
+    const basename = filename.replace(/\.[^.]+$/, "");
+    const sanitized = sanitizePaletteName(paletteName);
+    const finalFilename = sanitized
+      ? `${basename}_${sanitized}_gb.png`
+      : `${basename}_gb.png`;
+    link.download = finalFilename;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };

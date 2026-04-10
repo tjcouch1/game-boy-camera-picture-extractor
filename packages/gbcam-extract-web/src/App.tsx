@@ -9,6 +9,7 @@ import { ResultCard } from "./components/ResultCard.js";
 import { PalettePicker } from "./components/PalettePicker.js";
 import { IntermediateViewer } from "./components/IntermediateViewer.js";
 import { useDraftPalette } from "./hooks/useDraftPalette.js";
+import { sanitizePaletteName } from "./utils/filenames.js";
 
 function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
   if (!progress.currentImageProgress) return null;
@@ -47,10 +48,19 @@ export default function App() {
     "#525252",
     "#000000",
   ]);
+  const [paletteName, setPaletteName] = useState("Custom");
   const [debug, setDebug] = useState(false);
 
   // Use draft palette if it exists, otherwise use selected palette
   const effectivePalette = hasDraft && draft ? draft : palette;
+
+  const handlePaletteSelect = (
+    colors: [string, string, string, string],
+    name: string,
+  ) => {
+    setPalette(colors);
+    setPaletteName(name);
+  };
 
   const handleImagesSelected = (files: File[]) => {
     processFiles(files, debug);
@@ -100,6 +110,7 @@ export default function App() {
                   <PalettePicker
                     selected={effectivePalette}
                     onSelect={setPalette}
+                    onSelectWithName={handlePaletteSelect}
                   />
                 </div>
 
@@ -112,6 +123,7 @@ export default function App() {
                             r.filename,
                             r.result,
                             effectivePalette,
+                            paletteName,
                           );
                         });
                       }}
@@ -130,6 +142,7 @@ export default function App() {
                         filename={r.filename}
                         processingTime={r.processingTime}
                         palette={effectivePalette}
+                        paletteName={paletteName}
                       />
                       {r.result.intermediates && (
                         <IntermediateViewer
@@ -152,6 +165,7 @@ function downloadResult(
   filename: string,
   result: PipelineResult,
   palette: [string, string, string, string],
+  paletteName: string,
 ) {
   // Dynamically import to avoid circular issues
   import("gbcam-extract").then(({ applyPalette }) => {
@@ -169,7 +183,9 @@ function downloadResult(
     tmp.getContext("2d")!.putImageData(imgData, 0, 0);
     ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
     const link = document.createElement("a");
-    link.download = filename.replace(/\.[^.]+$/, "") + "_gb.png";
+    const baseName = filename.replace(/\.[^.]+$/, "");
+    const sanitizedPaletteName = sanitizePaletteName(paletteName);
+    link.download = `${baseName}_${sanitizedPaletteName}_gb.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   });
