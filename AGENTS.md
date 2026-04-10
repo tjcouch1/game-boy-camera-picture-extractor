@@ -59,11 +59,13 @@ The TypeScript port of the pipeline. This is what we develop going forward.
 ### Extraction scripts
 
 Python:
+
 ```bash
 cd packages/gbcam-extract-py && python gbcam_extract.py --dir ../../sample-pictures --output-dir ../../sample-pictures-out-py
 ```
 
 TypeScript:
+
 ```bash
 cd packages/gbcam-extract && pnpm extract -- --dir ../../sample-pictures --output-dir ../../sample-pictures-out
 ```
@@ -71,11 +73,13 @@ cd packages/gbcam-extract && pnpm extract -- --dir ../../sample-pictures --outpu
 ### Typechecking
 
 From root (checks all packages):
+
 ```bash
 pnpm typecheck
 ```
 
 Or per-package:
+
 ```bash
 cd packages/gbcam-extract && pnpm typecheck
 cd packages/gbcam-extract-web && pnpm typecheck
@@ -84,21 +88,59 @@ cd packages/gbcam-extract-web && pnpm typecheck
 ### Tests
 
 Python test suite:
+
 ```bash
 cd packages/gbcam-extract-py && python run_tests.py
 ```
 
 TypeScript unit tests (vitest):
+
 ```bash
 cd packages/gbcam-extract && pnpm test
 ```
 
 TypeScript pipeline tests (accuracy comparison against reference images):
+
 ```bash
 cd packages/gbcam-extract && pnpm test:pipeline
 ```
 
 Python test runner outputs to `test-output-py/`, TypeScript to `test-output/`. Both produce a `test-summary.log`. You can compare them side by side.
+
+### Interleave test (mixed Python/TypeScript pipeline debugging)
+
+The `interleave` script runs a single test image through a mixed Python/TypeScript pipeline to isolate per-step accuracy differences:
+
+```bash
+cd packages/gbcam-extract && pnpm interleave -- --image zelda-poster-1 --py warp,correct --ts crop,sample,quantize
+```
+
+**Usage pattern:**
+
+- `--image <name>` — test image name (without extension), e.g., `thing-1`, `zelda-poster-1`
+- `--py <steps>` — comma-separated steps to run in Python (e.g., `warp,correct`)
+- `--ts <steps>` — comma-separated steps to run in TypeScript (e.g., `crop,sample,quantize`)
+- Steps not specified default to TypeScript
+
+**Available steps:** `warp`, `correct`, `crop`, `sample`, `quantize`
+
+**Example workflows:**
+
+Test which step diverges most (run one step at a time in TypeScript while keeping others in Python):
+
+```bash
+# All Python (reference)
+pnpm interleave -- --image thing-2 --py warp,correct,crop,sample,quantize
+
+# Isolate each step by swapping one to TypeScript
+pnpm interleave -- --image thing-2 --py correct,crop,sample,quantize --ts warp
+pnpm interleave -- --image thing-2 --py warp,crop,sample,quantize --ts correct
+pnpm interleave -- --image thing-2 --py warp,correct,sample,quantize --ts crop
+pnpm interleave -- --image thing-2 --py warp,correct,crop,quantize --ts sample
+pnpm interleave -- --image thing-2 --py warp,correct,crop,sample --ts quantize
+```
+
+**Output:** Shows pixel-level accuracy percentage and per-colour error breakdown. Use to identify which step(s) contribute most to accuracy gaps.
 
 ### Inspecting test results
 
@@ -110,11 +152,13 @@ Python test runner outputs to `test-output-py/`, TypeScript to `test-output/`. B
 ### Website
 
 Development server:
+
 ```bash
 pnpm dev
 ```
 
 Or directly:
+
 ```bash
 cd packages/gbcam-extract-web && pnpm dev
 ```
@@ -150,6 +194,7 @@ The input is a phone photo of a Game Boy Camera image displayed on a Game Boy Ad
 ### Output Palette
 
 The pipeline outputs 128x112 images using four grayscale values:
+
 - `0` = BK (black, #000000)
 - `82` = DG (dark gray, #9494FF on screen)
 - `165` = LG (light gray, #FF9494 on screen)
@@ -199,7 +244,6 @@ Maps 128x112 brightness samples to the four GB palette colors (0/82/165/255). Us
 ## Goal
 
 The primary goal is to improve the pipeline's accuracy at transforming phone photos into faithful Game Boy Camera images. Run the test suite to track progress — it compares output pixel-by-pixel against hand-corrected reference images and reports per-color accuracy and confusion matrices.
-
 
 8. Save the Game Boy Camera picture file as a png.
 

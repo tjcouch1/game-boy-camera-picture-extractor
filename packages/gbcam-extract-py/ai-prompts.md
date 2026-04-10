@@ -549,9 +549,10 @@ Add command-line help -h and --help that explains the overall process including 
 
 # Recent work on website and TypeScript improvements
 
-/brainstorming The python pipeline is *significantly* more accurate than the typescript pipeline. Something must have gone wrong in the porting effort. Make a plan to go back and revise the typescript port code to more accurately mirror the python code. Compare the debug output between the typescript and python code to check your work. It may be helpful to write a script that can interweave python and typescript steps then analyze the output so you can isolate individual typescript steps 
+/brainstorming The python pipeline is _significantly_ more accurate than the typescript pipeline. Something must have gone wrong in the porting effort. Make a plan to go back and revise the typescript port code to more accurately mirror the python code. Compare the debug output between the typescript and python code to check your work. It may be helpful to write a script that can interweave python and typescript steps then analyze the output so you can isolate individual typescript steps
 
 /brainstorming make a plan to implement the following:
+
 - script that runs a local test of the built website files (simulate GitHub Pages locally - want to be able to test PWA, offline, etc)
 - in the website:
   - rewrite the palette colors (`palettes.ts`) to be derived directly from the color tables (`supporting-materials\color-tables`). there are some additional palettes in there that aren't from those color tables; move them into a new "Fun" section instead of mixing it with the others
@@ -560,9 +561,7 @@ Add command-line help -h and --help that explains the overall process including 
     - when there is not a draft custom palette, when the user clicks a color palette, set the new custom color palette to have those colors so the user can easily modify an existing palette. When there is a draft custom palette, don't change it when the user changes palettes
   - add a share button to the images
 
-
 offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
-
 
 Download all button
 Keep old output files
@@ -572,5 +571,6 @@ Put the palette name in the file name
 Edit custom palettes
 Favorite palettes
 Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
-Move md files etc. from py into right places 
+Move md files etc. from py into right places
 Update instructions files
+Move the prompt generation to gbcam-extract and export it from that package.
