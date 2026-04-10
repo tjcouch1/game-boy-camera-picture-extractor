@@ -57,4 +57,33 @@ describe("sample", () => {
     expect(result.height).toBe(CAM_H);
     expect(result.data[0]).toBe(42);
   });
+
+  it("samples R/G/B channels from separate subpixel column ranges", () => {
+    const scale = 8;
+    const w = CAM_W * scale;
+    const h = CAM_H * scale;
+    const input = createGBImageData(w, h);
+
+    // Fill entire image: R channel=200, G channel=150, B channel=100
+    // Since all pixels have these channel values, regardless of which column
+    // range each channel is sampled from, each channel's output should equal
+    // its distinct channel value — not the R channel value (200) for all.
+    for (let i = 0; i < input.data.length; i += 4) {
+      input.data[i] = 200; // R
+      input.data[i + 1] = 150; // G
+      input.data[i + 2] = 100; // B
+      input.data[i + 3] = 255; // A
+    }
+
+    const result = sample(input, { scale });
+
+    expect(result.width).toBe(CAM_W);
+    expect(result.height).toBe(CAM_H);
+    // After fix: R output = 200, G output = 150, B output = 100
+    // Before fix: R=G=B = 200 (only R channel read)
+    expect(result.data[0]).toBe(200); // R
+    expect(result.data[1]).toBe(150); // G  ← fails before fix
+    expect(result.data[2]).toBe(100); // B  ← fails before fix
+    expect(result.data[3]).toBe(255); // A
+  });
 });
