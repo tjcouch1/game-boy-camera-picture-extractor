@@ -114,8 +114,13 @@ function PaletteSection({
             <PaletteSwatch
               key={i}
               entry={entry}
-              isSelected={entry.name === selected.name && entry.colors.every((c, j) => c === selected.colors[j])}
-              doesMatchColors={entry.colors.every((c, j) => c === selected.colors[j])}
+              isSelected={
+                entry.name === selected.name &&
+                entry.colors.every((c, j) => c === selected.colors[j])
+              }
+              doesMatchColors={entry.colors.every(
+                (c, j) => c === selected.colors[j],
+              )}
               onClick={() => {
                 onSelectWithName(entry);
               }}
@@ -202,7 +207,7 @@ export function PalettePicker({
         <h2 className="text-sm font-semibold text-gray-200">Palette</h2>
         <div className="flex items-center gap-2">
           <div className="flex">
-            {selected.map((c, i) => (
+            {selected.colors.map((c: string, i: number) => (
               <div
                 key={i}
                 className="w-5 h-5 first:rounded-l last:rounded-r border border-gray-600"
@@ -230,7 +235,9 @@ export function PalettePicker({
             }}
             className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
           >
-            {editingDraft || editingPalette || showCreate ? "Cancel" : "+ Custom"}
+            {editingDraft || editingPalette || showCreate
+              ? "Cancel"
+              : "+ Custom"}
           </button>
         </div>
       </div>
@@ -239,7 +246,11 @@ export function PalettePicker({
         <div className="mb-3 p-3 bg-gray-900 rounded">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-gray-400">
-              {editingDraft ? "Edit Draft" : editingPalette ? "Edit Palette" : "New Palette"}
+              {editingDraft
+                ? "Edit Draft"
+                : editingPalette
+                  ? "Edit Palette"
+                  : "New Palette"}
             </span>
             {editingDraft && (
               <button

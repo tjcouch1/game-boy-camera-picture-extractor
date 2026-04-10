@@ -45,12 +45,7 @@ export default function App() {
   const { draft, hasDraft } = useDraftPalette();
   const [paletteEntry, setPaletteEntry] = useState<PaletteEntry>({
     name: "B + Left",
-    colors: [
-      "#FFFFFF",
-      "#A5A5A5",
-      "#525252",
-      "#000000",
-    ],
+    colors: ["#FFFFFF", "#A5A5A5", "#525252", "#000000"],
   });
   const [debug, setDebug] = useState(false);
 

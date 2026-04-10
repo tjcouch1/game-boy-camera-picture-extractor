@@ -1,5 +1,19 @@
-export type { GBImageData, PipelineResult, PipelineOptions, GBColorValue, StepName } from "./common.js";
-export { GB_COLORS, STEP_ORDER, CAM_W, CAM_H, SCREEN_W, SCREEN_H, createGBImageData } from "./common.js";
+export type {
+  GBImageData,
+  PipelineResult,
+  PipelineOptions,
+  GBColorValue,
+  StepName,
+} from "./common.js";
+export {
+  GB_COLORS,
+  STEP_ORDER,
+  CAM_W,
+  CAM_H,
+  SCREEN_W,
+  SCREEN_H,
+  createGBImageData,
+} from "./common.js";
 export { initOpenCV } from "./init-opencv.js";
 export { applyPalette } from "./palette.js";
 export { warp } from "./warp.js";
@@ -7,6 +21,12 @@ export { correct } from "./correct.js";
 export { crop } from "./crop.js";
 export { sample } from "./sample.js";
 export { quantize } from "./quantize.js";
+export type { PaletteEntry } from "./data/palettes.js";
+export {
+  MAIN_PALETTES,
+  ADDITIONAL_PALETTES,
+  FUN_PALETTES,
+} from "./data/palettes.js";
 
 import type { GBImageData, PipelineResult, PipelineOptions } from "./common.js";
 import { warp } from "./warp.js";
@@ -45,7 +65,12 @@ export async function processPicture(
 
   const result: PipelineResult = { grayscale: quantized };
   if (debug) {
-    result.intermediates = { warp: warped, correct: corrected, crop: cropped, sample: sampled };
+    result.intermediates = {
+      warp: warped,
+      correct: corrected,
+      crop: cropped,
+      sample: sampled,
+    };
   }
   return result;
 }

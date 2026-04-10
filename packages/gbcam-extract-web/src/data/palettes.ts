@@ -2,12 +2,10 @@ import {
   MAIN_PALETTES,
   ADDITIONAL_PALETTES as ADDITIONAL_FROM_CSV,
   FUN_PALETTES,
-} from "./palettes-generated.js";
+  type PaletteEntry,
+} from "gbcam-extract";
 
-export interface PaletteEntry {
-  name: string;
-  colors: [string, string, string, string];
-}
+export type { PaletteEntry } from "gbcam-extract";
 
 // Filter main palettes by button combo for BUTTON_COMBO_PALETTES section
 export const BUTTON_COMBO_PALETTES: PaletteEntry[] = MAIN_PALETTES.filter(
