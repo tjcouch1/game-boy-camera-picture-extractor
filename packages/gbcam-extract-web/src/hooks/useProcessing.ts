@@ -19,7 +19,7 @@ export interface ProcessingProgress {
   totalImages: number;
   completedImages: number;
   currentImageProgress: CurrentImageProgress | null;
-  overallProgress: number; // 0-100
+  overallProgress: number; // 0-100, smooth across all images and steps
 }
 
 function fileToGBImageData(file: File): Promise<GBImageData> {
@@ -57,6 +57,27 @@ export function useProcessing() {
   });
   const [results, setResults] = useState<ProcessingResult[]>([]);
 
+  // Pipeline steps for progress tracking
+  const PIPELINE_STEPS = ["warp", "correct", "crop", "sample", "quantize"];
+  const STEPS_COUNT = PIPELINE_STEPS.length;
+
+  const calculateOverallProgress = (
+    completedImages: number,
+    currentImageIndex: number,
+    currentStep: string,
+    totalImages: number,
+  ): number => {
+    // Each image has STEPS_COUNT steps
+    // Progress is: (completed images * STEPS_COUNT + current image steps + current step index) / (total images * STEPS_COUNT)
+    const currentStepIndex = PIPELINE_STEPS.indexOf(currentStep);
+    const stepsForCompletedImages = completedImages * STEPS_COUNT;
+    const stepsForCurrentImage = currentStepIndex;
+    const totalSteps = totalImages * STEPS_COUNT;
+    const progress =
+      (stepsForCompletedImages + stepsForCurrentImage) / totalSteps;
+    return Math.round(progress * 100);
+  };
+
   const processFiles = useCallback(async (files: File[], debug = false) => {
     setProcessing(true);
     setProgress({
@@ -80,6 +101,12 @@ export function useProcessing() {
             index: fileIndex,
             total: files.length,
           },
+          overallProgress: calculateOverallProgress(
+            fileIndex,
+            fileIndex,
+            "",
+            files.length,
+          ),
         }));
 
         const gbImage = await fileToGBImageData(file);
@@ -96,6 +123,12 @@ export function useProcessing() {
                     currentStep: step,
                   }
                 : null,
+              overallProgress: calculateOverallProgress(
+                fileIndex,
+                fileIndex,
+                step,
+                files.length,
+              ),
             }));
           },
         });
@@ -105,8 +138,11 @@ export function useProcessing() {
         setResults([...newResults]);
 
         const completedCount = fileIndex + 1;
-        const overallProgress = Math.round(
-          (completedCount / files.length) * 100,
+        const nextProgressValue = calculateOverallProgress(
+          completedCount,
+          completedCount,
+          "",
+          files.length,
         );
         setProgress((prev) => ({
           totalImages: files.length,
@@ -120,13 +156,16 @@ export function useProcessing() {
                   total: files.length,
                 }
               : null,
-          overallProgress,
+          overallProgress: nextProgressValue,
         }));
       } catch (err) {
         console.error(`Failed to process ${file.name}:`, err);
         const completedCount = fileIndex + 1;
-        const overallProgress = Math.round(
-          (completedCount / files.length) * 100,
+        const nextProgressValue = calculateOverallProgress(
+          completedCount,
+          completedCount,
+          "",
+          files.length,
         );
         setProgress((prev) => ({
           totalImages: files.length,
@@ -140,7 +179,7 @@ export function useProcessing() {
                   total: files.length,
                 }
               : null,
-          overallProgress,
+          overallProgress: nextProgressValue,
         }));
       }
     }
