@@ -60,6 +60,14 @@ TODO: expand
 pnpm i
 ```
 
+If you get a message about "ignored build scripts" (`pnpm` seems to be having trouble seeing the build script approval for `esbuild`):
+
+```bash
+pnpm rebuild
+# or
+pnpm approve-builds #and select esbuild
+```
+
 ## To build the TypeScript packages
 
 ```bash
@@ -79,7 +87,7 @@ pnpm test:pipeline
 pnpm extract --dir ../../sample-pictures --output-dir ../../sample-pictures-out --clean-steps
 ```
 
-## To run the website locally
+## To develop the website locally
 
 To run just on your computer:
 
@@ -93,19 +101,41 @@ To run on your network:
 pnpm dev:host
 ```
 
+Note: these will enable hot reloading for the website code but not for the extraction pipeline. If you make changes to the extraction pipeline, re-run the script.
+
+## To build the website and host a production preview
+
+To run just on your computer:
+
+```bash
+pnpm preview
+```
+
+To run on your network:
+
+```bash
+pnpm preview:host
+```
+
+## To publish to GitHub Pages
+
+1. Create a PR merging changes into `production` branch (once merge, will run `deploy.yml`)
+2. Create a release in GitHub
+3. Bump the versions in the `package.json` files
+
 # Python development instructions
 
 ## Python Setup
 
-TODO: Update with the latest instructions as of mono-repo
-
 ```bash
 cd packages/gbcam-extract-py
 python -m venv .venv
+
 # Unix-based
 source .venv/bin/activate
 # Windows
 ./.venv/Scripts/activate
+
 pip install -r requirements.txt
 ```
 

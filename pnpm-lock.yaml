@@ -16,13 +16,13 @@ importers:
       ml-regression-polynomial:
         specifier: ^3.0.0
         version: 3.0.2
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
     devDependencies:
       '@types/node':
         specifier: ^25.5.2
         version: 25.5.2
-      sharp:
-        specifier: ^0.34.5
-        version: 0.34.5
       tsup:
         specifier: ^8.0.0
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)
