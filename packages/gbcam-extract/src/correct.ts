@@ -75,24 +75,38 @@ export function correct(
   const W = input.width;
   const H = input.height;
 
-  // Extract grayscale from R channel
+  // Convert RGBA to grayscale using standard luminance formula
+  // The warp output is color RGBA from the input photo
   const gray = new Float32Array(H * W);
   for (let i = 0; i < gray.length; i++) {
-    gray[i] = input.data[i * 4];
+    const idx = i * 4;
+    const r = input.data[idx];
+    const g = input.data[idx + 1];
+    const b = input.data[idx + 2];
+    // Standard grayscale formula: 0.299*R + 0.587*G + 0.114*B
+    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
   }
 
   // ── Step 1: White surface estimation ──
-  const { ys: whiteYs, xs: whiteXs, vs: whiteVs } = collectWhiteSamples(
-    gray,
-    W,
-    H,
-    scale,
-  );
+  const {
+    ys: whiteYs,
+    xs: whiteXs,
+    vs: whiteVs,
+  } = collectWhiteSamples(gray, W, H, scale);
   const whiteSurface = fitSurface(whiteYs, whiteXs, whiteVs, H, W, polyDegree);
 
   // ── Step 2: Dark surface estimation (Coons bilinear patch) ──
   const { left, right, top, bot } = collectDarkSamples(gray, W, H, scale);
-  let darkSurface = buildDarkSurface(left, right, top, bot, H, W, scale, darkSmooth);
+  let darkSurface = buildDarkSurface(
+    left,
+    right,
+    top,
+    bot,
+    H,
+    W,
+    scale,
+    darkSmooth,
+  );
 
   // ── Step 3: Per-pixel affine correction ──
   let corrected = applyCorrection(gray, whiteSurface, darkSurface, W, H);
@@ -157,7 +171,7 @@ function gbBlockSample(
 
 function computePercentile(values: number[], percentile: number): number {
   const sorted = values.slice().sort((a, b) => a - b);
-  const idx = ((percentile / 100) * (sorted.length - 1));
+  const idx = (percentile / 100) * (sorted.length - 1);
   const lo = Math.floor(idx);
   const hi = Math.ceil(idx);
   if (lo === hi) return sorted[lo];
@@ -260,7 +274,10 @@ function collectDarkSamples(
 
 // ─── Uniform filter 1D (simple moving average with nearest boundary) ───
 
-export function uniformFilter1d(input: Float64Array, size: number): Float64Array {
+export function uniformFilter1d(
+  input: Float64Array,
+  size: number,
+): Float64Array {
   const half = Math.floor(size / 2);
   const n = input.length;
   const output = new Float64Array(n);
@@ -795,7 +812,13 @@ function refinePass(
   }
 
   // Re-correct with refined dark surface
-  const newCorrected = applyCorrection(gray, whiteSurface, newDarkSurface, W, H);
+  const newCorrected = applyCorrection(
+    gray,
+    whiteSurface,
+    newDarkSurface,
+    W,
+    H,
+  );
 
   return { darkSurface: newDarkSurface, corrected: newCorrected };
 }
