@@ -20,12 +20,14 @@ function PaletteSwatch({
   doesMatchColors,
   onClick,
   onDelete,
+  onEdit,
 }: {
   entry: PaletteEntry;
   isSelected: boolean;
   doesMatchColors: boolean;
   onClick: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
 }) {
   const bgClass = isSelected
     ? "bg-blue-600 ring-2 ring-blue-400"
@@ -48,17 +50,32 @@ function PaletteSwatch({
         ))}
       </div>
       <span className="truncate">{entry.name}</span>
-      {onDelete && (
-        <span
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="ml-auto text-red-400 hover:text-red-300 cursor-pointer"
-        >
-          x
-        </span>
-      )}
+      <div className="ml-auto flex gap-1">
+        {onEdit && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="text-blue-400 hover:text-blue-300 cursor-pointer"
+            title="Edit palette"
+          >
+            ✏️
+          </span>
+        )}
+        {onDelete && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="text-red-400 hover:text-red-300 cursor-pointer"
+            title="Delete palette"
+          >
+            x
+          </span>
+        )}
+      </div>
     </button>
   );
 }
@@ -69,12 +86,14 @@ function PaletteSection({
   selected,
   onSelectWithName,
   onDelete,
+  onEdit,
 }: {
   title: string;
   entries: PaletteEntry[];
   selected: PaletteEntry;
   onSelectWithName: (entry: PaletteEntry) => void;
   onDelete?: (index: number) => void;
+  onEdit?: (index: number, entry: PaletteEntry) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -100,6 +119,7 @@ function PaletteSection({
               onClick={() => {
                 onSelectWithName(entry);
               }}
+              onEdit={onEdit ? () => onEdit(i, entry) : undefined}
               onDelete={onDelete ? () => onDelete(i) : undefined}
             />
           ))}
@@ -129,6 +149,10 @@ export function PalettePicker({
   } = useDraftPalette();
   const [showCreate, setShowCreate] = useState(false);
   const [editingDraft, setEditingDraft] = useState(false);
+  const [editingPalette, setEditingPalette] = useState<{
+    index: number;
+    entry: PaletteEntry;
+  } | null>(null);
   const [newName, setNewName] = useState("");
   const [newColors, setNewColors] = useState<[string, string, string, string]>([
     "#FFFFFF",
@@ -139,7 +163,7 @@ export function PalettePicker({
 
   // Check if current selection matches draft
   const isDraftSelected =
-    hasDraft && draft && selected.every((c, i) => c === draft[i]);
+    hasDraft && draft && selected.colors.every((c, i) => c === draft[i]);
 
   const handleSave = () => {
     if (!newName.trim()) return;
@@ -150,6 +174,11 @@ export function PalettePicker({
       clearDraft();
       setEditingDraft(false);
       setShowCreate(false);
+    } else if (editingPalette) {
+      // Saving edited palette as new user palette
+      addPalette({ name: newName.trim(), colors: [...newColors] });
+      setEditingPalette(null);
+      setShowCreate(false);
     } else {
       // Creating new custom palette from scratch
       addPalette({ name: newName.trim(), colors: [...newColors] });
@@ -158,6 +187,13 @@ export function PalettePicker({
 
     setNewName("");
     setNewColors(["#FFFFFF", "#AAAAAA", "#555555", "#000000"]);
+  };
+
+  const handleEditPalette = (index: number, entry: PaletteEntry) => {
+    setEditingPalette({ index, entry });
+    setNewName("");
+    setNewColors([...entry.colors]);
+    setShowCreate(true);
   };
 
   return (
@@ -178,6 +214,8 @@ export function PalettePicker({
             onClick={() => {
               if (editingDraft) {
                 setEditingDraft(false);
+              } else if (editingPalette) {
+                setEditingPalette(null);
               } else if (showCreate) {
                 setShowCreate(false);
               } else {
@@ -192,16 +230,16 @@ export function PalettePicker({
             }}
             className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
           >
-            {showCreate ? "Cancel" : "+ Custom"}
+            {editingDraft || editingPalette || showCreate ? "Cancel" : "+ Custom"}
           </button>
         </div>
       </div>
 
-      {showCreate && (
+      {(showCreate || editingDraft || editingPalette) && (
         <div className="mb-3 p-3 bg-gray-900 rounded">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-gray-400">
-              {editingDraft ? "Edit Draft" : "New Palette"}
+              {editingDraft ? "Edit Draft" : editingPalette ? "Edit Palette" : "New Palette"}
             </span>
             {editingDraft && (
               <button
@@ -251,7 +289,11 @@ export function PalettePicker({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder={
-                editingDraft ? "Palette name to save draft as" : "Palette name"
+                editingDraft
+                  ? "Palette name to save draft as"
+                  : editingPalette
+                    ? "New palette name"
+                    : "Palette name"
               }
               className="flex-1 px-2 py-1 bg-gray-700 rounded text-xs text-white placeholder-gray-500 border border-gray-600 focus:border-blue-500 outline-none"
             />
@@ -260,7 +302,7 @@ export function PalettePicker({
               disabled={!newName.trim()}
               className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-xs font-medium transition-colors"
             >
-              {editingDraft ? "Save" : "Save"}
+              Save
             </button>
           </div>
         </div>
@@ -289,6 +331,7 @@ export function PalettePicker({
             onSelectWithName(entry);
           }}
           onDelete={removePalette}
+          onEdit={handleEditPalette}
         />
         <PaletteSection
           title="Button Combos"
@@ -300,6 +343,7 @@ export function PalettePicker({
             }
             onSelectWithName(entry);
           }}
+          onEdit={handleEditPalette}
         />
         <PaletteSection
           title="BG Presets"
@@ -311,6 +355,7 @@ export function PalettePicker({
             }
             onSelectWithName(entry);
           }}
+          onEdit={handleEditPalette}
         />
         <PaletteSection
           title="Additional"
@@ -322,6 +367,7 @@ export function PalettePicker({
             }
             onSelectWithName(entry);
           }}
+          onEdit={handleEditPalette}
         />
         <PaletteSection
           title="Fun"
@@ -333,6 +379,7 @@ export function PalettePicker({
             }
             onSelectWithName(entry);
           }}
+          onEdit={handleEditPalette}
         />
       </div>
     </div>
