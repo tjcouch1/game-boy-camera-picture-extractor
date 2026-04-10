@@ -258,9 +258,9 @@ function collectDarkSamples(
   return { left, right, top, bot };
 }
 
-// ─── Uniform filter 1D (simple moving average with reflect boundary) ───
+// ─── Uniform filter 1D (simple moving average with nearest boundary) ───
 
-function uniformFilter1d(input: Float64Array, size: number): Float64Array {
+export function uniformFilter1d(input: Float64Array, size: number): Float64Array {
   const half = Math.floor(size / 2);
   const n = input.length;
   const output = new Float64Array(n);
@@ -269,10 +269,9 @@ function uniformFilter1d(input: Float64Array, size: number): Float64Array {
     let sum = 0;
     for (let j = i - half; j <= i + half; j++) {
       let idx = j;
-      // Reflect boundary (nearest mode)
-      if (idx < 0) idx = -idx;
-      if (idx >= n) idx = 2 * n - 2 - idx;
-      idx = Math.max(0, Math.min(n - 1, idx));
+      // Nearest boundary: clamp to edge value (matches scipy mode='nearest')
+      if (idx < 0) idx = 0;
+      if (idx >= n) idx = n - 1;
       sum += input[idx];
     }
     output[i] = sum / size;
