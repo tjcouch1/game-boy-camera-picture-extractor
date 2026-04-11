@@ -10,6 +10,12 @@ import {
   useUserPalettes,
   type UserPaletteEntry,
 } from "../hooks/useUserPalettes.js";
+import {
+  PALETTE_COLOR_LABELS,
+  PALETTE_TEXT_CLASS,
+  PALETTE_LABEL_CLASS,
+  PALETTE_INPUT_CLASS,
+} from "../utils/paletteUI.js";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
@@ -44,7 +50,7 @@ function PaletteSwatch({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${bgClass}`}
+      className={`flex items-center gap-2 px-2 py-1.5 rounded transition-colors ${PALETTE_TEXT_CLASS} ${bgClass}`}
     >
       <div className="flex shrink-0">
         {entry.colors.map((c, i) => (
@@ -340,8 +346,8 @@ export function PalettePicker({
                             }}
                             className="w-8 h-8 rounded cursor-pointer bg-transparent"
                           />
-                          <span className="text-[10px] text-gray-500">
-                            {["Light", "Mid-L", "Mid-D", "Dark"][i]}
+                          <span className={PALETTE_LABEL_CLASS}>
+                            {PALETTE_COLOR_LABELS[i]}
                           </span>
                         </label>
                       ))}
@@ -356,7 +362,7 @@ export function PalettePicker({
                         handlePaletteNameChange(palette.id, e.target.value);
                       }}
                       placeholder="Palette name"
-                      className="w-full px-2 py-1 bg-gray-700 rounded text-xs text-white placeholder-gray-500 border border-gray-600 focus:border-blue-500 outline-none mb-2"
+                      className={`${PALETTE_INPUT_CLASS} mb-2`}
                     />
 
                     {/* Error message */}
