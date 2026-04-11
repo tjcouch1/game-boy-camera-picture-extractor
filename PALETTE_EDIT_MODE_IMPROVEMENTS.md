@@ -1,18 +1,21 @@
 # Palette Edit Mode Improvements Plan
 
 ## Overview
+
 This plan addresses comprehensive improvements to the palette picker UI/UX, focusing on implementing multi-palette edit mode, removing draft palette tracking, and fixing palette management issues.
 
 ## Current State
+
 - **Draft Palette System**: Uses `useDraftPalette` hook to track a single draft palette in localStorage
 - **Palette Editing**: Users can edit palettes, but editing creates new copies
-- **UI Issues**: 
+- **UI Issues**:
   - All palettes (including built-in ones) show edit buttons
   - User palette swatches have both edit and delete (X) buttons
   - Draft palette shown separately above user palettes
   - No indication of which palettes are being edited
 
 ## Goals
+
 1. Replace single-draft-palette with multi-palette edit mode
 2. Allow built-in palettes to be used as templates without editing them
 3. Improve UX with better visual feedback and state management
@@ -27,6 +30,7 @@ This plan addresses comprehensive improvements to the palette picker UI/UX, focu
 ### Phase 1: Data Architecture Refactoring
 
 #### 1.1 Simplify gbcam-extract exports
+
 **Files**: `packages/gbcam-extract/src/data/palette.ts`, `packages/gbcam-extract/src/data/palettes-generated.ts`
 
 - **Remove**: `palettes.ts` which just re-exports from `palettes-generated.ts`
@@ -34,6 +38,7 @@ This plan addresses comprehensive improvements to the palette picker UI/UX, focu
 - **Impact**: Cleaner module structure, direct access to generated palettes
 
 #### 1.2 Remove unused palette generation from web package
+
 **Files**: `packages/gbcam-extract-web/src/data/palettes.ts` and any related code
 
 - **Audit**: Check for any unused palette generation logic in web package
@@ -41,10 +46,11 @@ This plan addresses comprehensive improvements to the palette picker UI/UX, focu
 - **Keep**: Only the import from `gbcam-extract` and section-based grouping
 
 #### 1.3 Add tests for generate-palettes.ts
+
 **Files**: `packages/gbcam-extract/scripts/generate-palettes.ts` (new test file)
 
 - **Create**: Test file in `packages/gbcam-extract/tests/` or appropriate location
-- **Test**: 
+- **Test**:
   - CSV parsing from supporting-materials/color-tables/
   - Correct palette generation
   - Button combo extraction
@@ -55,31 +61,36 @@ This plan addresses comprehensive improvements to the palette picker UI/UX, focu
 ### Phase 2: Data Model Changes (User Palettes)
 
 #### 2.1 Update PaletteEntry interface
+
 **Impact**: Affects storage, UI, and palette management
 
 **New Model**:
+
 ```typescript
 interface PaletteEntry {
-  id: string;  // Unique identifier (uuid or similar)
+  id: string; // Unique identifier (uuid or similar)
   name: string;
   colors: [string, string, string, string];
   isBuiltIn: boolean;
   isEditing?: boolean;
-  savedColors?: [string, string, string, string];  // Track pre-edit state
-  savedName?: string;  // Track pre-edit name
+  savedColors?: [string, string, string, string]; // Track pre-edit state
+  savedName?: string; // Track pre-edit name
 }
 ```
 
 **Design Decisions**:
+
 - `isEditing`: Flag that palette is in edit mode (not saved yet or currently being edited)
 - `savedColors`/`savedName`: Restore values if user cancels while editing
 - `isBuiltIn`: Prevent editing of built-in palettes; no edit button shown
 - Each palette has unique `id` for reliable tracking across sessions
 
 #### 2.2 Update useUserPalettes hook
+
 **Files**: `packages/gbcam-extract-web/src/hooks/useUserPalettes.ts`
 
 **Changes**:
+
 - Update data model with `id`, `isEditing`, `savedColors`, `savedName`
 - Add method: `updatePalette(id, changes)` - Update palette properties
 - Add method: `createPaletteInEditMode(fromName, fromColors)` - Create new palette in edit mode with auto-generated name
@@ -89,6 +100,7 @@ interface PaletteEntry {
 - Ensure localStorage serialization/deserialization of new model
 
 #### 2.3 Delete useDraftPalette hook
+
 **Files**: `packages/gbcam-extract-web/src/hooks/useDraftPalette.ts`
 
 - **Delete**: Entire file; functionality moved to `useUserPalettes`
@@ -99,9 +111,11 @@ interface PaletteEntry {
 ### Phase 3: UI Component Updates
 
 #### 3.1 Update PaletteSwatch component
+
 **Files**: `packages/gbcam-extract-web/src/components/PalettePicker.tsx`
 
 **Changes to PaletteSwatch**:
+
 - Remove `onDelete` and `onEdit` props for palette entries
 - Add state for in-edit-mode palettes:
   - Show edit controls inline when `isEditing === true`
@@ -113,11 +127,13 @@ interface PaletteEntry {
   - If user palette editing: Show cancel and delete buttons
 
 #### 3.2 Refactor PalettePicker component
+
 **Files**: `packages/gbcam-extract-web/src/components/PalettePicker.tsx`
 
 **Major refactoring**:
 
 **Remove**:
+
 - `useDraftPalette` hook and all draft-related state
 - `editingPalette` state (merged into `editingPaletteId`)
 - `showCreate` state (merged into editing state)
@@ -125,6 +141,7 @@ interface PaletteEntry {
 - The "Cancel" button that switches with "+ Custom"
 
 **Add**:
+
 - `editingPaletteId` state (track which palette is being edited by ID)
 - Integration with updated `useUserPalettes` for multi-edit support
 - Auto-generate unique palette names when creating new palette:
@@ -133,6 +150,7 @@ interface PaletteEntry {
   - Generate "0x01 custom 1", "0x01 custom 2", etc., picking first unused number
 
 **UI Structure**:
+
 ```
 ┌─ Palette Picker ─────────────────────┐
 │  [colors] [selected palette name]     │
@@ -151,6 +169,7 @@ interface PaletteEntry {
 ```
 
 **Editor UI (in edit mode)**:
+
 ```
 ┌─ Name: [text input]────────────────┐
 │                                    │
@@ -164,6 +183,7 @@ interface PaletteEntry {
 ```
 
 **Editor behaviors**:
+
 - Name validation:
   - Show error if blank: "Palette name cannot be empty"
   - Show error if duplicate: "A palette with this name already exists"
@@ -174,9 +194,11 @@ interface PaletteEntry {
 - Save button closes edit mode and shows swatch again
 
 #### 3.3 PaletteSection component updates
+
 **Files**: `packages/gbcam-extract-web/src/components/PalettePicker.tsx`
 
 **Changes**:
+
 - Split "User Palettes" into two sections:
   - "Editing" section (always at top, always visible if any palettes editing)
   - "Saved" section (only shows saved user palettes)
@@ -188,13 +210,16 @@ interface PaletteEntry {
 ### Phase 4: Visual Design Updates
 
 #### 4.1 Remove X button from palette swatches
+
 **Context**: PaletteSwatch component
 
 **Changes**:
+
 - Don't render delete button for any non-editing palettes
 - Only show edit button (✏️) for user palettes when not in edit mode
 
 #### 4.2 Built-in palette styling
+
 **Context**: PaletteSwatch component
 
 - No edit button on built-in palettes
@@ -202,6 +227,7 @@ interface PaletteEntry {
 - No delete capability
 
 #### 4.3 Edit mode visual feedback
+
 **Context**: Editing and non-editing states
 
 - **Editing palette selected**: Brighter blue background (matching current selected style)
@@ -258,21 +284,25 @@ interface PaletteEntry {
 ## Key Technical Decisions
 
 ### Why remove draft palette?
+
 - More intuitive: Users don't need to understand "draft" concept
 - Cleaner UX: "+ Custom" button consistently creates a new palette
 - Better multi-edit support: Users can work on multiple palettes simultaneously
 
 ### Why unique IDs?
+
 - Reliable tracking across localStorage/serialization
 - Prevents name-based conflicts when renaming
 - Better React key usage for lists
 
 ### Why show editing palettes at top?
+
 - Visual prominence: Users know what's being edited
 - Intuitive organization: Current work at top
 - Consistent with many modern UIs (GMail drafts, etc.)
 
 ### Why validate on render, not on save?
+
 - Immediate feedback: Users see errors as they type
 - Better UX: No surprise errors on save
 - Users can fix issues before clicking save
@@ -282,12 +312,14 @@ interface PaletteEntry {
 ## Testing Strategy
 
 ### Unit Tests (generate-palettes.ts)
+
 - CSV file parsing
 - Palette data structure validation
 - Button combo extraction
 - File output validation
 
 ### Integration Tests (UI)
+
 - Create palette in edit mode
 - Edit multiple palettes simultaneously
 - Name validation (blank, duplicates)
@@ -298,6 +330,7 @@ interface PaletteEntry {
 - Persistence across page reload
 
 ### Manual Testing Checklist
+
 - [ ] Create custom palette
 - [ ] Edit palette colors
 - [ ] Change palette name
@@ -319,19 +352,23 @@ interface PaletteEntry {
 ## Files to Create/Modify
 
 ### Create
+
 - `packages/gbcam-extract/tests/generate-palettes.test.ts`
 
 ### Modify
+
 - `packages/gbcam-extract/src/data/palettes-generated.ts` (consolidate exports)
 - `packages/gbcam-extract-web/src/hooks/useUserPalettes.ts` (new data model)
 - `packages/gbcam-extract-web/src/components/PalettePicker.tsx` (major refactor)
 - `packages/gbcam-extract-web/src/data/palettes.ts` (cleanup)
 
 ### Delete
+
 - `packages/gbcam-extract/src/data/palettes.ts`
 - `packages/gbcam-extract-web/src/hooks/useDraftPalette.ts`
 
 ### Update
+
 - Any files importing from deleted/modified files
 
 ---

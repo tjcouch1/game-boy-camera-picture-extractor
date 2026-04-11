@@ -6,7 +6,10 @@ import {
   FUN_PALETTES_EXPORT,
 } from "../data/palettes.js";
 import type { PaletteEntry } from "../data/palettes.js";
-import { useUserPalettes, type UserPaletteEntry } from "../hooks/useUserPalettes.js";
+import {
+  useUserPalettes,
+  type UserPaletteEntry,
+} from "../hooks/useUserPalettes.js";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
@@ -295,7 +298,10 @@ export function PalettePicker({
                   {/* Color pickers */}
                   <div className="flex items-center gap-2 mb-2">
                     {palette.colors.map((c, i) => (
-                      <label key={i} className="flex flex-col items-center gap-1">
+                      <label
+                        key={i}
+                        className="flex flex-col items-center gap-1"
+                      >
                         <input
                           type="color"
                           value={c}

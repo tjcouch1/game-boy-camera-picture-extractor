@@ -60,9 +60,7 @@ export function useUserPalettes() {
         .filter((n) => n > 0);
 
       const nextNumber =
-        existingNumbers.length > 0
-          ? Math.max(...existingNumbers) + 1
-          : 1;
+        existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
 
       const newPalette: UserPaletteEntry = {
         id: generateId(),

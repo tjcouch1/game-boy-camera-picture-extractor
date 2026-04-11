@@ -21,13 +21,13 @@ describe("generate-palettes", () => {
   beforeAll(() => {
     colorTablesDir = path.join(
       __dirname,
-      "../../../supporting-materials/color-tables"
+      "../../../supporting-materials/color-tables",
     );
 
     // Read the generated palettes file
     const generatedPath = path.join(
       __dirname,
-      "../src/data/palettes-generated.ts"
+      "../src/data/palettes-generated.ts",
     );
     generatedContent = fs.readFileSync(generatedPath, "utf-8");
   });
@@ -35,7 +35,9 @@ describe("generate-palettes", () => {
   it("should have valid TypeScript syntax with PaletteEntry interface", () => {
     expect(generatedContent).toContain("interface PaletteEntry");
     expect(generatedContent).toContain("name: string");
-    expect(generatedContent).toContain("colors: [string, string, string, string]");
+    expect(generatedContent).toContain(
+      "colors: [string, string, string, string]",
+    );
     expect(generatedContent).toContain("buttonCombo?: string");
   });
 
@@ -47,7 +49,9 @@ describe("generate-palettes", () => {
 
   it("should export ADDITIONAL_PALETTES array", () => {
     expect(generatedContent).toContain("export const ADDITIONAL_PALETTES");
-    const match = generatedContent.match(/export const ADDITIONAL_PALETTES.*?\];/s);
+    const match = generatedContent.match(
+      /export const ADDITIONAL_PALETTES.*?\];/s,
+    );
     expect(match).toBeTruthy();
   });
 
@@ -59,9 +63,11 @@ describe("generate-palettes", () => {
 
   it("should have valid JSON structure for palettes", () => {
     // Extract JSON arrays and validate they're proper JSON
-    const mainMatch = generatedContent.match(/MAIN_PALETTES.*?= (\[[\s\S]*?\]);/);
+    const mainMatch = generatedContent.match(
+      /MAIN_PALETTES.*?= (\[[\s\S]*?\]);/,
+    );
     const additionalMatch = generatedContent.match(
-      /ADDITIONAL_PALETTES.*?= (\[[\s\S]*?\]);/
+      /ADDITIONAL_PALETTES.*?= (\[[\s\S]*?\]);/,
     );
     const funMatch = generatedContent.match(/FUN_PALETTES.*?= (\[[\s\S]*?\]);/);
 
@@ -84,7 +90,7 @@ describe("generate-palettes", () => {
     // Check for hex color pattern in the file
     const hexColorPattern = /#[0-9A-F]{6}/gi;
     const colors = generatedContent.match(hexColorPattern) || [];
-    
+
     expect(colors.length).toBeGreaterThan(0);
     colors.forEach((color) => {
       expect(color).toMatch(/#[0-9A-F]{6}/i);
@@ -93,7 +99,7 @@ describe("generate-palettes", () => {
 
   it("should have MAIN_PALETTES with correct structure", () => {
     const match = generatedContent.match(
-      /export const MAIN_PALETTES.*?= (\[[\s\S]*?\]);/
+      /export const MAIN_PALETTES.*?= (\[[\s\S]*?\]);/,
     );
     if (!match) {
       throw new Error("Could not find MAIN_PALETTES");
@@ -109,7 +115,7 @@ describe("generate-palettes", () => {
     expect(firstPalette).toHaveProperty("colors");
     expect(Array.isArray(firstPalette.colors)).toBe(true);
     expect(firstPalette.colors.length).toBe(4);
-    
+
     firstPalette.colors.forEach((color: string) => {
       expect(color).toMatch(/#[0-9A-F]{6}/i);
     });
@@ -117,17 +123,17 @@ describe("generate-palettes", () => {
 
   it("should extract button combos from MAIN_PALETTES", () => {
     const match = generatedContent.match(
-      /export const MAIN_PALETTES.*?= (\[[\s\S]*?\]);/
+      /export const MAIN_PALETTES.*?= (\[[\s\S]*?\]);/,
     );
     if (!match) {
       throw new Error("Could not find MAIN_PALETTES");
     }
 
     const palettes = JSON.parse(match[1]);
-    
+
     // At least some palettes should have buttonCombo
     const withCombo = palettes.filter(
-      (p: { buttonCombo?: string }) => p.buttonCombo
+      (p: { buttonCombo?: string }) => p.buttonCombo,
     );
     expect(withCombo.length).toBeGreaterThan(0);
   });
@@ -135,7 +141,7 @@ describe("generate-palettes", () => {
   it("should have unique palette names in each category", () => {
     const extractArray = (arrayName: string) => {
       const match = generatedContent.match(
-        new RegExp(`export const ${arrayName}.*?= (\\[[\\s\\S]*?\\]);`)
+        new RegExp(`export const ${arrayName}.*?= (\\[[\\s\\S]*?\\]);`),
       );
       if (!match) return [];
       return JSON.parse(match[1]);
@@ -166,10 +172,7 @@ describe("generate-palettes", () => {
 
     files.forEach((file) => {
       const filePath = path.join(colorTablesDir, file);
-      expect(fs.existsSync(filePath)).toBe(
-        true,
-        `Missing CSV file: ${file}`
-      );
+      expect(fs.existsSync(filePath)).toBe(true, `Missing CSV file: ${file}`);
     });
   });
 
@@ -181,7 +184,7 @@ describe("generate-palettes", () => {
 
   it("should have ADDITIONAL_PALETTES with correct structure", () => {
     const match = generatedContent.match(
-      /export const ADDITIONAL_PALETTES.*?= (\[[\s\S]*?\]);/
+      /export const ADDITIONAL_PALETTES.*?= (\[[\s\S]*?\]);/,
     );
     if (!match) {
       throw new Error("Could not find ADDITIONAL_PALETTES");
@@ -199,7 +202,9 @@ describe("generate-palettes", () => {
   });
 
   it("should have FUN_PALETTES with correct structure", () => {
-    const match = generatedContent.match(/export const FUN_PALETTES.*?= (\[[\s\S]*?\]);/);
+    const match = generatedContent.match(
+      /export const FUN_PALETTES.*?= (\[[\s\S]*?\]);/,
+    );
     if (!match) {
       throw new Error("Could not find FUN_PALETTES");
     }
@@ -219,7 +224,7 @@ describe("generate-palettes", () => {
   it("should not have buttonCombo in ADDITIONAL_PALETTES or FUN_PALETTES", () => {
     const extractArray = (arrayName: string) => {
       const match = generatedContent.match(
-        new RegExp(`export const ${arrayName}.*?= (\\[[\\s\\S]*?\\]);`)
+        new RegExp(`export const ${arrayName}.*?= (\\[[\\s\\S]*?\\]);`),
       );
       if (!match) return [];
       return JSON.parse(match[1]);
@@ -239,18 +244,18 @@ describe("generate-palettes", () => {
 
   it("should parse palette names correctly from CSV", () => {
     const match = generatedContent.match(
-      /export const MAIN_PALETTES.*?= (\[[\s\S]*?\]);/
+      /export const MAIN_PALETTES.*?= (\[[\s\S]*?\]);/,
     );
     if (!match) {
       throw new Error("Could not find MAIN_PALETTES");
     }
 
     const palettes = JSON.parse(match[1]);
-    
+
     // Check that names follow expected pattern (e.g., "0x00", "0x01", etc)
     const hexPattern = /^0x[0-9A-F]{2}$/i;
     const hasHexNames = palettes.some((p: { name: string }) =>
-      hexPattern.test(p.name)
+      hexPattern.test(p.name),
     );
     expect(hasHexNames).toBe(true);
   });
