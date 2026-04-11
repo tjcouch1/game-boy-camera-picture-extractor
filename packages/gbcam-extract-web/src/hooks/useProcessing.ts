@@ -68,14 +68,15 @@ export function useProcessing() {
     totalImages: number,
   ): number => {
     // Each image has STEPS_COUNT steps
-    // Progress is: (completed images * STEPS_COUNT + current image steps + current step index) / (total images * STEPS_COUNT)
-    const currentStepIndex = PIPELINE_STEPS.indexOf(currentStep);
+    // Progress is: (completed images * STEPS_COUNT + current step index) / (total images * STEPS_COUNT)
+    // Clamp to 0-100 to avoid negative values
+    const currentStepIndex = Math.max(0, PIPELINE_STEPS.indexOf(currentStep));
     const stepsForCompletedImages = completedImages * STEPS_COUNT;
     const stepsForCurrentImage = currentStepIndex;
     const totalSteps = totalImages * STEPS_COUNT;
     const progress =
       (stepsForCompletedImages + stepsForCurrentImage) / totalSteps;
-    return Math.round(progress * 100);
+    return Math.max(0, Math.min(100, Math.round(progress * 100)));
   };
 
   const processFiles = useCallback(async (files: File[], debug = false) => {
