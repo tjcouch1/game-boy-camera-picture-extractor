@@ -106,11 +106,10 @@ function PaletteSection({
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 ml-3">
           {entries.map((entry, i) => {
             const isUserPalette = "id" in entry;
+            // For all palettes (user or built-in), check if name and colors match selected
             const isSelected =
-              "id" in entry
-                ? selectedEditingPaletteId === entry.id
-                : entry.name === selected.name &&
-                  entry.colors.every((c, j) => c === selected.colors[j]);
+              entry.name === selected.name &&
+              entry.colors.every((c, j) => c === selected.colors[j]);
             const doesMatchColors = entry.colors.every(
               (c, j) => c === selected.colors[j],
             );
@@ -170,6 +169,14 @@ export function PalettePicker({
     selectedEditingPaletteId &&
     userPalettes.find((p) => p.id === selectedEditingPaletteId);
 
+  // Helper: check if a palette is the selected one (by name + colors match)
+  const isPaletteSelected = (palette: UserPaletteEntry): boolean => {
+    return (
+      palette.name === selected.name &&
+      palette.colors.every((c, j) => c === selected.colors[j])
+    );
+  };
+
   // Validate palette edits
   const validatePaletteName = (id: string, name: string): string => {
     if (!name.trim()) {
@@ -187,6 +194,9 @@ export function PalettePicker({
   const handleCreateCustom = () => {
     const newId = createPaletteInEditMode(selected.name, selected.colors);
     setSelectedEditingPaletteId(newId);
+    // The newly created palette will be added to userPalettes via the hook's state update
+    // We can just select the current selected palette colors since we're creating from it
+    onSelectWithName(selected);
   };
 
   const handleStartEdit = (paletteId: string) => {
@@ -220,9 +230,14 @@ export function PalettePicker({
   };
 
   const handlePaletteNameChange = (id: string, newName: string) => {
+    const palette = userPalettes.find((p) => p.id === id);
     updatePalette(id, { name: newName });
     const error = validatePaletteName(id, newName);
     setEditingPaletteErrors(error);
+    // If this palette is currently selected, update the selection to reflect new name
+    if (palette && isPaletteSelected(palette)) {
+      onSelectWithName({ name: newName, colors: palette.colors });
+    }
   };
 
   const handlePaletteColorChange = (
@@ -230,8 +245,9 @@ export function PalettePicker({
     colorIndex: number,
     newColor: string,
   ) => {
-    if (editingPalette) {
-      const newColors = [...editingPalette.colors] as [
+    const palette = userPalettes.find((p) => p.id === id);
+    if (palette) {
+      const newColors = [...palette.colors] as [
         string,
         string,
         string,
@@ -239,6 +255,10 @@ export function PalettePicker({
       ];
       newColors[colorIndex] = newColor;
       updatePalette(id, { colors: newColors });
+      // If this palette is currently selected, update the selection to reflect new colors
+      if (isPaletteSelected(palette)) {
+        onSelectWithName({ name: palette.name, colors: newColors });
+      }
     }
   };
 
@@ -285,67 +305,72 @@ export function PalettePicker({
               ✏️ EDITING ({editingPalettes.length})
             </div>
             <div className="ml-3 space-y-2">
-              {editingPalettes.map((palette) => (
-                <div
-                  key={palette.id}
-                  className={`p-3 rounded border-2 ${
-                    selectedEditingPaletteId === palette.id
-                      ? "border-blue-500 bg-blue-900"
-                      : "border-gray-600 bg-gray-900"
-                  } cursor-pointer transition-colors`}
-                  onClick={() => handleSelectEditingPalette(palette.id)}
-                >
-                  {/* Color pickers */}
-                  <div className="flex items-center gap-2 mb-2">
-                    {palette.colors.map((c, i) => (
-                      <label
-                        key={i}
-                        className="flex flex-col items-center gap-1"
-                      >
-                        <input
-                          type="color"
-                          value={c}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            handlePaletteColorChange(
-                              palette.id,
-                              i,
-                              e.target.value,
-                            );
-                          }}
-                          className="w-8 h-8 rounded cursor-pointer bg-transparent"
-                        />
-                        <span className="text-[10px] text-gray-500">
-                          {["Light", "Mid-L", "Mid-D", "Dark"][i]}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-
-                  {/* Name input */}
-                  <input
-                    type="text"
-                    value={palette.name}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      handlePaletteNameChange(palette.id, e.target.value);
+              {editingPalettes.map((palette) => {
+                const isSelected = isPaletteSelected(palette);
+                return (
+                  <div
+                    key={palette.id}
+                    className={`p-3 rounded border-2 ${
+                      isSelected
+                        ? "border-blue-400 bg-blue-900 ring-2 ring-blue-400"
+                        : "border-gray-600 bg-gray-900 hover:bg-gray-800"
+                    } cursor-pointer transition-colors`}
+                    onClick={() => {
+                      handleSelectEditingPalette(palette.id);
+                      setSelectedEditingPaletteId(palette.id);
                     }}
-                    placeholder="Palette name"
-                    className="w-full px-2 py-1 bg-gray-700 rounded text-xs text-white placeholder-gray-500 border border-gray-600 focus:border-blue-500 outline-none mb-2"
-                  />
+                  >
+                    {/* Color pickers */}
+                    <div className="flex items-center gap-2 mb-2">
+                      {palette.colors.map((c, i) => (
+                        <label
+                          key={i}
+                          className="flex flex-col items-center gap-1"
+                        >
+                          <input
+                            type="color"
+                            value={c}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handlePaletteColorChange(
+                                palette.id,
+                                i,
+                                e.target.value,
+                              );
+                            }}
+                            className="w-8 h-8 rounded cursor-pointer bg-transparent"
+                          />
+                          <span className="text-[10px] text-gray-500">
+                            {["Light", "Mid-L", "Mid-D", "Dark"][i]}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
 
-                  {/* Error message */}
-                  {selectedEditingPaletteId === palette.id &&
-                    editingPaletteErrors && (
-                      <p className="text-red-400 text-[10px] mb-2">
-                        {editingPaletteErrors}
-                      </p>
-                    )}
+                    {/* Name input */}
+                    <input
+                      type="text"
+                      value={palette.name}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handlePaletteNameChange(palette.id, e.target.value);
+                      }}
+                      placeholder="Palette name"
+                      className="w-full px-2 py-1 bg-gray-700 rounded text-xs text-white placeholder-gray-500 border border-gray-600 focus:border-blue-500 outline-none mb-2"
+                    />
 
-                  {/* Action buttons */}
-                  <div className="flex gap-1 justify-end">
-                    {palette.savedName && (
-                      <button
+                    {/* Error message */}
+                    {selectedEditingPaletteId === palette.id &&
+                      editingPaletteErrors && (
+                        <p className="text-red-400 text-[10px] mb-2">
+                          {editingPaletteErrors}
+                        </p>
+                      )}
+
+                    {/* Action buttons */}
+                    <div className="flex gap-1 justify-end">
+                      {palette.savedName && (
+                        <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleCancelEdit(palette.id);
@@ -376,7 +401,8 @@ export function PalettePicker({
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

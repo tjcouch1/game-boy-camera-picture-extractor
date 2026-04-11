@@ -47,8 +47,23 @@ export function useUserPalettes() {
   // Create a new palette in edit mode with auto-generated unique name
   const createPaletteInEditMode = useCallback(
     (fromName: string, fromColors: [string, string, string, string]) => {
-      // Find the highest number for "<fromName> custom #" pattern
-      const pattern = `${fromName} custom`;
+      // Check if fromName already ends with " custom #" pattern
+      const customPatternMatch = fromName.match(/ custom (\d+)$/);
+      let baseName: string;
+      let startNumber: number;
+
+      if (customPatternMatch) {
+        // Extract base name and starting number
+        baseName = fromName.substring(0, fromName.length - customPatternMatch[0].length);
+        startNumber = parseInt(customPatternMatch[1], 10);
+      } else {
+        // Use fromName as base, start numbering at 1
+        baseName = fromName;
+        startNumber = 0;
+      }
+
+      // Find the highest number for "<baseName> custom #" pattern
+      const pattern = `${baseName} custom`;
       const existingNumbers = palettes
         .map((p) => {
           if (p.name.startsWith(pattern)) {
@@ -64,7 +79,7 @@ export function useUserPalettes() {
 
       const newPalette: UserPaletteEntry = {
         id: generateId(),
-        name: `${fromName} custom ${nextNumber}`,
+        name: `${baseName} custom ${nextNumber}`,
         colors: [...fromColors],
         isEditing: true,
       };
