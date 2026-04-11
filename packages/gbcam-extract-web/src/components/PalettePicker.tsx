@@ -474,8 +474,6 @@ export function PalettePicker({
           isExpanded={isExpanded("Fun")}
           onToggleExpand={() => toggleExpanded("Fun")}
         />
-          isBuiltIn={true}
-        />
       </div>
     </div>
   );
