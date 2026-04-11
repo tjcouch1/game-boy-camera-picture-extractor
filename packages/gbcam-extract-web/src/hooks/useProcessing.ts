@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { PipelineResult, GBImageData } from "gbcam-extract";
 import { processPicture } from "gbcam-extract";
 
@@ -20,6 +20,24 @@ export interface ProcessingProgress {
   completedImages: number;
   currentImageProgress: CurrentImageProgress | null;
   overallProgress: number; // 0-100, smooth across all images and steps
+}
+
+const RESULTS_STORAGE_KEY = "gbcam-current-results";
+
+function loadResultsFromStorage(): ProcessingResult[] {
+  try {
+    const stored = localStorage.getItem(RESULTS_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return [];
+}
+
+function saveResultsToStorage(results: ProcessingResult[]) {
+  localStorage.setItem(RESULTS_STORAGE_KEY, JSON.stringify(results));
 }
 
 function fileToGBImageData(file: File): Promise<GBImageData> {
@@ -55,7 +73,14 @@ export function useProcessing() {
     currentImageProgress: null,
     overallProgress: 0,
   });
-  const [results, setResults] = useState<ProcessingResult[]>([]);
+  const [results, setResults] = useState<ProcessingResult[]>(
+    loadResultsFromStorage
+  );
+
+  // Save results whenever they change
+  useEffect(() => {
+    saveResultsToStorage(results);
+  }, [results]);
 
   // Pipeline steps for progress tracking
   const PIPELINE_STEPS = ["warp", "correct", "crop", "sample", "quantize"];
