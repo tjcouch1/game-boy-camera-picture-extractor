@@ -60,10 +60,10 @@ function saveSettingsToStorage(settings: HistorySettings) {
 
 export function useImageHistory() {
   const [history, setHistory] = useState<ImageHistoryBatch[]>(
-    loadHistoryFromStorage
+    loadHistoryFromStorage,
   );
   const [settings, setSettings] = useState<HistorySettings>(
-    loadSettingsFromStorage
+    loadSettingsFromStorage,
   );
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
@@ -78,48 +78,58 @@ export function useImageHistory() {
   }, [settings]);
 
   // Add current results to history (moves them from current to history)
-  const archiveResults = useCallback((results: ProcessingResult[]) => {
-    if (results.length === 0) return;
+  const archiveResults = useCallback(
+    (results: ProcessingResult[]) => {
+      if (results.length === 0) return;
 
-    const newBatch: ImageHistoryBatch = {
-      id: generateId(),
-      timestamp: Date.now(),
-      results: results.slice(0, MAX_BATCH_SIZE), // Limit batch size
-    };
+      const newBatch: ImageHistoryBatch = {
+        id: generateId(),
+        timestamp: Date.now(),
+        results: results.slice(0, MAX_BATCH_SIZE), // Limit batch size
+      };
 
-    setHistory((prev) => {
-      let updated = [newBatch, ...prev];
+      setHistory((prev) => {
+        let updated = [newBatch, ...prev];
 
-      // Calculate total number of images
-      let totalImages = updated.reduce((sum, batch) => sum + batch.results.length, 0);
+        // Calculate total number of images
+        let totalImages = updated.reduce(
+          (sum, batch) => sum + batch.results.length,
+          0,
+        );
 
-      // Remove oldest batches if total exceeds max size
-      while (totalImages > settings.maxSize && updated.length > 0) {
-        const lastBatch = updated[updated.length - 1];
-        totalImages -= lastBatch.results.length;
-        updated = updated.slice(0, -1);
-      }
+        // Remove oldest batches if total exceeds max size
+        while (totalImages > settings.maxSize && updated.length > 0) {
+          const lastBatch = updated[updated.length - 1];
+          totalImages -= lastBatch.results.length;
+          updated = updated.slice(0, -1);
+        }
 
-      return updated;
-    });
-  }, [settings]);
+        return updated;
+      });
+    },
+    [settings],
+  );
 
   // Delete a specific result from history
-  const deleteFromHistory = useCallback((batchId: string, resultIndex: number) => {
-    setHistory((prev) =>
-      prev
-        .map((batch) => {
-          if (batch.id === batchId) {
-            return {
-              ...batch,
-              results: batch.results.filter((_, i) => i !== resultIndex),
-            };
-          }
-          return batch;
-        })
-        .filter((batch) => batch.results.length > 0) // Remove empty batches
-    );
-  }, []);
+  const deleteFromHistory = useCallback(
+    (batchId: string, resultIndex: number) => {
+      setHistory(
+        (prev) =>
+          prev
+            .map((batch) => {
+              if (batch.id === batchId) {
+                return {
+                  ...batch,
+                  results: batch.results.filter((_, i) => i !== resultIndex),
+                };
+              }
+              return batch;
+            })
+            .filter((batch) => batch.results.length > 0), // Remove empty batches
+      );
+    },
+    [],
+  );
 
   // Delete all results from a specific batch
   const deleteBatch = useCallback((batchId: string) => {
@@ -132,15 +142,21 @@ export function useImageHistory() {
   }, []);
 
   // Update history settings
-  const updateSettings = useCallback((newSettings: Partial<HistorySettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
-  }, []);
+  const updateSettings = useCallback(
+    (newSettings: Partial<HistorySettings>) => {
+      setSettings((prev) => ({ ...prev, ...newSettings }));
+    },
+    [],
+  );
 
   // Prune history based on current max size
   const pruneHistory = useCallback(() => {
     setHistory((prev) => {
       let updated = [...prev];
-      let totalImages = updated.reduce((sum, batch) => sum + batch.results.length, 0);
+      let totalImages = updated.reduce(
+        (sum, batch) => sum + batch.results.length,
+        0,
+      );
 
       while (totalImages > settings.maxSize && updated.length > 0) {
         const lastBatch = updated[updated.length - 1];

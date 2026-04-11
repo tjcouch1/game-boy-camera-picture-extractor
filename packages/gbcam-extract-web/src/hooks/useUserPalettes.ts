@@ -54,7 +54,10 @@ export function useUserPalettes() {
 
       if (customPatternMatch) {
         // Extract base name and starting number
-        baseName = fromName.substring(0, fromName.length - customPatternMatch[0].length);
+        baseName = fromName.substring(
+          0,
+          fromName.length - customPatternMatch[0].length,
+        );
         startNumber = parseInt(customPatternMatch[1], 10);
       } else {
         // Use fromName as base, start numbering at 1

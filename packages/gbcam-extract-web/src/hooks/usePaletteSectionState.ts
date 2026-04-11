@@ -16,12 +16,18 @@ export function usePaletteSectionState() {
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(expandedSections)));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(Array.from(expandedSections)),
+    );
   }, [expandedSections]);
 
-  const isExpanded = useCallback((sectionTitle: string): boolean => {
-    return expandedSections.has(sectionTitle);
-  }, [expandedSections]);
+  const isExpanded = useCallback(
+    (sectionTitle: string): boolean => {
+      return expandedSections.has(sectionTitle);
+    },
+    [expandedSections],
+  );
 
   const toggleExpanded = useCallback((sectionTitle: string) => {
     setExpandedSections((prev) => {

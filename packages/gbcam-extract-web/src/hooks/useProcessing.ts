@@ -74,7 +74,7 @@ export function useProcessing() {
     overallProgress: 0,
   });
   const [results, setResults] = useState<ProcessingResult[]>(
-    loadResultsFromStorage
+    loadResultsFromStorage,
   );
 
   // Save results whenever they change

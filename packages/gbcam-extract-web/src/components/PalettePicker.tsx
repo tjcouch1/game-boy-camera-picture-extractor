@@ -258,12 +258,7 @@ export function PalettePicker({
   ) => {
     const palette = userPalettes.find((p) => p.id === id);
     if (palette) {
-      const newColors = [...palette.colors] as [
-        string,
-        string,
-        string,
-        string,
-      ];
+      const newColors = [...palette.colors] as [string, string, string, string];
       newColors[colorIndex] = newColor;
       updatePalette(id, { colors: newColors });
       // If this palette is currently selected, update the selection to reflect new colors
@@ -382,36 +377,36 @@ export function PalettePicker({
                     <div className="flex gap-1 justify-end">
                       {palette.savedName && (
                         <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCancelEdit(palette.id);
+                          }}
+                          className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-[10px] transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleCancelEdit(palette.id);
+                          handleDeletePalette(palette.id);
                         }}
-                        className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-[10px] transition-colors"
+                        className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-[10px] text-white transition-colors"
                       >
-                        Cancel
+                        Delete
                       </button>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeletePalette(palette.id);
-                      }}
-                      className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-[10px] text-white transition-colors"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSavePalette(palette.id);
-                      }}
-                      disabled={!!editingPaletteErrors}
-                      className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-[10px] text-white font-medium transition-colors"
-                    >
-                      Save
-                    </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSavePalette(palette.id);
+                        }}
+                        disabled={!!editingPaletteErrors}
+                        className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-[10px] text-white font-medium transition-colors"
+                      >
+                        Save
+                      </button>
+                    </div>
                   </div>
-                </div>
                 );
               })}
             </div>

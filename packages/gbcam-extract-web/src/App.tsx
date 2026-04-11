@@ -41,7 +41,13 @@ function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
 
 export default function App() {
   const { status, progress: cvProgress, error } = useOpenCV();
-  const { processFiles, processing, progress, results, setResults: setCurrentResults } = useProcessing();
+  const {
+    processFiles,
+    processing,
+    progress,
+    results,
+    setResults: setCurrentResults,
+  } = useProcessing();
   const {
     history,
     isHistoryExpanded,
@@ -68,9 +74,12 @@ export default function App() {
     processFiles(files, debug);
   };
 
-  const handleDeleteResult = useCallback((filename: string) => {
-    setCurrentResults((prev) => prev.filter((r) => r.filename !== filename));
-  }, [setCurrentResults]);
+  const handleDeleteResult = useCallback(
+    (filename: string) => {
+      setCurrentResults((prev) => prev.filter((r) => r.filename !== filename));
+    },
+    [setCurrentResults],
+  );
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -168,8 +177,15 @@ export default function App() {
                   onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
                   className="text-sm font-medium text-gray-300 hover:text-white mb-3 flex items-center gap-1"
                 >
-                  <span className="text-xs">{isHistoryExpanded ? "v" : ">"}</span>
-                  📚 Image History ({history.reduce((sum, batch) => sum + batch.results.length, 0)} images)
+                  <span className="text-xs">
+                    {isHistoryExpanded ? "v" : ">"}
+                  </span>
+                  📚 Image History (
+                  {history.reduce(
+                    (sum, batch) => sum + batch.results.length,
+                    0,
+                  )}{" "}
+                  images)
                 </button>
 
                 {isHistoryExpanded && (
@@ -182,7 +198,10 @@ export default function App() {
                         value={historySettings.maxSize}
                         onChange={(e) =>
                           updateHistorySettings({
-                            maxSize: Math.max(1, parseInt(e.target.value, 10) || 1),
+                            maxSize: Math.max(
+                              1,
+                              parseInt(e.target.value, 10) || 1,
+                            ),
                           })
                         }
                         className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none w-16"
@@ -199,9 +218,13 @@ export default function App() {
                     </div>
 
                     {history.map((batch) => (
-                      <div key={batch.id} className="bg-gray-800/50 rounded-lg p-4">
+                      <div
+                        key={batch.id}
+                        className="bg-gray-800/50 rounded-lg p-4"
+                      >
                         <div className="text-xs text-gray-500 mb-3">
-                          {new Date(batch.timestamp).toLocaleString()} ({batch.results.length} images)
+                          {new Date(batch.timestamp).toLocaleString()} (
+                          {batch.results.length} images)
                         </div>
                         <div className="grid gap-3">
                           {batch.results.map((result, idx) => (
