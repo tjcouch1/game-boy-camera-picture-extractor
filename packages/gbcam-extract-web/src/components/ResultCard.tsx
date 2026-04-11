@@ -14,6 +14,7 @@ interface ResultCardProps {
   processingTime: number;
   palette: [string, string, string, string];
   paletteName: string;
+  onDelete?: () => void;
 }
 
 export function ResultCard({
@@ -22,6 +23,7 @@ export function ResultCard({
   processingTime,
   palette,
   paletteName,
+  onDelete,
 }: ResultCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [showCopyFeedback, setShowCopyFeedback] = useState(false);
@@ -89,7 +91,7 @@ export function ResultCard({
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4">
+    <div className="bg-gray-800 rounded-lg p-4 relative">
       <div className="flex items-start gap-4">
         <canvas
           ref={canvasRef}
@@ -126,6 +128,15 @@ export function ResultCard({
             </button>
           </div>
         </div>
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-700 rounded text-white transition-colors"
+            title="Delete result"
+          >
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );

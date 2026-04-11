@@ -219,5 +219,5 @@ export function useProcessing() {
     });
   }, []);
 
-  return { processFiles, processing, progress, results };
+  return { processFiles, processing, progress, results, setResults };
 }
