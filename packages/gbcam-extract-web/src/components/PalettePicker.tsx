@@ -10,6 +10,7 @@ import {
   useUserPalettes,
   type UserPaletteEntry,
 } from "../hooks/useUserPalettes.js";
+import { usePaletteSectionState } from "../hooks/usePaletteSectionState.js";
 import {
   PALETTE_COLOR_LABELS,
   PALETTE_TEXT_CLASS,
@@ -86,6 +87,8 @@ function PaletteSection({
   onSelectWithName,
   onEdit,
   isBuiltIn,
+  isExpanded,
+  onToggleExpand,
 }: {
   title: string;
   entries: (PaletteEntry | UserPaletteEntry)[];
@@ -94,21 +97,21 @@ function PaletteSection({
   onSelectWithName: (entry: PaletteEntry) => void;
   onEdit?: (id: string, entry: UserPaletteEntry) => void;
   isBuiltIn?: boolean;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   if (entries.length === 0) return null;
 
   return (
     <div>
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={onToggleExpand}
         className="text-sm font-medium text-gray-300 hover:text-white mb-1 flex items-center gap-1"
       >
-        <span className="text-xs">{expanded ? "v" : ">"}</span>
+        <span className="text-xs">{isExpanded ? "v" : ">"}</span>
         {title} ({entries.length})
       </button>
-      {expanded && (
+      {isExpanded && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 ml-3">
           {entries.map((entry, i) => {
             const isUserPalette = "id" in entry;
@@ -164,6 +167,8 @@ export function PalettePicker({
     deletePalette,
     startEditingPalette,
   } = useUserPalettes();
+
+  const { isExpanded, toggleExpanded } = usePaletteSectionState();
 
   const [selectedEditingPaletteId, setSelectedEditingPaletteId] = useState<
     string | undefined
@@ -424,6 +429,8 @@ export function PalettePicker({
             const userPalette = palette as UserPaletteEntry;
             handleStartEdit(userPalette.id);
           }}
+          isExpanded={isExpanded("User Palettes")}
+          onToggleExpand={() => toggleExpanded("User Palettes")}
         />
 
         {/* Built-in Palettes Sections */}
@@ -434,6 +441,8 @@ export function PalettePicker({
           selectedEditingPaletteId={selectedEditingPaletteId}
           onSelectWithName={onSelectWithName}
           isBuiltIn={true}
+          isExpanded={isExpanded("Button Combos")}
+          onToggleExpand={() => toggleExpanded("Button Combos")}
         />
         <PaletteSection
           title="BG Presets"
@@ -442,6 +451,8 @@ export function PalettePicker({
           selectedEditingPaletteId={selectedEditingPaletteId}
           onSelectWithName={onSelectWithName}
           isBuiltIn={true}
+          isExpanded={isExpanded("BG Presets")}
+          onToggleExpand={() => toggleExpanded("BG Presets")}
         />
         <PaletteSection
           title="Additional"
@@ -450,6 +461,8 @@ export function PalettePicker({
           selectedEditingPaletteId={selectedEditingPaletteId}
           onSelectWithName={onSelectWithName}
           isBuiltIn={true}
+          isExpanded={isExpanded("Additional")}
+          onToggleExpand={() => toggleExpanded("Additional")}
         />
         <PaletteSection
           title="Fun"
@@ -457,6 +470,10 @@ export function PalettePicker({
           selected={selected}
           selectedEditingPaletteId={selectedEditingPaletteId}
           onSelectWithName={onSelectWithName}
+          isBuiltIn={true}
+          isExpanded={isExpanded("Fun")}
+          onToggleExpand={() => toggleExpanded("Fun")}
+        />
           isBuiltIn={true}
         />
       </div>
