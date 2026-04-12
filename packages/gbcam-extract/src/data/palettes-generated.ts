@@ -379,24 +379,6 @@ export const ADDITIONAL_PALETTES: PaletteEntry[] = [
 
 export const FUN_PALETTES: PaletteEntry[] = [
   {
-    "name": "OBJ0 Classic",
-    "colors": [
-      "#FFFFFF",
-      "#FF8484",
-      "#943A3A",
-      "#000000"
-    ]
-  },
-  {
-    "name": "OBJ1 Classic",
-    "colors": [
-      "#FFFFFF",
-      "#63A5FF",
-      "#0000FF",
-      "#000000"
-    ]
-  },
-  {
     "name": "DMG Green",
     "colors": [
       "#9BBC0F",

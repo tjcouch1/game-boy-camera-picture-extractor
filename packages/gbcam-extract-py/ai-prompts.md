@@ -598,18 +598,58 @@ Make a plan to fix the following problems with palette edit mode. Write that pla
 
 Think deeply. Do not skip any parts of this list; make sure everything is represented in the implementation plan and gets implemented.
 
-offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
-The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
-Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
-Download all zipped button
-Keep old output files
-Not touching frame_ascii.txt in correct.ts - why?
-Change the algorithm so it detects an appropriate scale instead of using 8 hard-coded
-Edit custom palettes
-Favorite palettes
-Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
-Move md files etc. from py into right places
-Update instructions files
-Scale output images to preferred scale
-Remove http-server? Maybe vite preview does everything
-Localization
+---
+
+Make a plan to fix the following problems and implement the following features. Write that plan to a markdown file in repo root. Then commit. Then implement the plan. Commit between groups of features/fixes (e.g. do all the editing palette stuff in one commit, do the image history in another, etc.):
+
+- when you create a new palette whose name matches an existing palette's name, ` custom 1` always gets appended to the end of the string, which is wrong; this means creating new palettes from existing custom palettes will keep adding that string e.g. `0x01 custom 1 custom 1 custom 1 custom 1`. Instead, you need to check if ` custom #` is already at the end of the name. If so, don't append `custom #` again; just increment the number to the first unique number. E.g. creating a new palette based on `0x01 custom 1` should make `0x01 custom 2`
+- when you click + Custom, select the new palette.
+- make the edit palette text lighter (it doesn't contrast well enough against the blue background). Probably best to just match the colors between the normal palette swatch and the editing palettes. Consider sharing code between these so updating these things just has to happen in one place
+- When you click a user palette, it doesn't give it the bright blue and outline like it's selected
+- seems like there are a number of issues around an edit palette not being the same as the user palette. Are you copying the data out and not replacing it? Would be best to just mark a user palette as being edited or not edited and just filter the two lists so there is continuity between the palettes
+  - when you have an edit palette selected then cancel, the selection needs to return to that edit palette in the user palettes list
+  - the editing palette states don't seem to be right. Looks like the last selected edited palette stays selected even if you select a normal palette, but there needs to just be one palette selected at any time. Also, the editing palettes don't have the semi-selected state when their colors match but they aren't the selected palette
+  - When you select an edit palette and change its colors, the images don't update with the new selected colors. Changing the palette colors should **immediately** update the image colors.
+- the progress bar's reporting is really off. When I provide 2 images, it shows -10% while processing the first image, then shows 40% on the second. When I provide one image, it shows -20%. Something is going wrong. Revise
+- keep the palette section showing even when the user hasn't added any images. Save the state of the palette section in localStorage so whether the folded sections are open or closed persists between refreshes
+- persist the output images (localStorage? something else?) so they stay between refreshes. Don't store debug images or source images (that's too much data); just keep the output data.
+- Every time new images get run, move the previous output images to a foldable "Image History" section (default folded; persist whether it is folded) below the current round's output images.
+  - Add a delete button in the top right of each result card and a "Delete all images in history" button at the top of the "Image History" section.
+  - Add a way to choose how many images are saved in history before old ones are deleted (default 10). Persist this setting
+  - persist the image history so they stay between refreshes as well. But automatically delete the oldest images when they are more than the configured number of images to save in history
+
+Think deeply. Do not skip any parts of this list; make sure everything is represented in the implementation plan and gets implemented.
+
+---
+
+- When I have generated images and reload the page with `gbcam-current-results` populated with two images, I get the following error, and nothing loads. Fix this error, and make sure it is also not going to come up in image history either:
+
+```
+Uncaught InvalidStateError: Failed to construct 'ImageData': The input data has zero elements.
+at ResultCard.tsx:47:21
+```
+
+- The new custom palette names are still wrong - if "custom #" is at the end of the name you're copying from, you need to make the new name increment the existing number instead of just having the same name as the existing one
+- For an editing palette, the somewhat blue background color that shows when the palette has matching colors to the selected palette but is not actually the selected palette is not working. It just has the normal gray background if it is not selected. Fix this so matching colors but not matching name has the same blue styling as the palette swatch
+- If you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists". Fix this
+- Looks like palette editing validation errors like name already exists don't show up unless you select the palette. Make it so the editing errors display whether or not you select the palette
+
+---
+
+- Add a new feature: copy palette to clipboard in the editing palette UI, paste pa
+  Copy palette to clipboard, paste new palette, paste palette colors in editing palette
+  offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
+  The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
+  Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
+  Download all zipped button
+  Keep old output files
+  Not touching frame_ascii.txt in correct.ts - why?
+  Change the algorithm so it detects an appropriate scale instead of using 8 hard-coded
+  Edit custom palettes
+  Favorite palettes
+  Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
+  Move md files etc. from py into right places
+  Update instructions files
+  Scale output images to preferred scale
+  Remove http-server? Maybe vite preview does everything
+  Localization
