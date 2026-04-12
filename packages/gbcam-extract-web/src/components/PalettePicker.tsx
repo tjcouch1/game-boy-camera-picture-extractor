@@ -173,7 +173,9 @@ export function PalettePicker({
   const [selectedEditingPaletteId, setSelectedEditingPaletteId] = useState<
     string | undefined
   >();
-  const [editingPaletteErrors, setEditingPaletteErrors] = useState<string>("");
+  const [editingPaletteErrors, setEditingPaletteErrors] = useState<
+    Record<string, string>
+  >({});
 
   // Get the currently editing palette (if any)
   const editingPalette =
@@ -219,32 +221,47 @@ export function PalettePicker({
     if (editingPalette) {
       const error = validatePaletteName(id, editingPalette.name);
       if (error) {
-        setEditingPaletteErrors(error);
+        setEditingPaletteErrors((prev) => ({ ...prev, [id]: error }));
         return;
       }
     }
     savePalette(id);
     setSelectedEditingPaletteId(undefined);
-    setEditingPaletteErrors("");
+    setEditingPaletteErrors((prev) => {
+      const updated = { ...prev };
+      delete updated[id];
+      return updated;
+    });
   };
 
   const handleCancelEdit = (id: string) => {
     cancelPaletteEdit(id);
     setSelectedEditingPaletteId(undefined);
-    setEditingPaletteErrors("");
+    setEditingPaletteErrors((prev) => {
+      const updated = { ...prev };
+      delete updated[id];
+      return updated;
+    });
   };
 
   const handleDeletePalette = (id: string) => {
     deletePalette(id);
     setSelectedEditingPaletteId(undefined);
-    setEditingPaletteErrors("");
+    setEditingPaletteErrors((prev) => {
+      const updated = { ...prev };
+      delete updated[id];
+      return updated;
+    });
   };
 
   const handlePaletteNameChange = (id: string, newName: string) => {
     const palette = userPalettes.find((p) => p.id === id);
     updatePalette(id, { name: newName });
     const error = validatePaletteName(id, newName);
-    setEditingPaletteErrors(error);
+    setEditingPaletteErrors((prev) => ({
+      ...prev,
+      [id]: error,
+    }));
     // If this palette is currently selected, update the selection to reflect new name
     if (palette && isPaletteSelected(palette)) {
       onSelectWithName({ name: newName, colors: palette.colors });
@@ -313,13 +330,19 @@ export function PalettePicker({
             <div className="ml-3 space-y-2">
               {editingPalettes.map((palette) => {
                 const isSelected = isPaletteSelected(palette);
+                const doesMatchColors = palette.colors.every(
+                  (c, i) =>
+                    c.toUpperCase() === selected.colors[i].toUpperCase(),
+                );
                 return (
                   <div
                     key={palette.id}
                     className={`p-3 rounded border-2 ${
                       isSelected
                         ? "border-blue-400 bg-blue-900 ring-2 ring-blue-400"
-                        : "border-gray-600 bg-gray-900 hover:bg-gray-800"
+                        : doesMatchColors
+                          ? "border-blue-400 bg-blue-950 hover:bg-blue-900"
+                          : "border-gray-600 bg-gray-900 hover:bg-gray-800"
                     } cursor-pointer transition-colors`}
                     onClick={() => {
                       handleSelectEditingPalette(palette.id);
@@ -366,12 +389,11 @@ export function PalettePicker({
                     />
 
                     {/* Error message */}
-                    {selectedEditingPaletteId === palette.id &&
-                      editingPaletteErrors && (
-                        <p className="text-red-400 text-[10px] mb-2">
-                          {editingPaletteErrors}
-                        </p>
-                      )}
+                    {editingPaletteErrors[palette.id] && (
+                      <p className="text-red-400 text-[10px] mb-2">
+                        {editingPaletteErrors[palette.id]}
+                      </p>
+                    )}
 
                     {/* Action buttons */}
                     <div className="flex gap-1 justify-end">
@@ -400,7 +422,7 @@ export function PalettePicker({
                           e.stopPropagation();
                           handleSavePalette(palette.id);
                         }}
-                        disabled={!!editingPaletteErrors}
+                        disabled={!!editingPaletteErrors[palette.id]}
                         className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-[10px] text-white font-medium transition-colors"
                       >
                         Save

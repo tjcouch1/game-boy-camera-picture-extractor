@@ -50,35 +50,33 @@ export function useUserPalettes() {
       // Check if fromName already ends with " custom #" pattern
       const customPatternMatch = fromName.match(/ custom (\d+)$/);
       let baseName: string;
-      let startNumber: number;
+      let nextNumber: number;
 
       if (customPatternMatch) {
-        // Extract base name and starting number
+        // Extract base name and use the next number after the current one
         baseName = fromName.substring(
           0,
           fromName.length - customPatternMatch[0].length,
         );
-        startNumber = parseInt(customPatternMatch[1], 10);
+        const currentNumber = parseInt(customPatternMatch[1], 10);
+        nextNumber = currentNumber + 1;
       } else {
         // Use fromName as base, start numbering at 1
         baseName = fromName;
-        startNumber = 0;
+        // Find the highest number for "<baseName> custom #" pattern
+        const pattern = `${baseName} custom`;
+        const existingNumbers = palettes
+          .map((p) => {
+            if (p.name.startsWith(pattern)) {
+              const match = p.name.match(new RegExp(`^${pattern} (\\d+)$`));
+              return match ? parseInt(match[1], 10) : 0;
+            }
+            return 0;
+          })
+          .filter((n) => n > 0);
+        nextNumber =
+          existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
       }
-
-      // Find the highest number for "<baseName> custom #" pattern
-      const pattern = `${baseName} custom`;
-      const existingNumbers = palettes
-        .map((p) => {
-          if (p.name.startsWith(pattern)) {
-            const match = p.name.match(new RegExp(`^${pattern} (\\d+)$`));
-            return match ? parseInt(match[1], 10) : 0;
-          }
-          return 0;
-        })
-        .filter((n) => n > 0);
-
-      const nextNumber =
-        existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
 
       const newPalette: UserPaletteEntry = {
         id: generateId(),

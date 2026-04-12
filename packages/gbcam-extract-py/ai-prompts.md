@@ -622,17 +622,20 @@ Think deeply. Do not skip any parts of this list; make sure everything is repres
 
 ---
 
-- When I have generated images and reload the page with `gbcam-current-results` populated with two images, I get the following error, and nothing loads. Fix this error, and make sure it is also not going to come up in image history either:
+- Now, when I have generated images and reload the page with `gbcam-current-results` populated with two images, instead of an uncaught error, I get the following error, and nothing loads. You shouldn't only catch the error; fix this error, and make sure it is also not going to come up in image history either:
 
 ```
-Uncaught InvalidStateError: Failed to construct 'ImageData': The input data has zero elements.
-at ResultCard.tsx:47:21
+Invalid image data received from applyPalette
 ```
 
-- The new custom palette names are still wrong - if "custom #" is at the end of the name you're copying from, you need to make the new name increment the existing number instead of just having the same name as the existing one
-- For an editing palette, the somewhat blue background color that shows when the palette has matching colors to the selected palette but is not actually the selected palette is not working. It just has the normal gray background if it is not selected. Fix this so matching colors but not matching name has the same blue styling as the palette swatch
-- If you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists". Fix this
-- Looks like palette editing validation errors like name already exists don't show up unless you select the palette. Make it so the editing errors display whether or not you select the palette
+Following are the contents of my `gbcam-current-results`:
+
+```json
+
+```
+
+- This error is still happening: if you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists". Fix this.
+- The progress bar is still very wrong. Now, it never goes blue. Investigate it by running the server and attaching some of the images from `sample-pictures` and seeing what happens.
 
 ---
 

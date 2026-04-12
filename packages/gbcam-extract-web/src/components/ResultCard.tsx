@@ -37,19 +37,28 @@ export function ResultCard({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const colored = applyPalette(result.grayscale, palette);
-    const scale = 2;
-    canvas.width = colored.width * scale;
-    canvas.height = colored.height * scale;
-    const ctx = canvas.getContext("2d")!;
-    ctx.imageSmoothingEnabled = false;
-    const cloned = new Uint8ClampedArray(colored.data);
-    const imgData = new ImageData(cloned, colored.width, colored.height);
-    const tmp = document.createElement("canvas");
-    tmp.width = colored.width;
-    tmp.height = colored.height;
-    tmp.getContext("2d")!.putImageData(imgData, 0, 0);
-    ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+    try {
+      const colored = applyPalette(result.grayscale, palette);
+      // Validate that we have actual image data
+      if (!colored || !colored.data || colored.data.length === 0) {
+        console.error("Invalid image data received from applyPalette");
+        return;
+      }
+      const scale = 2;
+      canvas.width = colored.width * scale;
+      canvas.height = colored.height * scale;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = false;
+      const cloned = new Uint8ClampedArray(colored.data);
+      const imgData = new ImageData(cloned, colored.width, colored.height);
+      const tmp = document.createElement("canvas");
+      tmp.width = colored.width;
+      tmp.height = colored.height;
+      tmp.getContext("2d")!.putImageData(imgData, 0, 0);
+      ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+    } catch (err) {
+      console.error("Error rendering image:", err);
+    }
   }, [result, palette]);
 
   const handleDownload = () => {
