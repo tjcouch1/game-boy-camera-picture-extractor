@@ -1,7 +1,11 @@
 import { useState, useCallback, useEffect } from "react";
 import type { PipelineResult, GBImageData } from "gbcam-extract";
 import { processPicture } from "gbcam-extract";
-import { reconstructPipelineResult } from "../utils/deserializeResults.js";
+import {
+  serializePipelineResult,
+  deserializePipelineResult,
+  isSerializedPipelineResult,
+} from "../utils/serialization.js";
 
 export interface ProcessingResult {
   result: PipelineResult;
@@ -30,10 +34,12 @@ function loadResultsFromStorage(): ProcessingResult[] {
     const stored = localStorage.getItem(RESULTS_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Reconstruct PipelineResult objects with proper Uint8ClampedArray data
+      // Deserialize PipelineResult objects from compact base64 form
       return parsed.map((item: any) => ({
         ...item,
-        result: reconstructPipelineResult(item.result) || item.result,
+        result: isSerializedPipelineResult(item.result)
+          ? deserializePipelineResult(item.result)
+          : item.result,
       }));
     }
   } catch {
@@ -43,7 +49,12 @@ function loadResultsFromStorage(): ProcessingResult[] {
 }
 
 function saveResultsToStorage(results: ProcessingResult[]) {
-  localStorage.setItem(RESULTS_STORAGE_KEY, JSON.stringify(results));
+  // Serialize before storing to use compact base64 representation
+  const serialized = results.map((item) => ({
+    ...item,
+    result: serializePipelineResult(item.result),
+  }));
+  localStorage.setItem(RESULTS_STORAGE_KEY, JSON.stringify(serialized));
 }
 
 function fileToGBImageData(file: File): Promise<GBImageData> {
