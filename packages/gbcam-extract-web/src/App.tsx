@@ -64,6 +64,7 @@ export default function App() {
     colors: ["#FFFFFF", "#A5A5A5", "#525252", "#000000"],
   });
   const [debug, setDebug] = useState(false);
+  const [clipboardEnabled, setClipboardEnabled] = useState(false);
 
   const handleImagesSelected = (files: File[]) => {
     // Archive current results to history before processing new ones
@@ -100,7 +101,7 @@ export default function App() {
 
         {status === "ready" && (
           <>
-            <div className="mb-6 flex items-center gap-4">
+            <div className="mb-6 flex flex-wrap items-center gap-4">
               <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                 <input
                   type="checkbox"
@@ -109,6 +110,15 @@ export default function App() {
                   className="rounded"
                 />
                 Debug mode
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clipboardEnabled}
+                  onChange={(e) => setClipboardEnabled(e.target.checked)}
+                  className="rounded"
+                />
+                Enable Copy/Paste
               </label>
             </div>
 
@@ -123,6 +133,7 @@ export default function App() {
               <PalettePicker
                 selected={paletteEntry}
                 onSelectWithName={setPaletteEntry}
+                clipboardEnabled={clipboardEnabled}
               />
             </div>
 

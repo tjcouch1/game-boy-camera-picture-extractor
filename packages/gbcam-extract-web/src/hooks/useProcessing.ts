@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { flushSync } from "react-dom";
 import type { PipelineResult, GBImageData } from "gbcam-extract";
 import { processPicture } from "gbcam-extract";
 import {
@@ -188,22 +189,24 @@ export function useProcessing() {
         const start = performance.now();
         const result = await processPicture(gbImage, {
           debug,
-          onProgress: (step) => {
-            setProgress((prev) => ({
-              ...prev,
-              currentImageProgress: prev.currentImageProgress
-                ? {
-                    ...prev.currentImageProgress,
-                    currentStep: step,
-                  }
-                : null,
-              overallProgress: calculateOverallProgress(
-                fileIndex,
-                fileIndex,
-                step,
-                files.length,
-              ),
-            }));
+          onProgress: (step, pct) => {
+            flushSync(() => {
+              setProgress((prev) => ({
+                ...prev,
+                currentImageProgress: prev.currentImageProgress
+                  ? {
+                      ...prev.currentImageProgress,
+                      currentStep: step,
+                    }
+                  : null,
+                overallProgress: calculateOverallProgress(
+                  fileIndex,
+                  fileIndex,
+                  step,
+                  files.length,
+                ),
+              }));
+            });
           },
         });
         const processingTime = performance.now() - start;

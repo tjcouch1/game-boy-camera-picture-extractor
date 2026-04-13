@@ -11,16 +11,22 @@ import {
   type UserPaletteEntry,
 } from "../hooks/useUserPalettes.js";
 import { usePaletteSectionState } from "../hooks/usePaletteSectionState.js";
+import { useClipboardPaletteCheck } from "../hooks/useClipboardPalette.js";
 import {
   PALETTE_COLOR_LABELS,
   PALETTE_TEXT_CLASS,
   PALETTE_LABEL_CLASS,
   PALETTE_INPUT_CLASS,
 } from "../utils/paletteUI.js";
+import {
+  writePaletteToClipboard,
+  readPaletteFromClipboard,
+} from "../utils/paletteClipboard.js";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
   onSelectWithName: (entry: PaletteEntry) => void;
+  clipboardEnabled?: boolean;
 }
 
 function PaletteSwatch({
@@ -157,6 +163,7 @@ function PaletteSection({
 export function PalettePicker({
   selected,
   onSelectWithName,
+  clipboardEnabled = false,
 }: PalettePickerProps) {
   const {
     palettes: userPalettes,
@@ -169,6 +176,7 @@ export function PalettePicker({
   } = useUserPalettes();
 
   const { isExpanded, toggleExpanded } = usePaletteSectionState();
+  const { hasClipboardPalette } = useClipboardPaletteCheck(clipboardEnabled);
 
   const [selectedEditingPaletteId, setSelectedEditingPaletteId] = useState<
     string | undefined
@@ -176,6 +184,7 @@ export function PalettePicker({
   const [editingPaletteErrors, setEditingPaletteErrors] = useState<
     Record<string, string>
   >({});
+  const [copyFeedback, setCopyFeedback] = useState<string | undefined>();
 
   // Get the currently editing palette (if any)
   const editingPalette =
@@ -195,6 +204,7 @@ export function PalettePicker({
     if (!name.trim()) {
       return "Palette name cannot be empty";
     }
+    // Check against ALL other palettes (both saved and editing) except the one being validated
     const isDuplicate = userPalettes.some(
       (p) => p.id !== id && p.name.toLowerCase() === name.toLowerCase(),
     );
@@ -210,6 +220,52 @@ export function PalettePicker({
     // The newly created palette will be added to userPalettes via the hook's state update
     // We can just select the current selected palette colors since we're creating from it
     onSelectWithName(selected);
+  };
+
+  const handleCopyPaletteToClipboard = async (palette: UserPaletteEntry) => {
+    const success = await writePaletteToClipboard({
+      name: palette.name,
+      colors: palette.colors,
+    });
+    if (success) {
+      setCopyFeedback("Copied!");
+      setTimeout(() => setCopyFeedback(undefined), 2000);
+    } else {
+      setCopyFeedback("Failed to copy");
+      setTimeout(() => setCopyFeedback(undefined), 2000);
+    }
+  };
+
+  const handlePastePaletteColors = async () => {
+    if (!editingPalette) return;
+    const paletteData = await readPaletteFromClipboard();
+    if (paletteData) {
+      updatePalette(editingPalette.id, {
+        colors: paletteData.colors,
+      });
+      if (isPaletteSelected(editingPalette)) {
+        onSelectWithName({
+          name: editingPalette.name,
+          colors: paletteData.colors,
+        });
+      }
+    }
+  };
+
+  const handlePasteNewPalette = async () => {
+    const paletteData = await readPaletteFromClipboard();
+    if (paletteData) {
+      // Use the clipboard palette name as base for deduplication
+      const newId = createPaletteInEditMode(
+        paletteData.name,
+        paletteData.colors,
+      );
+      setSelectedEditingPaletteId(newId);
+      onSelectWithName({
+        name: paletteData.name,
+        colors: paletteData.colors,
+      });
+    }
   };
 
   const handleStartEdit = (paletteId: string) => {
@@ -300,7 +356,7 @@ export function PalettePicker({
     <div className="bg-gray-800 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-gray-200">Palette</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex">
             {selected.colors.map((c: string, i: number) => (
               <div
@@ -316,6 +372,20 @@ export function PalettePicker({
           >
             + Custom
           </button>
+          {clipboardEnabled && (
+            <button
+              onClick={handlePasteNewPalette}
+              disabled={!hasClipboardPalette}
+              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs transition-colors"
+              title={
+                hasClipboardPalette
+                  ? "Paste palette from clipboard"
+                  : "Clipboard does not contain a palette"
+              }
+            >
+              📋
+            </button>
+          )}
         </div>
       </div>
 
@@ -350,7 +420,7 @@ export function PalettePicker({
                     }}
                   >
                     {/* Color pickers */}
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
                       {palette.colors.map((c, i) => (
                         <label
                           key={i}
@@ -374,6 +444,37 @@ export function PalettePicker({
                           </span>
                         </label>
                       ))}
+                      <div className="flex gap-1 ml-auto">
+                        {clipboardEnabled && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyPaletteToClipboard(palette);
+                              }}
+                              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
+                              title="Copy palette colors to clipboard"
+                            >
+                              📄
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePastePaletteColors();
+                              }}
+                              disabled={!hasClipboardPalette}
+                              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs transition-colors"
+                              title={
+                                hasClipboardPalette
+                                  ? "Paste palette colors from clipboard"
+                                  : "Clipboard does not contain a palette"
+                              }
+                            >
+                              📋
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     {/* Name input */}
