@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { PipelineResult } from "gbcam-extract";
 import { useOpenCV } from "./hooks/useOpenCV.js";
 import { useImageHistory } from "./hooks/useImageHistory.js";
@@ -11,6 +11,8 @@ import { PalettePicker } from "./components/PalettePicker.js";
 import { IntermediateViewer } from "./components/IntermediateViewer.js";
 import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
+
+const APP_SETTINGS_KEY = "gbcam-app-settings";
 
 function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
   if (!progress.currentImageProgress) return null;
@@ -63,8 +65,46 @@ export default function App() {
     name: "B + Left",
     colors: ["#FFFFFF", "#A5A5A5", "#525252", "#000000"],
   });
-  const [debug, setDebug] = useState(false);
-  const [clipboardEnabled, setClipboardEnabled] = useState(false);
+  const [debug, setDebugInternal] = useState(false);
+  const [clipboardEnabled, setClipboardEnabledInternal] = useState(false);
+
+  const setDebug = useCallback((value: boolean) => {
+    setDebugInternal(value);
+    // Save to localStorage immediately
+    const stored = localStorage.getItem(APP_SETTINGS_KEY);
+    const currentSettings = stored ? JSON.parse(stored) : {};
+    localStorage.setItem(
+      APP_SETTINGS_KEY,
+      JSON.stringify({ ...currentSettings, debug: value }),
+    );
+  }, []);
+
+  const setClipboardEnabled = useCallback((value: boolean) => {
+    setClipboardEnabledInternal(value);
+    // Save to localStorage immediately
+    const stored = localStorage.getItem(APP_SETTINGS_KEY);
+    const currentSettings = stored ? JSON.parse(stored) : {};
+    localStorage.setItem(
+      APP_SETTINGS_KEY,
+      JSON.stringify({ ...currentSettings, clipboardEnabled: value }),
+    );
+  }, []);
+
+  // Load settings from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(APP_SETTINGS_KEY);
+      if (stored) {
+        const { debug: storedDebug, clipboardEnabled: storedClipboard } =
+          JSON.parse(stored);
+        if (typeof storedDebug === "boolean") setDebugInternal(storedDebug);
+        if (typeof storedClipboard === "boolean")
+          setClipboardEnabledInternal(storedClipboard);
+      }
+    } catch (e) {
+      console.error("Error loading app settings from storage:", e);
+    }
+  }, []);
 
   const handleImagesSelected = (files: File[]) => {
     // Archive current results to history before processing new ones
@@ -118,7 +158,7 @@ export default function App() {
                   onChange={(e) => setClipboardEnabled(e.target.checked)}
                   className="rounded"
                 />
-                Enable Copy/Paste
+                Enable Copy/Paste Palettes
               </label>
             </div>
 
