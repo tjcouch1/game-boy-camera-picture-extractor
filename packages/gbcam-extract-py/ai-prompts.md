@@ -635,11 +635,9 @@ Think deeply.
 ---
 
 - This error is still happening: if you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists". Fix this.
-- The progress bar is still very wrong. Now, it never goes blue. Investigate it by running the server and attaching some of the images from `sample-pictures` and seeing what happens.
+- The progress bar is still very wrong. Now, it never goes blue. When uploading 2 images (for example), it just sits at 0% for a long time, then very briefly displays 50%, then goes away. Investigate it by running the server and attaching some of the images from `sample-pictures` and seeing what happens.
+- Add a new feature: icon button to copy palette to clipboard in the editing palette UI in-line to the right of the palette swatches (but it should be able to wrap to the next line if the window isn't wide enough), icon button to paste palette colors in editing palette UI to the right of the copy palette button, and icon button to paste a new palette to the right of the "+ Custom" button. Disable the "paste palette colors" button and the "+ From Clipboard" button when the clipboard contents are not formatted as a palette. Make sure pasting a new palette does the same name deduplication as "+ Custom" (incrementing the number and such)
 
-- Add a new feature: copy palette to clipboard in the editing palette UI, paste pa
-
-Copy palette to clipboard, paste new palette, paste palette colors in editing palette
 offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
 The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
 Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
