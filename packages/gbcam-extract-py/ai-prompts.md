@@ -634,23 +634,29 @@ Think deeply.
 
 ---
 
-- This error is still happening: if you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists". Fix this.
-- The progress bar is still very wrong. Now, it never goes blue. When uploading 2 images (for example), it just sits at 0% for a long time, then very briefly displays 50%, then goes away. Investigate it by running the server and attaching some of the images from `sample-pictures` and seeing what happens.
-- Add a new feature: icon button to copy palette to clipboard in the editing palette UI in-line to the right of the palette swatches (but it should be able to wrap to the next line if the window isn't wide enough), icon button to paste palette colors in editing palette UI to the right of the copy palette button, and icon button to paste a new palette to the right of the "+ Custom" button. Disable the "paste palette colors" button and the "+ From Clipboard" button when the clipboard contents are not formatted as a palette. Make sure pasting a new palette does the same name deduplication as "+ Custom" (incrementing the number and such)
+Do the following:
+
+1. Add a new app setting for output image scale (default 1x). This means that, when the user copies, shares, or downloads an image, it should output with that image scale. Currently, the downloaded image is 256x224, which is 2x. I want the default to download as 128x112.
+2. Fix the following problems with offline use (Think deeply about these; investigate the situation, diagnose, and solve the problem):
+
+- Currently, the app does not allow you to "install" the website on mobile, and the "install page" popup that usually happens on desktop for PWAs does not show up
+- When I reconnect to the webpage after updating the website in some way, the browser doesn't update the site; it just keeps the old files. I want it to check if there are changes and update if so. But I don't want to download the entire site every time I connect; can you make it so it just checks a hash of the files and updates only the new/changed files?
+
+3. When the user creates a custom palette (either "+ Custom" or paste new palette), select the new palette
+4. Persist the user's current palette selection so it stays between refreshes
+
+---
 
 offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
 The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
 Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
 Download all zipped button
-Keep old output files
 Not touching frame_ascii.txt in correct.ts - why?
 Change the algorithm so it detects an appropriate scale instead of using 8 hard-coded
-Edit custom palettes
 Favorite palettes
 Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
 Move md files etc. from py into right places
-Update instructions files
 Scale output images to preferred scale
 Remove http-server? Maybe vite preview does everything
 Localization
-dynamic import - https://docs.opencv.org/3.4/d0/d84/tutorial_js_usage.html https://stackblitz.com/edit/ocavue-opencvjs-ewb71azg?file=main.ts,opencv.ts,tsconfig.json,init-opencv.ts
+dynamic import opencv - https://docs.opencv.org/3.4/d0/d84/tutorial_js_usage.html https://stackblitz.com/edit/ocavue-opencvjs-ewb71azg?file=main.ts,opencv.ts,tsconfig.json,init-opencv.ts

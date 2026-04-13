@@ -212,6 +212,16 @@ Then run the following:
 python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --reference "../../test-input/zelda-poster-output-corrected.png" --output-dir ../../test-output-py/zelda-poster-1 --keep-intermediates
 ```
 
+# Known issues
+
+- Conversion does not preserve the image with 100% accuracy
+- Unique palette name issues
+  - If you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists"
+  - Pasting the same new palette multiple times uses the same palette name incremented from the previous palette name
+- The progress bar does not display progress correctly.
+- PWA doesn't work properly and offline does not work
+- Images download at 2x scale and are not configurable to anything else
+
 # Roadmap
 
 - Accuracy improvements
@@ -219,3 +229,4 @@ python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --referenc
 - Add color palette selection (pipeline - already implemented in website)
 - Publish the GitHub Pages frontend
   - Verify PWA works for offline use
+- Shadcn/ui
