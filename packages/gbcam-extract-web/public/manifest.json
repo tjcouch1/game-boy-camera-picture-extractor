@@ -1,6 +1,6 @@
 {
-  "name": "GB Camera Picture Extractor",
-  "short_name": "GB Camera",
+  "name": "Game Boy Camera Picture Extractor",
+  "short_name": "Game Boy Camera",
   "description": "Extract Game Boy Camera pictures from phone photos",
   "start_url": "./",
   "scope": "./",

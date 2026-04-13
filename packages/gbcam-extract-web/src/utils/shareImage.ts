@@ -21,7 +21,7 @@ export async function shareImage(
         try {
           await navigator.share({
             files: [new File([blob], filename, { type: "image/png" })],
-            title: "GB Camera Picture",
+            title: "Game Boy Camera Picture",
           });
           resolve();
         } catch (err) {

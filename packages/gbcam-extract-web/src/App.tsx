@@ -209,7 +209,9 @@ export default function App() {
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">GB Camera Picture Extractor</h1>
+          <h1 className="text-2xl font-bold">
+            Game Boy Camera Picture Extractor
+          </h1>
           {isInstallable && (
             <button
               onClick={handleInstallApp}
