@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { PipelineResult, GBImageData } from "gbcam-extract";
 import { processPicture } from "gbcam-extract";
+import { reconstructPipelineResult } from "../utils/deserializeResults.js";
 
 export interface ProcessingResult {
   result: PipelineResult;
@@ -28,7 +29,12 @@ function loadResultsFromStorage(): ProcessingResult[] {
   try {
     const stored = localStorage.getItem(RESULTS_STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      // Reconstruct PipelineResult objects with proper Uint8ClampedArray data
+      return parsed.map((item: any) => ({
+        ...item,
+        result: reconstructPipelineResult(item.result) || item.result,
+      }));
     }
   } catch {
     // Ignore parse errors

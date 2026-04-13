@@ -260,24 +260,40 @@ function downloadResult(
 ) {
   // Dynamically import to avoid circular issues
   import("gbcam-extract").then(({ applyPalette }) => {
-    const colored = applyPalette(result.grayscale, palette);
-    const canvas = document.createElement("canvas");
-    canvas.width = colored.width * 2;
-    canvas.height = colored.height * 2;
-    const ctx = canvas.getContext("2d")!;
-    ctx.imageSmoothingEnabled = false;
-    const cloned = new Uint8ClampedArray(colored.data);
-    const imgData = new ImageData(cloned, colored.width, colored.height);
-    const tmp = document.createElement("canvas");
-    tmp.width = colored.width;
-    tmp.height = colored.height;
-    tmp.getContext("2d")!.putImageData(imgData, 0, 0);
-    ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
-    const link = document.createElement("a");
-    const baseName = filename.replace(/\.[^.]+$/, "");
-    const sanitizedPaletteName = sanitizePaletteName(paletteName);
-    link.download = `${baseName}_${sanitizedPaletteName}_gb.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
+    try {
+      // Validate input before processing
+      if (!result.grayscale || !result.grayscale.data) {
+        console.error("Cannot download: invalid image data");
+        return;
+      }
+
+      const colored = applyPalette(result.grayscale, palette);
+
+      if (!colored || !colored.data || colored.data.length === 0) {
+        console.error("Failed to apply palette for download");
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = colored.width * 2;
+      canvas.height = colored.height * 2;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = false;
+      const cloned = new Uint8ClampedArray(colored.data);
+      const imgData = new ImageData(cloned, colored.width, colored.height);
+      const tmp = document.createElement("canvas");
+      tmp.width = colored.width;
+      tmp.height = colored.height;
+      tmp.getContext("2d")!.putImageData(imgData, 0, 0);
+      ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+      const link = document.createElement("a");
+      const baseName = filename.replace(/\.[^.]+$/, "");
+      const sanitizedPaletteName = sanitizePaletteName(paletteName);
+      link.download = `${baseName}_${sanitizedPaletteName}_gb.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (err) {
+      console.error("Error downloading image:", err);
+    }
   });
 }

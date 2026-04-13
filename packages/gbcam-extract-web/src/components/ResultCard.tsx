@@ -38,12 +38,41 @@ export function ResultCard({
     if (!canvas) return;
 
     try {
-      const colored = applyPalette(result.grayscale, palette);
-      // Validate that we have actual image data
-      if (!colored || !colored.data || colored.data.length === 0) {
-        console.error("Invalid image data received from applyPalette");
+      // Validate input data before passing to applyPalette
+      if (!result.grayscale || typeof result.grayscale !== "object") {
+        console.error(
+          "Invalid grayscale data: missing or invalid grayscale object",
+        );
         return;
       }
+
+      if (!result.grayscale.data) {
+        console.error(
+          "Invalid grayscale data: missing data property. Data may not have been properly deserialized from storage.",
+        );
+        return;
+      }
+
+      if (!(result.grayscale.data instanceof Uint8ClampedArray)) {
+        console.warn(
+          "Warning: grayscale.data is not a Uint8ClampedArray. This may cause rendering issues. Data type:",
+          typeof result.grayscale.data,
+          "Constructor:",
+          (result.grayscale.data as any)?.constructor?.name,
+        );
+      }
+
+      const colored = applyPalette(result.grayscale, palette);
+
+      // Validate that we have actual image data
+      if (!colored || !colored.data || colored.data.length === 0) {
+        console.error(
+          "Invalid image data received from applyPalette. Result:",
+          colored,
+        );
+        return;
+      }
+
       const scale = 2;
       canvas.width = colored.width * scale;
       canvas.height = colored.height * scale;
