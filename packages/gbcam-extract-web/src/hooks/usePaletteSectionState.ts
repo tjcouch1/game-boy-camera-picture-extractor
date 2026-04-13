@@ -9,8 +9,8 @@ export function usePaletteSectionState() {
       if (stored) {
         return new Set(JSON.parse(stored));
       }
-    } catch {
-      // Ignore parse errors
+    } catch (e) {
+      console.error("Error parsing palette sections from storage:", e);
     }
     return new Set();
   });

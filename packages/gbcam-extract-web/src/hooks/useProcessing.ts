@@ -29,21 +29,26 @@ export interface ProcessingProgress {
 
 const RESULTS_STORAGE_KEY = "gbcam-current-results";
 
-function loadResultsFromStorage(): ProcessingResult[] {
+async function loadResultsFromStorage(): Promise<ProcessingResult[]> {
   try {
     const stored = localStorage.getItem(RESULTS_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Deserialize PipelineResult objects from compact base64 form
-      return parsed.map((item: any) => ({
-        ...item,
-        result: isSerializedPipelineResult(item.result)
-          ? deserializePipelineResult(item.result)
-          : item.result,
-      }));
+      // Deserialize PipelineResult objects from PNG format
+      // Map over results and await deserialization for each
+      const deserialized = await Promise.all(
+        parsed.map(async (item: any) => ({
+          ...item,
+          result: isSerializedPipelineResult(item.result)
+            ? await deserializePipelineResult(item.result)
+            : item.result,
+        })),
+      );
+      return deserialized;
     }
-  } catch {
-    // Ignore parse errors
+  } catch (e) {
+    console.error("Error parsing results from storage:", e);
+    throw e;
   }
   return [];
 }
@@ -90,14 +95,40 @@ export function useProcessing() {
     currentImageProgress: null,
     overallProgress: 0,
   });
-  const [results, setResults] = useState<ProcessingResult[]>(
-    loadResultsFromStorage,
-  );
+  const [results, setResults] = useState<ProcessingResult[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Save results whenever they change
+  // Load results from storage on mount
   useEffect(() => {
-    saveResultsToStorage(results);
-  }, [results]);
+    let isMounted = true;
+    loadResultsFromStorage()
+      .then((loaded) => {
+        if (isMounted) {
+          setResults(loaded);
+          setIsLoaded(true);
+          // Save the loaded results back to storage to ensure consistency
+          saveResultsToStorage(loaded);
+        }
+      })
+      .catch(() => {
+        // If loading fails, mark as loaded and clear storage
+        if (isMounted) {
+          setResults([]);
+          setIsLoaded(true);
+          localStorage.removeItem(RESULTS_STORAGE_KEY);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Save results whenever they change (only after initial load)
+  useEffect(() => {
+    if (isLoaded) {
+      saveResultsToStorage(results);
+    }
+  }, [results, isLoaded]);
 
   // Pipeline steps for progress tracking
   const PIPELINE_STEPS = ["warp", "correct", "crop", "sample", "quantize"];

@@ -36,21 +36,31 @@ function loadHistoryFromStorage(): ImageHistoryBatch[] {
     const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Deserialize PipelineResult objects from compact base64 form
-      return parsed.map((batch: any) => ({
-        ...batch,
-        results: batch.results.map((item: any) => ({
-          ...item,
-          result: isSerializedPipelineResult(item.result)
-            ? deserializePipelineResult(item.result)
-            : item.result,
-        })),
-      }));
+      // Return the raw parsed data - deserialization happens async in useEffect
+      return parsed;
     }
-  } catch {
-    // Ignore parse errors
+  } catch (e) {
+    console.error("Error parsing history from storage:", e);
   }
   return [];
+}
+
+async function deserializeHistoryBatches(
+  batches: ImageHistoryBatch[],
+): Promise<ImageHistoryBatch[]> {
+  return Promise.all(
+    batches.map(async (batch) => ({
+      ...batch,
+      results: await Promise.all(
+        batch.results.map(async (item: any) => ({
+          ...item,
+          result: isSerializedPipelineResult(item.result)
+            ? await deserializePipelineResult(item.result)
+            : item.result,
+        })),
+      ),
+    })),
+  );
 }
 
 function loadSettingsFromStorage(): HistorySettings {
@@ -59,8 +69,8 @@ function loadSettingsFromStorage(): HistorySettings {
     if (stored) {
       return JSON.parse(stored);
     }
-  } catch {
-    // Ignore parse errors
+  } catch (e) {
+    console.error("Error parsing history settings from storage:", e);
   }
   return { maxSize: DEFAULT_MAX_SIZE };
 }
@@ -82,18 +92,45 @@ function saveSettingsToStorage(settings: HistorySettings) {
 }
 
 export function useImageHistory() {
-  const [history, setHistory] = useState<ImageHistoryBatch[]>(
-    loadHistoryFromStorage,
-  );
+  const [history, setHistory] = useState<ImageHistoryBatch[]>([]);
   const [settings, setSettings] = useState<HistorySettings>(
     loadSettingsFromStorage,
   );
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
-  // Save history whenever it changes
+  // Load history from storage on mount
   useEffect(() => {
-    saveHistoryToStorage(history);
-  }, [history]);
+    let isMounted = true;
+    const rawBatches = loadHistoryFromStorage();
+    deserializeHistoryBatches(rawBatches)
+      .then((deserialized) => {
+        if (isMounted) {
+          setHistory(deserialized);
+          setIsHistoryLoaded(true);
+          // Save the loaded history back to storage to ensure consistency
+          saveHistoryToStorage(deserialized);
+        }
+      })
+      .catch(() => {
+        // If loading fails, mark as loaded and clear storage
+        if (isMounted) {
+          setHistory([]);
+          setIsHistoryLoaded(true);
+          localStorage.removeItem(HISTORY_STORAGE_KEY);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Save history whenever it changes (only after initial load)
+  useEffect(() => {
+    if (isHistoryLoaded) {
+      saveHistoryToStorage(history);
+    }
+  }, [history, isHistoryLoaded]);
 
   // Save settings whenever they change
   useEffect(() => {

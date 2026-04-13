@@ -1,14 +1,15 @@
 import type { PipelineResult, GBImageData } from "gbcam-extract";
 
 /**
- * Serialized form of GBImageData using base64 encoding for efficiency.
- * Base64 adds ~33% overhead vs ~300%+ for plain JSON object representation.
+ * Serialized form of GBImageData using PNG encoding for maximum efficiency.
+ * PNG compression typically achieves 60-70% size reduction vs base64 raw encoding.
+ * For a 128x112 image: ~57KB raw → ~4-5KB PNG → ~6-7KB base64-encoded PNG data URL.
  */
 export interface SerializedGBImageData {
   _type: "GBImageData";
   width: number;
   height: number;
-  data: string; // base64-encoded Uint8ClampedArray
+  pngData: string; // PNG image as base64 data URL (image/png;base64,...)
 }
 
 /**
@@ -26,39 +27,95 @@ export interface SerializedPipelineResult {
 }
 
 /**
- * Serialize a GBImageData to a compact base64 representation.
- * @returns Serialized object with width, height, and base64-encoded data
+ * Convert Uint8ClampedArray to a canvas-based PNG data URL.
+ * This performs lossless PNG compression on the grayscale image.
+ */
+function grayscaleToCanvasPNG(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+): string {
+  // Create canvas at 1x scale
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d")!;
+  const imageData = ctx.createImageData(width, height);
+
+  // Copy data (already in RGBA format from Uint8ClampedArray)
+  imageData.data.set(data);
+  ctx.putImageData(imageData, 0, 0);
+
+  // Convert to PNG data URL
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Convert PNG data URL back to Uint8ClampedArray.
+ * Returns a promise that resolves when the image is loaded.
+ */
+function pngDataUrlToGrayscale(
+  pngDataUrl: string,
+  width: number,
+  height: number,
+): Promise<Uint8ClampedArray> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, width, height);
+        resolve(new Uint8ClampedArray(imageData.data));
+      } catch (err) {
+        reject(new Error(`Failed to decode PNG: ${err}`));
+      }
+    };
+
+    img.onerror = () => {
+      reject(new Error("Failed to load PNG image data"));
+    };
+
+    // Handle data URL
+    img.src = pngDataUrl;
+  });
+}
+
+/**
+ * Serialize a GBImageData to PNG format.
+ * @returns Serialized object with PNG data URL
  */
 export function serializeGBImageData(
   img: GBImageData,
 ): SerializedGBImageData {
-  // Convert Uint8ClampedArray to base64
-  const binaryString = String.fromCharCode.apply(null, Array.from(img.data));
-  const base64Data = btoa(binaryString);
+  const pngData = grayscaleToCanvasPNG(img.data, img.width, img.height);
 
   return {
     _type: "GBImageData",
     width: img.width,
     height: img.height,
-    data: base64Data,
+    pngData,
   };
 }
 
 /**
- * Deserialize a GBImageData from base64 representation.
- * @returns Reconstructed GBImageData with proper Uint8ClampedArray
+ * Deserialize a GBImageData from PNG format.
+ * @returns Promise that resolves to reconstructed GBImageData with proper Uint8ClampedArray
  */
-export function deserializeGBImageData(
+export async function deserializeGBImageData(
   serialized: SerializedGBImageData,
-): GBImageData {
-  // Decode base64 to binary string
-  const binaryString = atob(serialized.data);
-
-  // Convert binary string to Uint8ClampedArray
-  const data = new Uint8ClampedArray(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    data[i] = binaryString.charCodeAt(i);
-  }
+): Promise<GBImageData> {
+  const data = await pngDataUrlToGrayscale(
+    serialized.pngData,
+    serialized.width,
+    serialized.height,
+  );
 
   return {
     width: serialized.width,
@@ -68,7 +125,7 @@ export function deserializeGBImageData(
 }
 
 /**
- * Serialize a PipelineResult to a compact JSON-friendly form.
+ * Serialize a PipelineResult to PNG format.
  */
 export function serializePipelineResult(
   result: PipelineResult,
@@ -91,21 +148,24 @@ export function serializePipelineResult(
 }
 
 /**
- * Deserialize a PipelineResult from JSON form.
+ * Deserialize a PipelineResult from PNG format.
+ * Note: This is async because PNG decoding requires image loading.
  */
-export function deserializePipelineResult(
+export async function deserializePipelineResult(
   serialized: SerializedPipelineResult,
-): PipelineResult {
+): Promise<PipelineResult> {
+  const grayscale = await deserializeGBImageData(serialized.grayscale);
+
   const result: PipelineResult = {
-    grayscale: deserializeGBImageData(serialized.grayscale),
+    grayscale,
   };
 
   if (serialized.intermediates) {
     result.intermediates = {
-      warp: deserializeGBImageData(serialized.intermediates.warp),
-      correct: deserializeGBImageData(serialized.intermediates.correct),
-      crop: deserializeGBImageData(serialized.intermediates.crop),
-      sample: deserializeGBImageData(serialized.intermediates.sample),
+      warp: await deserializeGBImageData(serialized.intermediates.warp),
+      correct: await deserializeGBImageData(serialized.intermediates.correct),
+      crop: await deserializeGBImageData(serialized.intermediates.crop),
+      sample: await deserializeGBImageData(serialized.intermediates.sample),
     };
   }
 
@@ -139,6 +199,7 @@ export function isSerializedGBImageData(
     obj._type === "GBImageData" &&
     typeof obj.width === "number" &&
     typeof obj.height === "number" &&
-    typeof obj.data === "string"
+    typeof obj.pngData === "string" &&
+    obj.pngData.startsWith("data:image/png")
   );
 }
