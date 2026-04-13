@@ -67,12 +67,13 @@ export default function App() {
     settings: historySettings,
   } = useImageHistory();
   const [paletteEntry, setPaletteEntry] = useState<PaletteEntry>({
-    name: "B + Left",
-    colors: ["#FFFFFF", "#A5A5A5", "#525252", "#000000"],
+    name: "Down",
+    colors: ["#FFFFA5", "#FF9494", "#9494FF", "#000000"],
   });
   const [debug, setDebugInternal] = useState(false);
   const [clipboardEnabled, setClipboardEnabledInternal] = useState(false);
   const [outputScale, setOutputScaleInternal] = useState(1);
+  const [previewScale, setPreviewScaleInternal] = useState(2);
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
@@ -110,6 +111,17 @@ export default function App() {
     );
   }, []);
 
+  const setPreviewScale = useCallback((value: number) => {
+    setPreviewScaleInternal(value);
+    // Save to localStorage immediately
+    const stored = localStorage.getItem(APP_SETTINGS_KEY);
+    const currentSettings = stored ? JSON.parse(stored) : {};
+    localStorage.setItem(
+      APP_SETTINGS_KEY,
+      JSON.stringify({ ...currentSettings, previewScale: value }),
+    );
+  }, []);
+
   // Load settings from localStorage on mount
   useEffect(() => {
     try {
@@ -119,6 +131,7 @@ export default function App() {
           debug: storedDebug,
           clipboardEnabled: storedClipboard,
           outputScale: storedOutputScale,
+          previewScale: storedPreviewScale,
           paletteSelection: storedPaletteSelection,
         } = JSON.parse(stored);
         if (typeof storedDebug === "boolean") setDebugInternal(storedDebug);
@@ -126,6 +139,8 @@ export default function App() {
           setClipboardEnabledInternal(storedClipboard);
         if (typeof storedOutputScale === "number")
           setOutputScaleInternal(storedOutputScale);
+        if (typeof storedPreviewScale === "number")
+          setPreviewScaleInternal(storedPreviewScale);
         if (storedPaletteSelection) {
           setPaletteEntry(storedPaletteSelection);
         }
@@ -162,7 +177,7 @@ export default function App() {
     };
   }, []);
 
-  const handlePaletteSelected = (entry: PaletteEntry) => {
+  const handlePaletteSelected = useCallback((entry: PaletteEntry) => {
     setPaletteEntry(entry);
     // Save selection to localStorage
     const stored = localStorage.getItem(APP_SETTINGS_KEY);
@@ -171,7 +186,7 @@ export default function App() {
       APP_SETTINGS_KEY,
       JSON.stringify({ ...currentSettings, paletteSelection: entry }),
     );
-  };
+  }, []);
 
   const handleInstallApp = async () => {
     if (!installPrompt) return;
@@ -256,19 +271,6 @@ export default function App() {
                 />
                 Enable Copy/Paste Palettes
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <span>Output Scale:</span>
-                <select
-                  value={outputScale}
-                  onChange={(e) => setOutputScale(parseInt(e.target.value, 10))}
-                  className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
-                >
-                  <option value={1}>1x (128x112)</option>
-                  <option value={2}>2x (256x224)</option>
-                  <option value={3}>3x (384x336)</option>
-                  <option value={4}>4x (512x448)</option>
-                </select>
-              </label>
             </div>
 
             <ImageInput
@@ -288,8 +290,8 @@ export default function App() {
 
             {results.length > 0 && (
               <>
-                {results.length > 1 && (
-                  <div className="mb-4">
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  {results.length > 1 && (
                     <button
                       onClick={() => {
                         results.forEach((r) => {
@@ -306,8 +308,42 @@ export default function App() {
                     >
                       Download All ({results.length})
                     </button>
-                  </div>
-                )}
+                  )}
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <span>Output Scale:</span>
+                    <select
+                      value={outputScale}
+                      onChange={(e) =>
+                        setOutputScale(parseInt(e.target.value, 10))
+                      }
+                      className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
+                    >
+                      <option value={1}>1x (128x112)</option>
+                      <option value={2}>2x (256x224)</option>
+                      <option value={3}>3x (384x336)</option>
+                      <option value={4}>4x (512x448)</option>
+                      <option value={8}>8x (1024x896)</option>
+                      <option value={16}>16x (2048x1792)</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <span>Preview Scale:</span>
+                    <select
+                      value={previewScale}
+                      onChange={(e) =>
+                        setPreviewScale(parseInt(e.target.value, 10))
+                      }
+                      className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
+                    >
+                      <option value={1}>1x</option>
+                      <option value={2}>2x</option>
+                      <option value={3}>3x</option>
+                      <option value={4}>4x</option>
+                      <option value={8}>8x</option>
+                      <option value={16}>16x</option>
+                    </select>
+                  </label>
+                </div>
 
                 <div className="grid gap-4">
                   {results.map((r) => (
@@ -319,6 +355,7 @@ export default function App() {
                         palette={paletteEntry.colors}
                         paletteName={paletteEntry.name}
                         outputScale={outputScale}
+                        previewScale={previewScale}
                         onDelete={() => handleDeleteResult(r.filename)}
                       />
                       {r.result.intermediates && (
@@ -398,6 +435,7 @@ export default function App() {
                               palette={paletteEntry.colors}
                               paletteName={paletteEntry.name}
                               outputScale={outputScale}
+                              previewScale={previewScale}
                               onDelete={() => deleteFromHistory(batch.id, idx)}
                             />
                           ))}

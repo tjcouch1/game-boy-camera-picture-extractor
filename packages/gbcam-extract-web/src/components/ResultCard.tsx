@@ -15,6 +15,7 @@ interface ResultCardProps {
   palette: [string, string, string, string];
   paletteName: string;
   outputScale?: number;
+  previewScale?: number;
   onDelete?: () => void;
 }
 
@@ -25,6 +26,7 @@ export function ResultCard({
   palette,
   paletteName,
   outputScale = 1,
+  previewScale = 2,
   onDelete,
 }: ResultCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -75,7 +77,7 @@ export function ResultCard({
         return;
       }
 
-      const scale = outputScale;
+      const scale = previewScale;
       canvas.width = colored.width * scale;
       canvas.height = colored.height * scale;
       const ctx = canvas.getContext("2d")!;
@@ -90,7 +92,7 @@ export function ResultCard({
     } catch (err) {
       console.error("Error rendering image:", err);
     }
-  }, [result, palette]);
+  }, [result, palette, previewScale]);
 
   const handleDownload = () => {
     const canvas = canvasRef.current;
@@ -171,7 +173,7 @@ export function ResultCard({
         {onDelete && (
           <button
             onClick={onDelete}
-            className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-700 rounded text-white transition-colors"
+            className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-red-600 hover:bg-red-700 rounded text-white transition-colors"
             title="Delete result"
           >
             ✕
