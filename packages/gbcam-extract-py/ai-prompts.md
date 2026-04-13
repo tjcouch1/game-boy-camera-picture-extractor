@@ -622,37 +622,37 @@ Think deeply. Do not skip any parts of this list; make sure everything is repres
 
 ---
 
-- Now, when I have generated images and reload the page with `gbcam-current-results` populated with two images, instead of an uncaught error, I get the following error, and nothing loads. You shouldn't only catch the error; fix this error, and make sure it is also not going to come up in image history either:
+When running the `gbcam-extract-web` website with `pnpm dev`, when I have generated images and reload the page with `gbcam-current-results` populated with two images, I get the following error, and nothing loads. Diagnose and fix this error, and make sure it is also not going to come up in image history either:
 
 ```
 Invalid image data received from applyPalette
 ```
 
-Following are the contents of my `gbcam-current-results`:
+The contents of my `gbcam-current-results` are saved to `gbcam-current-results.json` in repo root.
 
-```json
+Think deeply.
 
-```
+---
 
 - This error is still happening: if you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists". Fix this.
 - The progress bar is still very wrong. Now, it never goes blue. Investigate it by running the server and attaching some of the images from `sample-pictures` and seeing what happens.
 
----
-
 - Add a new feature: copy palette to clipboard in the editing palette UI, paste pa
-  Copy palette to clipboard, paste new palette, paste palette colors in editing palette
-  offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
-  The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
-  Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
-  Download all zipped button
-  Keep old output files
-  Not touching frame_ascii.txt in correct.ts - why?
-  Change the algorithm so it detects an appropriate scale instead of using 8 hard-coded
-  Edit custom palettes
-  Favorite palettes
-  Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
-  Move md files etc. from py into right places
-  Update instructions files
-  Scale output images to preferred scale
-  Remove http-server? Maybe vite preview does everything
-  Localization
+
+Copy palette to clipboard, paste new palette, paste palette colors in editing palette
+offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
+The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
+Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?
+Download all zipped button
+Keep old output files
+Not touching frame_ascii.txt in correct.ts - why?
+Change the algorithm so it detects an appropriate scale instead of using 8 hard-coded
+Edit custom palettes
+Favorite palettes
+Figure out why bots can't run pnpm from Volta, write how to run it in AGENTS.md, redo emphasis on how to run stuff
+Move md files etc. from py into right places
+Update instructions files
+Scale output images to preferred scale
+Remove http-server? Maybe vite preview does everything
+Localization
+dynamic import - https://docs.opencv.org/3.4/d0/d84/tutorial_js_usage.html https://stackblitz.com/edit/ocavue-opencvjs-ewb71azg?file=main.ts,opencv.ts,tsconfig.json,init-opencv.ts
