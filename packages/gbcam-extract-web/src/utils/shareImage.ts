@@ -1,5 +1,18 @@
 export async function canShare(): Promise<boolean> {
-  return "share" in navigator;
+  if (!("share" in navigator)) return false;
+  // Check that the browser supports file sharing specifically (required for image sharing).
+  // navigator.canShare is available on modern mobile browsers that support file sharing.
+  if ("canShare" in navigator) {
+    try {
+      const testFile = new File([""], "test.png", { type: "image/png" });
+      return (navigator as any).canShare({ files: [testFile] });
+    } catch {
+      return false;
+    }
+  }
+  // If canShare API is absent but share is present, conservatively return false —
+  // file sharing is unlikely to work without canShare support.
+  return false;
 }
 
 export async function shareImage(

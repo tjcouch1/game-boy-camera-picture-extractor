@@ -647,6 +647,14 @@ Do the following:
 
 ---
 
+1. On mobile, "Install PWA" is not available. What's going wrong? Investigate deeply and fix it.
+2. Output Scale isn't being obeyed; it should download, share, or copy to clipboard with the output scale, not the preview scale
+3. When the user creates a new palette with "+ Custom" or pasting a new palette, it should select that newly created palette.
+4. On mobile, the screen width is so thin that it is breaking the result card: things are overlapping (the X button and the file name, for example), and the result card's width is too wide for the site, so it goes past the site width. Make the result card better able to adapt to the screen width.
+5. It looks like the share button is not appearing on the result card on mobile. What's wrong? Fix it.
+
+---
+
 offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
 The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
 Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?

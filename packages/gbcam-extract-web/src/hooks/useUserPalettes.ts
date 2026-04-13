@@ -86,7 +86,7 @@ export function useUserPalettes() {
       };
 
       setPalettes((prev) => [...prev, newPalette]);
-      return newPalette.id;
+      return newPalette;
     },
     [palettes],
   );

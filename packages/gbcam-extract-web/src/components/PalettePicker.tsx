@@ -215,10 +215,10 @@ export function PalettePicker({
   };
 
   const handleCreateCustom = () => {
-    const newId = createPaletteInEditMode(selected.name, selected.colors);
-    setSelectedEditingPaletteId(newId);
-    // Auto-select the newly created palette
-    onSelectWithName(selected);
+    const newPalette = createPaletteInEditMode(selected.name, selected.colors);
+    setSelectedEditingPaletteId(newPalette.id);
+    // Select the newly created palette using its generated name (e.g. "Down custom 1")
+    onSelectWithName({ name: newPalette.name, colors: newPalette.colors });
   };
 
   const handleCopyPaletteToClipboard = async (palette: UserPaletteEntry) => {
@@ -254,17 +254,14 @@ export function PalettePicker({
   const handlePasteNewPalette = async () => {
     const paletteData = await readPaletteFromClipboard();
     if (paletteData) {
-      // Use the clipboard palette name as base for deduplication
-      const newId = createPaletteInEditMode(
+      // createPaletteInEditMode deduplicates the name, so use the returned palette
+      const newPalette = createPaletteInEditMode(
         paletteData.name,
         paletteData.colors,
       );
-      setSelectedEditingPaletteId(newId);
-      // Auto-select the newly created palette
-      onSelectWithName({
-        name: paletteData.name,
-        colors: paletteData.colors,
-      });
+      setSelectedEditingPaletteId(newPalette.id);
+      // Select using the actual generated name (may differ from clipboard name if duplicate)
+      onSelectWithName({ name: newPalette.name, colors: newPalette.colors });
     }
   };
 

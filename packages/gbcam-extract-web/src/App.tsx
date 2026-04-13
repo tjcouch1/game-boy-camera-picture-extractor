@@ -19,6 +19,20 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+/** Detect iOS Safari (iPhone/iPad/iPod) — where beforeinstallprompt never fires. */
+function isIOSSafari(): boolean {
+  const ua = navigator.userAgent;
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+  // "standalone" means already installed as PWA
+  const isStandalone = (navigator as any).standalone === true;
+  return isIOS && !isStandalone;
+}
+
+/** Detect Android Chrome / other browsers that fire beforeinstallprompt. */
+function isAlreadyInstalled(): boolean {
+  return window.matchMedia("(display-mode: standalone)").matches;
+}
+
 function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
   if (!progress.currentImageProgress) return null;
 
@@ -77,6 +91,7 @@ export default function App() {
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [showIOSInstallTip, setShowIOSInstallTip] = useState(false);
 
   const setDebug = useCallback((value: boolean) => {
     setDebugInternal(value);
@@ -152,6 +167,12 @@ export default function App() {
 
   // Handle PWA install prompt
   useEffect(() => {
+    // iOS Safari never fires beforeinstallprompt — show a manual tip instead
+    if (isIOSSafari() && !isAlreadyInstalled()) {
+      setShowIOSInstallTip(true);
+      return;
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       const promptEvent = e as BeforeInstallPromptEvent;
@@ -237,6 +258,28 @@ export default function App() {
             </button>
           )}
         </div>
+
+        {/* iOS install tip — Safari doesn't fire beforeinstallprompt */}
+        {showIOSInstallTip && (
+          <div className="mb-4 flex items-start gap-3 p-3 bg-blue-900/60 border border-blue-700 rounded-lg text-sm text-blue-200">
+            <span className="text-lg leading-none mt-0.5">📲</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium mb-0.5">Install as App</p>
+              <p className="text-xs text-blue-300">
+                Tap the <strong>Share</strong> button (
+                <span className="font-mono">⎙</span>) in Safari, then choose{" "}
+                <strong>"Add to Home Screen"</strong>.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowIOSInstallTip(false)}
+              className="shrink-0 text-blue-400 hover:text-blue-200 text-lg leading-none"
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {status === "loading" && (
           <div className="mb-6">

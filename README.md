@@ -221,6 +221,8 @@ python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --referenc
 - The progress bar does not display progress correctly.
 - PWA doesn't work properly and offline does not work
 - Images download at 2x scale and are not configurable to anything else
+- Debug mode in the website is completely untested
+- Copy/paste palette/palette colors is not working on mobile
 
 # Roadmap
 
