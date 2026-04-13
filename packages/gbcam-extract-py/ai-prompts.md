@@ -655,6 +655,29 @@ Do the following:
 
 ---
 
+1. On mobile, "Install PWA" is not available. I received this feedback from another AI:
+
+```
+Now also the manifest.json needs fixing for mobile PWA install — the SVG data URI icons don't work reliably on mobile (especially Android Chrome). Mobile browsers require PNG icons. Let me check if the manifest is linked properly and fix it with proper icon handling. The vite config has manifest: false meaning it uses the public/manifest.json directly. We should update it with proper PNG icon references (we'll use inline data URIs with PNG base64, or simpler — just note that for mobile Chrome, SVG icons in manifests are not supported).
+
+The manifest uses data:image/svg+xml,... icon URIs. This is a critical PWA issue on Android Chrome — Chrome requires actual PNG files (not data URIs or SVGs) to trigger beforeinstallprompt. Without valid PNG icons, Chrome silently skips the install prompt entirely. This is likely the main cause of issue #1 on Android as well.
+For the manifest, we need to create real PNG icon files and reference them.
+```
+
+Now I have added a `public` folder with PNGs and SVGs of the light and dark mode icon to use:
+
+- `lucide-image-down-black-0.338.0` should be used for light mode
+- `lucide-image-down-white-0.338.0` should be used for dark mode
+
+Set this icon as the new icon to use throughout the site and PWA including in the manifest, favicon, etc. Add it inline to the left of the title in App.tsx, too
+
+2. Add a small link to the `lucide-license` file titled `Lucide 'Image Down' Icon license` at the bottom of the page (you can rename the file or adjust the PWA settings if you need to in order to make it work offline)
+
+3. The share button is not appearing on mobile. What's wrong? Fix it.
+4. Copy/paste palette and paste palette colors are not working on mobile; the copy button is enabled, but nothing gets copied to clipboard, and the paste button never enables. Maybe it's not asking the user for permission to use the clipboard or something. What's going wrong? Fix it.
+
+---
+
 offline, "install PWA". Seemed like OpenCV wasn't loading offline or something - the upload buttons were grayed out
 The offline-available features don't seem to be working properly. It seems I can "add to home screen", but I can't "install website" as a PWA for offline use. When I connect offline, it doesn't work. Diagnose the problem and fix it.
 Additionally, when I stop and start the preview, my browser doesn't update the files. Instead of not even checking if there are changes, can you make it so it checks a hash of the files to import and only downloads the new files if there are changes?

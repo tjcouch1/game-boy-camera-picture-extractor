@@ -232,3 +232,4 @@ python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --referenc
 - Publish the GitHub Pages frontend
   - Verify PWA works for offline use
 - Shadcn/ui
+- Credits page
