@@ -14,6 +14,7 @@ interface ResultCardProps {
   processingTime: number;
   palette: [string, string, string, string];
   paletteName: string;
+  outputScale?: number;
   onDelete?: () => void;
 }
 
@@ -23,6 +24,7 @@ export function ResultCard({
   processingTime,
   palette,
   paletteName,
+  outputScale = 1,
   onDelete,
 }: ResultCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,7 +75,7 @@ export function ResultCard({
         return;
       }
 
-      const scale = 2;
+      const scale = outputScale;
       canvas.width = colored.width * scale;
       canvas.height = colored.height * scale;
       const ctx = canvas.getContext("2d")!;

@@ -14,6 +14,11 @@ import type { PaletteEntry } from "./data/palettes.js";
 
 const APP_SETTINGS_KEY = "gbcam-app-settings";
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
 function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
   if (!progress.currentImageProgress) return null;
 
@@ -67,6 +72,10 @@ export default function App() {
   });
   const [debug, setDebugInternal] = useState(false);
   const [clipboardEnabled, setClipboardEnabledInternal] = useState(false);
+  const [outputScale, setOutputScaleInternal] = useState(1);
+  const [installPrompt, setInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
 
   const setDebug = useCallback((value: boolean) => {
     setDebugInternal(value);
@@ -90,21 +99,95 @@ export default function App() {
     );
   }, []);
 
+  const setOutputScale = useCallback((value: number) => {
+    setOutputScaleInternal(value);
+    // Save to localStorage immediately
+    const stored = localStorage.getItem(APP_SETTINGS_KEY);
+    const currentSettings = stored ? JSON.parse(stored) : {};
+    localStorage.setItem(
+      APP_SETTINGS_KEY,
+      JSON.stringify({ ...currentSettings, outputScale: value }),
+    );
+  }, []);
+
   // Load settings from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(APP_SETTINGS_KEY);
       if (stored) {
-        const { debug: storedDebug, clipboardEnabled: storedClipboard } =
-          JSON.parse(stored);
+        const {
+          debug: storedDebug,
+          clipboardEnabled: storedClipboard,
+          outputScale: storedOutputScale,
+          paletteSelection: storedPaletteSelection,
+        } = JSON.parse(stored);
         if (typeof storedDebug === "boolean") setDebugInternal(storedDebug);
         if (typeof storedClipboard === "boolean")
           setClipboardEnabledInternal(storedClipboard);
+        if (typeof storedOutputScale === "number")
+          setOutputScaleInternal(storedOutputScale);
+        if (storedPaletteSelection) {
+          setPaletteEntry(storedPaletteSelection);
+        }
       }
     } catch (e) {
       console.error("Error loading app settings from storage:", e);
     }
   }, []);
+
+  // Handle PWA install prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      const promptEvent = e as BeforeInstallPromptEvent;
+      setInstallPrompt(promptEvent);
+      setIsInstallable(true);
+    };
+
+    const handleAppInstalled = () => {
+      console.log("App installed successfully");
+      setInstallPrompt(null);
+      setIsInstallable(false);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handlePaletteSelected = (entry: PaletteEntry) => {
+    setPaletteEntry(entry);
+    // Save selection to localStorage
+    const stored = localStorage.getItem(APP_SETTINGS_KEY);
+    const currentSettings = stored ? JSON.parse(stored) : {};
+    localStorage.setItem(
+      APP_SETTINGS_KEY,
+      JSON.stringify({ ...currentSettings, paletteSelection: entry }),
+    );
+  };
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) return;
+
+    try {
+      await installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+      if (result.outcome === "accepted") {
+        console.log("User accepted install prompt");
+      }
+      setInstallPrompt(null);
+      setIsInstallable(false);
+    } catch (err) {
+      console.error("Install prompt failed:", err);
+    }
+  };
 
   const handleImagesSelected = (files: File[]) => {
     // Archive current results to history before processing new ones
@@ -125,7 +208,18 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <h1 className="text-2xl font-bold mb-6">GB Camera Picture Extractor</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">GB Camera Picture Extractor</h1>
+          {isInstallable && (
+            <button
+              onClick={handleInstallApp}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
+              title="Install this app on your device"
+            >
+              Install App
+            </button>
+          )}
+        </div>
 
         {status === "loading" && (
           <div className="mb-6">
@@ -160,6 +254,19 @@ export default function App() {
                 />
                 Enable Copy/Paste Palettes
               </label>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <span>Output Scale:</span>
+                <select
+                  value={outputScale}
+                  onChange={(e) => setOutputScale(parseInt(e.target.value, 10))}
+                  className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
+                >
+                  <option value={1}>1x (128x112)</option>
+                  <option value={2}>2x (256x224)</option>
+                  <option value={3}>3x (384x336)</option>
+                  <option value={4}>4x (512x448)</option>
+                </select>
+              </label>
             </div>
 
             <ImageInput
@@ -172,7 +279,7 @@ export default function App() {
             <div className="mt-6 mb-4">
               <PalettePicker
                 selected={paletteEntry}
-                onSelectWithName={setPaletteEntry}
+                onSelectWithName={handlePaletteSelected}
                 clipboardEnabled={clipboardEnabled}
               />
             </div>
@@ -189,6 +296,7 @@ export default function App() {
                             r.result,
                             paletteEntry.colors,
                             paletteEntry.name,
+                            outputScale,
                           );
                         });
                       }}
@@ -208,6 +316,7 @@ export default function App() {
                         processingTime={r.processingTime}
                         palette={paletteEntry.colors}
                         paletteName={paletteEntry.name}
+                        outputScale={outputScale}
                         onDelete={() => handleDeleteResult(r.filename)}
                       />
                       {r.result.intermediates && (
@@ -286,6 +395,7 @@ export default function App() {
                               processingTime={result.processingTime}
                               palette={paletteEntry.colors}
                               paletteName={paletteEntry.name}
+                              outputScale={outputScale}
                               onDelete={() => deleteFromHistory(batch.id, idx)}
                             />
                           ))}
@@ -308,6 +418,7 @@ function downloadResult(
   result: PipelineResult,
   palette: [string, string, string, string],
   paletteName: string,
+  outputScale: number = 1,
 ) {
   // Dynamically import to avoid circular issues
   import("gbcam-extract").then(({ applyPalette }) => {
@@ -326,8 +437,8 @@ function downloadResult(
       }
 
       const canvas = document.createElement("canvas");
-      canvas.width = colored.width * 2;
-      canvas.height = colored.height * 2;
+      canvas.width = colored.width * outputScale;
+      canvas.height = colored.height * outputScale;
       const ctx = canvas.getContext("2d")!;
       ctx.imageSmoothingEnabled = false;
       const cloned = new Uint8ClampedArray(colored.data);

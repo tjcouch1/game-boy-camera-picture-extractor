@@ -217,8 +217,7 @@ export function PalettePicker({
   const handleCreateCustom = () => {
     const newId = createPaletteInEditMode(selected.name, selected.colors);
     setSelectedEditingPaletteId(newId);
-    // The newly created palette will be added to userPalettes via the hook's state update
-    // We can just select the current selected palette colors since we're creating from it
+    // Auto-select the newly created palette
     onSelectWithName(selected);
   };
 
@@ -261,6 +260,7 @@ export function PalettePicker({
         paletteData.colors,
       );
       setSelectedEditingPaletteId(newId);
+      // Auto-select the newly created palette
       onSelectWithName({
         name: paletteData.name,
         colors: paletteData.colors,
