@@ -1,27 +1,9 @@
-export async function canShare(): Promise<boolean> {
+export function canShare(): boolean {
+  // Check if the basic share API exists
   if (!("share" in navigator)) return false;
 
-  // Check if canShare API is available
-  if ("canShare" in navigator) {
-    try {
-      // Try to check if we can share files
-      const testFile = new File([""], "test.png", { type: "image/png" });
-      const canShareFiles = (navigator as any).canShare({ files: [testFile] });
-      if (canShareFiles) return true;
-
-      // If file sharing is not supported, try text sharing as fallback
-      // Some browsers support share() but not file sharing specifically
-      const canShareText = (navigator as any).canShare({ title: "test" });
-      return canShareText;
-    } catch {
-      // If canShare check fails, fall back to testing with the actual share API
-      // This is a more permissive approach for browsers with incomplete API support
-      return true;
-    }
-  }
-
-  // If canShare API is absent but share is present, assume it works
-  // Modern mobile browsers should have both, but be permissive for compatibility
+  // The Share API is available; assume it works for mobile
+  // Some browsers don't have canShare API, but share() still works
   return true;
 }
 

@@ -184,7 +184,9 @@ export function PalettePicker({
   const [editingPaletteErrors, setEditingPaletteErrors] = useState<
     Record<string, string>
   >({});
-  const [copyFeedback, setCopyFeedback] = useState<string | undefined>();
+  const [buttonFeedback, setButtonFeedback] = useState<
+    Record<string, string | undefined>
+  >({});
 
   // Get the currently editing palette (if any)
   const editingPalette =
@@ -226,33 +228,54 @@ export function PalettePicker({
       name: palette.name,
       colors: palette.colors,
     });
+    const buttonId = `copy-${palette.id}`;
     if (success) {
-      setCopyFeedback("Copied!");
-      setTimeout(() => setCopyFeedback(undefined), 2000);
+      setButtonFeedback((prev) => ({ ...prev, [buttonId]: "Copied!" }));
+      setTimeout(
+        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
+        2000,
+      );
     } else {
-      setCopyFeedback("Failed to copy (check browser permissions)");
-      setTimeout(() => setCopyFeedback(undefined), 3000);
+      setButtonFeedback((prev) => ({
+        ...prev,
+        [buttonId]: "Failed (perms)",
+      }));
+      setTimeout(
+        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
+        3000,
+      );
     }
   };
 
-  const handlePastePaletteColors = async () => {
-    if (!editingPalette) return;
+  const handlePastePaletteColors = async (paletteId: string) => {
+    const palette = userPalettes.find((p) => p.id === paletteId);
+    if (!palette) return;
     const paletteData = await readPaletteFromClipboard();
+    const buttonId = `paste-${paletteId}`;
     if (paletteData) {
-      updatePalette(editingPalette.id, {
+      updatePalette(paletteId, {
         colors: paletteData.colors,
       });
-      if (isPaletteSelected(editingPalette)) {
+      if (isPaletteSelected(palette)) {
         onSelectWithName({
-          name: editingPalette.name,
+          name: palette.name,
           colors: paletteData.colors,
         });
       }
-      setCopyFeedback("Pasted!");
-      setTimeout(() => setCopyFeedback(undefined), 2000);
+      setButtonFeedback((prev) => ({ ...prev, [buttonId]: "Pasted!" }));
+      setTimeout(
+        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
+        2000,
+      );
     } else {
-      setCopyFeedback("No palette in clipboard or permission denied");
-      setTimeout(() => setCopyFeedback(undefined), 3000);
+      setButtonFeedback((prev) => ({
+        ...prev,
+        [buttonId]: "No palette",
+      }));
+      setTimeout(
+        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
+        3000,
+      );
     }
   };
 
@@ -267,11 +290,31 @@ export function PalettePicker({
       setSelectedEditingPaletteId(newPalette.id);
       // Select using the actual generated name (may differ from clipboard name if duplicate)
       onSelectWithName({ name: newPalette.name, colors: newPalette.colors });
-      setCopyFeedback("Pasted!");
-      setTimeout(() => setCopyFeedback(undefined), 2000);
+      setButtonFeedback((prev) => ({
+        ...prev,
+        "paste-new": "Pasted!",
+      }));
+      setTimeout(
+        () =>
+          setButtonFeedback((prev) => ({
+            ...prev,
+            "paste-new": undefined,
+          })),
+        2000,
+      );
     } else {
-      setCopyFeedback("No palette in clipboard or permission denied");
-      setTimeout(() => setCopyFeedback(undefined), 3000);
+      setButtonFeedback((prev) => ({
+        ...prev,
+        "paste-new": "No palette",
+      }));
+      setTimeout(
+        () =>
+          setButtonFeedback((prev) => ({
+            ...prev,
+            "paste-new": undefined,
+          })),
+        3000,
+      );
     }
   };
 
@@ -361,13 +404,6 @@ export function PalettePicker({
 
   return (
     <div className="bg-gray-800 rounded-lg p-4">
-      {/* Feedback notification */}
-      {copyFeedback && (
-        <div className="mb-3 p-2 bg-blue-900/60 border border-blue-700 rounded text-xs text-blue-200 text-center">
-          {copyFeedback}
-        </div>
-      )}
-
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-gray-200">Palette</h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -397,7 +433,7 @@ export function PalettePicker({
                   : "Clipboard does not contain a palette"
               }
             >
-              📋
+              {buttonFeedback["paste-new"] || "📋"}
             </button>
           )}
         </div>
@@ -469,12 +505,12 @@ export function PalettePicker({
                               className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
                               title="Copy palette colors to clipboard"
                             >
-                              📄
+                              {buttonFeedback[`copy-${palette.id}`] || "📄"}
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handlePastePaletteColors();
+                                handlePastePaletteColors(palette.id);
                               }}
                               disabled={!hasClipboardPalette}
                               className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs transition-colors"
@@ -484,7 +520,7 @@ export function PalettePicker({
                                   : "Clipboard does not contain a palette"
                               }
                             >
-                              📋
+                              {buttonFeedback[`paste-${palette.id}`] || "📋"}
                             </button>
                           </>
                         )}

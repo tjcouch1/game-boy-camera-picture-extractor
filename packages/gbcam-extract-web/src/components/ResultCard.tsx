@@ -74,7 +74,7 @@ export function ResultCard({
   const [shareSupported, setShareSupported] = useState(false);
 
   useEffect(() => {
-    canShare().then(setShareSupported);
+    setShareSupported(canShare());
   }, []);
 
   // Render preview canvas at previewScale

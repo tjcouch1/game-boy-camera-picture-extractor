@@ -246,11 +246,7 @@ export default function App() {
       <div className="container mx-auto px-4 py-8 max-w-4xl flex-1">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <img
-              src="./lucide-image-down-white-0.338.0.svg"
-              alt="App Icon"
-              className="w-8 h-8"
-            />
+            <img src="./icon.svg" alt="App Icon" className="w-8 h-8" />
             <h1 className="text-2xl font-bold">
               Game Boy Camera Picture Extractor
             </h1>
