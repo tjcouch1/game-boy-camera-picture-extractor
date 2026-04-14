@@ -42,7 +42,11 @@ function buildOutputCanvas(
     tmp
       .getContext("2d")!
       .putImageData(
-        new ImageData(new Uint8ClampedArray(colored.data), colored.width, colored.height),
+        new ImageData(
+          new Uint8ClampedArray(colored.data),
+          colored.width,
+          colored.height,
+        ),
         0,
         0,
       );
@@ -64,7 +68,9 @@ export function ResultCard({
   onDelete,
 }: ResultCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [showCopyFeedback, setShowCopyFeedback] = useState(false);
+  const [showCopyFeedback, setShowCopyFeedback] = useState<string | false>(
+    false,
+  );
   const [shareSupported, setShareSupported] = useState(false);
 
   useEffect(() => {
@@ -95,7 +101,11 @@ export function ResultCard({
       tmp
         .getContext("2d")!
         .putImageData(
-          new ImageData(new Uint8ClampedArray(colored.data), colored.width, colored.height),
+          new ImageData(
+            new Uint8ClampedArray(colored.data),
+            colored.width,
+            colored.height,
+          ),
           0,
           0,
         );
@@ -111,7 +121,9 @@ export function ResultCard({
     const basename = filename.replace(/\.[^.]+$/, "");
     const sanitized = sanitizePaletteName(paletteName);
     const link = document.createElement("a");
-    link.download = sanitized ? `${basename}_${sanitized}_gb.png` : `${basename}_gb.png`;
+    link.download = sanitized
+      ? `${basename}_${sanitized}_gb.png`
+      : `${basename}_gb.png`;
     link.href = outputCanvas.toDataURL("image/png");
     link.click();
   }, [result, palette, outputScale, filename, paletteName]);
@@ -120,7 +132,10 @@ export function ResultCard({
     const outputCanvas = buildOutputCanvas(result, palette, outputScale);
     if (!outputCanvas) return;
     try {
-      await shareImage(outputCanvas, filename.replace(/\.[^.]+$/, "") + "_gb.png");
+      await shareImage(
+        outputCanvas,
+        filename.replace(/\.[^.]+$/, "") + "_gb.png",
+      );
     } catch (err) {
       console.error("Failed to share image:", err);
     }
@@ -131,23 +146,30 @@ export function ResultCard({
     if (!outputCanvas) return;
     try {
       await copyImageToClipboard(outputCanvas);
-      setShowCopyFeedback(true);
+      setShowCopyFeedback("Copied!");
       setTimeout(() => setShowCopyFeedback(false), 2000);
     } catch (err) {
+      const errorMsg = (err as Error).message || "Failed to copy";
+      setShowCopyFeedback(`Error: ${errorMsg}`);
+      setTimeout(() => setShowCopyFeedback(false), 3000);
       console.error("Failed to copy image:", err);
     }
   }, [result, palette, outputScale]);
-
 
   return (
     <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
       {/* Header row: filename + delete */}
       <div className="flex items-start gap-2 mb-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-200 truncate" title={filename}>
+          <p
+            className="text-sm font-medium text-gray-200 truncate"
+            title={filename}
+          >
             {filename}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">{processingTime.toFixed(0)}ms</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {processingTime.toFixed(0)}ms
+          </p>
         </div>
         {onDelete && (
           <button
@@ -185,8 +207,9 @@ export function ResultCard({
           <button
             onClick={handleCopy}
             className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-xs font-medium transition-colors"
+            title="Copy image to clipboard"
           >
-            {showCopyFeedback ? "Copied!" : "Copy"}
+            {showCopyFeedback || "Copy"}
           </button>
         </div>
       </div>

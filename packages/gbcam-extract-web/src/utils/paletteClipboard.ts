@@ -57,50 +57,72 @@ export function deserializePaletteFromClipboard(
 /**
  * Check if clipboard contents are formatted as a palette.
  * This is async because we need to read from the clipboard API.
+ * Gracefully handles permission denied errors.
  */
 export async function isPaletteInClipboard(): Promise<boolean> {
   try {
     // Check if clipboard API is available
-    if (!navigator.clipboard) {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
       return false;
     }
-    const text = await navigator.clipboard.readText();
-    return deserializePaletteFromClipboard(text) !== null;
+
+    // On some mobile browsers, readText() requires user permission
+    // Try to read, catch permission errors gracefully
+    try {
+      const text = await navigator.clipboard.readText();
+      return deserializePaletteFromClipboard(text) !== null;
+    } catch (err) {
+      // NotAllowedError means permission denied, which is expected on some mobile browsers
+      // Other errors might be connectivity-related - return false for all cases
+      return false;
+    }
   } catch {
-    // Clipboard API not available or denied
+    // Clipboard API not available
     return false;
   }
 }
 
 /**
  * Read a palette from the clipboard.
+ * Requires user permission on mobile browsers.
  */
 export async function readPaletteFromClipboard(): Promise<SerializedPalette | null> {
   try {
     // Check if clipboard API is available
-    if (!navigator.clipboard) {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
       return null;
     }
+
     const text = await navigator.clipboard.readText();
     return deserializePaletteFromClipboard(text);
-  } catch {
-    // Clipboard API not available or denied
+  } catch (err) {
+    // NotAllowedError (permission denied) and other errors
+    // Log for debugging but don't throw to user
+    console.debug("Failed to read from clipboard:", (err as Error).name);
     return null;
   }
 }
 
 /**
  * Write a palette to the clipboard.
+ * Returns true if successful, false otherwise.
  */
 export async function writePaletteToClipboard(
   palette: SerializedPalette,
 ): Promise<boolean> {
   try {
+    // Check if clipboard API is available
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      return false;
+    }
+
     const serialized = serializePaletteToClipboard(palette);
     await navigator.clipboard.writeText(serialized);
     return true;
-  } catch {
-    // Clipboard API not available or denied
+  } catch (err) {
+    // NotAllowedError or other write errors
+    // Log for debugging but return false gracefully
+    console.debug("Failed to write to clipboard:", (err as Error).name);
     return false;
   }
 }

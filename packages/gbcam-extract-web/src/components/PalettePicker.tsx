@@ -230,8 +230,8 @@ export function PalettePicker({
       setCopyFeedback("Copied!");
       setTimeout(() => setCopyFeedback(undefined), 2000);
     } else {
-      setCopyFeedback("Failed to copy");
-      setTimeout(() => setCopyFeedback(undefined), 2000);
+      setCopyFeedback("Failed to copy (check browser permissions)");
+      setTimeout(() => setCopyFeedback(undefined), 3000);
     }
   };
 
@@ -248,6 +248,11 @@ export function PalettePicker({
           colors: paletteData.colors,
         });
       }
+      setCopyFeedback("Pasted!");
+      setTimeout(() => setCopyFeedback(undefined), 2000);
+    } else {
+      setCopyFeedback("No palette in clipboard or permission denied");
+      setTimeout(() => setCopyFeedback(undefined), 3000);
     }
   };
 
@@ -262,6 +267,11 @@ export function PalettePicker({
       setSelectedEditingPaletteId(newPalette.id);
       // Select using the actual generated name (may differ from clipboard name if duplicate)
       onSelectWithName({ name: newPalette.name, colors: newPalette.colors });
+      setCopyFeedback("Pasted!");
+      setTimeout(() => setCopyFeedback(undefined), 2000);
+    } else {
+      setCopyFeedback("No palette in clipboard or permission denied");
+      setTimeout(() => setCopyFeedback(undefined), 3000);
     }
   };
 
@@ -351,6 +361,13 @@ export function PalettePicker({
 
   return (
     <div className="bg-gray-800 rounded-lg p-4">
+      {/* Feedback notification */}
+      {copyFeedback && (
+        <div className="mb-3 p-2 bg-blue-900/60 border border-blue-700 rounded text-xs text-blue-200 text-center">
+          {copyFeedback}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-gray-200">Palette</h2>
         <div className="flex flex-wrap items-center gap-2">

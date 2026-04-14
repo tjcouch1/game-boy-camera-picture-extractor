@@ -1,18 +1,28 @@
 export async function canShare(): Promise<boolean> {
   if (!("share" in navigator)) return false;
-  // Check that the browser supports file sharing specifically (required for image sharing).
-  // navigator.canShare is available on modern mobile browsers that support file sharing.
+
+  // Check if canShare API is available
   if ("canShare" in navigator) {
     try {
+      // Try to check if we can share files
       const testFile = new File([""], "test.png", { type: "image/png" });
-      return (navigator as any).canShare({ files: [testFile] });
+      const canShareFiles = (navigator as any).canShare({ files: [testFile] });
+      if (canShareFiles) return true;
+
+      // If file sharing is not supported, try text sharing as fallback
+      // Some browsers support share() but not file sharing specifically
+      const canShareText = (navigator as any).canShare({ title: "test" });
+      return canShareText;
     } catch {
-      return false;
+      // If canShare check fails, fall back to testing with the actual share API
+      // This is a more permissive approach for browsers with incomplete API support
+      return true;
     }
   }
-  // If canShare API is absent but share is present, conservatively return false —
-  // file sharing is unlikely to work without canShare support.
-  return false;
+
+  // If canShare API is absent but share is present, assume it works
+  // Modern mobile browsers should have both, but be permissive for compatibility
+  return true;
 }
 
 export async function shareImage(
@@ -66,11 +76,38 @@ export async function copyImageToClipboard(
       }
 
       try {
+        // Check if clipboard API is available
+        if (!navigator.clipboard) {
+          reject(new Error("Clipboard API not available"));
+          return;
+        }
+
         const item = new ClipboardItem({
           "image/png": blob,
         });
-        await navigator.clipboard.write([item]);
-        resolve();
+
+        try {
+          await navigator.clipboard.write([item]);
+          resolve();
+        } catch (err) {
+          // Handle permission denied and other errors
+          const errorName = (err as Error).name;
+          if (errorName === "NotAllowedError") {
+            reject(
+              new Error(
+                "Clipboard permission denied. Please allow clipboard access in your browser settings.",
+              ),
+            );
+          } else if (errorName === "SecurityError") {
+            reject(
+              new Error(
+                "Security error: clipboard access not allowed in this context",
+              ),
+            );
+          } else {
+            reject(err);
+          }
+        }
       } catch (err) {
         reject(err);
       }

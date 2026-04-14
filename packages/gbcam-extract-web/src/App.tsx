@@ -242,12 +242,19 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <div className="container mx-auto px-4 py-8 max-w-4xl flex-1">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">
-            Game Boy Camera Picture Extractor
-          </h1>
+          <div className="flex items-center gap-3">
+            <img
+              src="./lucide-image-down-white-0.338.0.svg"
+              alt="App Icon"
+              className="w-8 h-8"
+            />
+            <h1 className="text-2xl font-bold">
+              Game Boy Camera Picture Extractor
+            </h1>
+          </div>
           {isInstallable && (
             <button
               onClick={handleInstallApp}
@@ -492,6 +499,18 @@ export default function App() {
           </>
         )}
       </div>
+      <footer className="mt-8 border-t border-gray-700 bg-gray-900/50">
+        <div className="container mx-auto px-4 py-4 max-w-4xl flex justify-center">
+          <a
+            href="./lucide-license"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            Lucide 'Image Down' Icon license
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
