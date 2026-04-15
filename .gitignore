@@ -238,3 +238,6 @@ tsconfig.tsbuildinfo
 
 # Claude superpowers plugin
 .superpowers/
+
+# Generated license files (gitignored but included in build)
+packages/gbcam-extract-web/public/licenses.html

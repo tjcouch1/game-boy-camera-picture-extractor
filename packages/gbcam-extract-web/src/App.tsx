@@ -496,7 +496,16 @@ export default function App() {
         )}
       </div>
       <footer className="mt-8 border-t border-gray-700 bg-gray-900/50">
-        <div className="container mx-auto px-4 py-4 max-w-4xl flex justify-center">
+        <div className="container mx-auto px-4 py-4 max-w-4xl flex justify-center gap-4">
+          <a
+            href="./licenses.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            Open Source Licenses
+          </a>
+          <span className="text-xs text-gray-600">•</span>
           <a
             href="./lucide-license"
             target="_blank"

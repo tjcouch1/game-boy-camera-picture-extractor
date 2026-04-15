@@ -1,5 +1,6 @@
 {
   "name": "game-boy-camera-picture-extractor",
+  "license": "MIT",
   "private": true,
   "packageManager": "pnpm@10.8.1",
   "scripts": {
