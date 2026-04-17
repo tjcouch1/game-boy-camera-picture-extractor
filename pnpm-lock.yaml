@@ -6,7 +6,14 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.2
+        version: 25.5.2
+      gbcam-extract-web:
+        specifier: link:packages\gbcam-extract-web
+        version: link:packages/gbcam-extract-web
 
   packages/gbcam-extract:
     dependencies:

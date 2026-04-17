@@ -7,6 +7,7 @@
  */
 
 import * as licenseChecker from "license-checker";
+import type { ModuleInfos } from "license-checker";
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -28,21 +29,11 @@ const publicDir = path.join(packageDir, "public");
 const configPath = path.join(packageDir, "license-checker.config.json");
 const outputFile = path.join(publicDir, "licenses.html");
 
-interface LicenseInfo {
-  licenses: string;
-  repository?: string;
-  licenseFile: string;
-  licenseText: string;
-  [key: string]: any;
-}
-
-interface LicenseData {
-  [packageName: string]: LicenseInfo;
-}
+interface LicenseData extends ModuleInfos {}
 
 // Extract copyright from license text (look for common patterns)
-function extractCopyright(licenseText: string): string {
-  const lines = licenseText.split("\n");
+function extractCopyright(licenseText: string | undefined): string {
+  const lines = licenseText?.split("\n") ?? [];
   for (const line of lines) {
     if (line.toLowerCase().includes("copyright")) {
       return line.trim();

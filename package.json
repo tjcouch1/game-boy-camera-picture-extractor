@@ -30,5 +30,9 @@
   "volta": {
     "node": "24.14.1",
     "pnpm": "10.33.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "gbcam-extract-web": "link:packages\\gbcam-extract-web"
   }
 }
