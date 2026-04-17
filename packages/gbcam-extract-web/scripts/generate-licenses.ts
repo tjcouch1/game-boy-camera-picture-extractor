@@ -15,6 +15,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const packageDir = path.join(__dirname, "..");
+// The location where all dependencies are installed (recursively) in a pnpm workspace
+const workspacePackageDir = path.join(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "node_modules",
+  ".pnpm",
+);
 const publicDir = path.join(packageDir, "public");
 const configPath = path.join(packageDir, "license-checker.config.json");
 const outputFile = path.join(publicDir, "licenses.html");
@@ -303,7 +312,7 @@ function generateHtmlLicensesPage(licenses: LicenseData): string {
         Open Source Licenses
       </h1>
       <p>
-        This application uses the following open source dependencies. Thank you to all the maintainers!
+        This application uses the following ${Object.keys(licenseArray).length} open source dependencies. Thank you to all the maintainers!
       </p>
     </header>
 
@@ -330,7 +339,7 @@ async function main() {
     const licenseData = await new Promise<LicenseData>((resolve, reject) => {
       licenseChecker.init(
         {
-          start: packageDir,
+          start: workspacePackageDir,
           customPath: configPath,
           json: true,
         },
@@ -343,6 +352,13 @@ async function main() {
         },
       );
     });
+
+    // Write the raw license data to a JSON file for debugging
+    await fs.writeFile(
+      path.join(packageDir, "licenses.json"),
+      JSON.stringify(licenseData, null, 2),
+      "utf-8",
+    );
 
     // Generate HTML from license data
     const htmlContent = generateHtmlLicensesPage(licenseData);

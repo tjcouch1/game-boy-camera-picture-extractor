@@ -1,6 +1,13 @@
 {
   "name": "game-boy-camera-picture-extractor",
+  "author": "TJ Couch",
   "license": "MIT",
+  "description": "Repository for extracting and cleaning Game Boy Camera images from pictures",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tjcouch1/game-boy-camera-picture-extractor.git",
+    "directory": "packages/gbcam-extract"
+  },
   "private": true,
   "packageManager": "pnpm@10.8.1",
   "scripts": {

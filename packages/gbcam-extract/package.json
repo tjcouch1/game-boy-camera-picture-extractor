@@ -1,7 +1,14 @@
 {
   "name": "gbcam-extract",
-  "license": "MIT",
   "version": "0.1.0",
+  "author": "TJ Couch",
+  "license": "MIT",
+  "description": "Library that extracts and cleans Game Boy Camera images from pictures",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tjcouch1/game-boy-camera-picture-extractor.git",
+    "directory": "packages/gbcam-extract"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
