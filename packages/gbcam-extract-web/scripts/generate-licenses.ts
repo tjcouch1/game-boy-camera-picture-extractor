@@ -7,7 +7,7 @@
  */
 
 import * as licenseChecker from "license-checker";
-import type { ModuleInfos } from "license-checker";
+import type { ModuleInfos, ModuleInfo } from "license-checker";
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -28,29 +28,118 @@ const workspacePackageDir = path.join(
 const publicDir = path.join(packageDir, "public");
 const configPath = path.join(packageDir, "license-checker.config.json");
 const outputFile = path.join(publicDir, "licenses.html");
+const augmentedDataFile = path.join(packageDir, "licenses.json");
 
 interface LicenseData extends ModuleInfos {}
 
-// Extract copyright from license text (look for common patterns)
+interface AugmentedLicense {
+  name: string;
+  version: string;
+  licenses: string | string[];
+  copyright: string;
+  repository?: string;
+  publisher?: string;
+  email?: string;
+  url?: string;
+  description?: string;
+  licenseText: string;
+}
+
+// Extract copyright from license text (look for real copyright statements)
 function extractCopyright(licenseText: string | undefined): string {
   const lines = licenseText?.split("\n") ?? [];
+
+  // First pass: look for lines that clearly start with "Copyright"
+  // These are most likely actual copyright statements
+  // Pattern: "Copyright" followed by optional (c), ©, or year
+  const strictPattern = /^Copyright\s*(?:\([cC]\)|©)?\s*/;
+
   for (const line of lines) {
-    if (line.toLowerCase().includes("copyright")) {
-      return line.trim();
+    const trimmed = line.trim();
+    if (strictPattern.test(trimmed)) {
+      return trimmed;
     }
   }
+
+  // Second pass: look for "Copyright" with a year (YYYY)
+  // This catches variations like "Copyright YYYY Name" or "Copyright 2018 Google Inc."
+  const yearPattern = /^[^C]*Copyright\s+(\d{4})/i;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (yearPattern.test(trimmed) && !isBodeLine(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  // Third pass: look for lines containing "copyright" that are NOT part of license body
+  const bodyExclusions = [
+    /shall\s+(be|include|retain)/i,
+    /copyright\s+(notice|owner|statement|claim)/i,
+    /reproduce.*copyright/i,
+    /notice.*attached/i,
+    /notice.*included/i,
+    /notice.*appear/i,
+    /licensor.*copyright/i,
+    /copyright.*licensor/i,
+  ];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.toLowerCase().includes("copyright")) {
+      if (!bodyExclusions.some((pattern) => pattern.test(trimmed))) {
+        return trimmed;
+      }
+    }
+  }
+
   return "";
 }
 
-// Transform license data into HTML format
-function generateHtmlLicensesPage(licenses: LicenseData): string {
+// Helper to check if a line is part of the license body
+function isBodeLine(line: string): boolean {
+  const bodyIndicators = [
+    /shall\s+(be|include|retain)/i,
+    /notice.*attached/i,
+    /notice.*included/i,
+    /licensor.*shall/i,
+  ];
+  return bodyIndicators.some((pattern) => pattern.test(line));
+}
+
+// Augment license data with extracted copyright and filter to relevant fields
+function augmentLicenseData(
+  licenses: LicenseData,
+): Record<string, AugmentedLicense> {
+  const augmented: Record<string, AugmentedLicense> = {};
+
+  for (const [key, license] of Object.entries(licenses)) {
+    const copyright = extractCopyright(license.licenseText);
+
+    augmented[key] = {
+      name: license.name || key.split("@")[0],
+      version: license.version || "",
+      licenses: license.licenses || "Unknown",
+      copyright,
+      licenseText: license.licenseText || "",
+      ...(license.repository && { repository: license.repository }),
+      ...(license.publisher && { publisher: license.publisher }),
+      ...(license.email && { email: license.email }),
+      ...(license.url && { url: license.url }),
+      ...(license.description && { description: license.description }),
+    };
+  }
+
+  return augmented;
+}
+
+// Transform augmented license data into HTML format
+function generateHtmlLicensesPage(
+  augmentedLicenses: Record<string, AugmentedLicense>,
+): string {
   // Convert to array and sort by package name
-  const licenseArray = Object.entries(licenses)
-    .map(([name, info]) => ({
-      name,
-      ...info,
-      copyright: extractCopyright(info.licenseText),
-    }))
+  const licenseArray = Object.entries(augmentedLicenses)
+    .map(([, license]) => license)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const licenseList = licenseArray
@@ -63,12 +152,65 @@ function generateHtmlLicensesPage(licenses: LicenseData): string {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 
+      // Build package info lines
+      const infoLines: string[] = [];
+
+      // Package name as link to NPM
+      const packageLink = `<a href="https://www.npmjs.com/package/${license.name}" target="_blank" rel="noopener noreferrer">${license.name}</a>`;
+
+      // Add version if available
+      if (license.version) {
+        infoLines.push(
+          `<span class="package-info-label">Version:</span> <span class="package-info-value">${license.version}</span>`,
+        );
+      }
+
+      // Add description if available
+      if (license.description) {
+        infoLines.push(
+          `<span class="package-info-label">Description:</span> <span class="package-info-value">${license.description}</span>`,
+        );
+      }
+
+      // Add publisher/author if available
+      if (license.publisher) {
+        infoLines.push(
+          `<span class="package-info-label">Publisher:</span> <span class="package-info-value">${license.publisher}</span>`,
+        );
+      }
+
+      // Add email if available
+      if (license.email) {
+        infoLines.push(
+          `<span class="package-info-label">Email:</span> <span class="package-info-value"><a href="mailto:${license.email}">${license.email}</a></span>`,
+        );
+      }
+
+      // Add URL if available
+      if (license.url) {
+        infoLines.push(
+          `<span class="package-info-label">URL:</span> <span class="package-info-value"><a href="${license.url}" target="_blank" rel="noopener noreferrer">${license.url}</a></span>`,
+        );
+      }
+
+      // Add repository if available
+      if (license.repository) {
+        infoLines.push(
+          `<span class="package-info-label">Repository:</span> <span class="package-info-value"><a href="${license.repository}" target="_blank" rel="noopener noreferrer">${license.repository}</a></span>`,
+        );
+      }
+
+      const infoHtml =
+        infoLines.length > 0
+          ? `<div class="package-info">${infoLines.join("<br>")}</div>`
+          : "";
+
       return `
     <div class="license-entry">
-      <h3>${license.name}</h3>
+      <h3>${packageLink}</h3>
       <p class="license-type">${license.licenses || "Unknown"}</p>
       ${license.copyright ? `<p class="copyright">${license.copyright}</p>` : ""}
-      ${license.repository ? `<p class="repository"><a href="${license.repository}" target="_blank" rel="noopener noreferrer">${license.repository}</a></p>` : ""}
+      ${infoHtml}
       <details>
         <summary>View License Text</summary>
         <pre><code>${escaped}</code></pre>
@@ -173,6 +315,14 @@ function generateHtmlLicensesPage(licenses: LicenseData): string {
       margin-bottom: 0.5rem;
     }
 
+    .license-entry h3 a {
+      color: #60a5fa;
+    }
+
+    .license-entry h3 a:hover {
+      text-decoration: underline;
+    }
+
     .license-type {
       font-size: 0.875rem;
       color: #9ca3af;
@@ -186,13 +336,36 @@ function generateHtmlLicensesPage(licenses: LicenseData): string {
       font-style: italic;
     }
 
-    .repository {
+    .package-info {
       font-size: 0.875rem;
+      color: #9ca3af;
       margin-bottom: 1rem;
+      padding: 0.75rem;
+      background-color: #111827;
+      border-radius: 0.375rem;
     }
 
-    .repository a {
+    .package-info-label {
+      font-weight: 600;
+      color: #d1d5db;
+      margin-right: 0.5rem;
+    }
+
+    .package-info-value {
+      color: #9ca3af;
       word-break: break-all;
+    }
+
+    .package-info-value a {
+      color: #60a5fa;
+    }
+
+    .package-info-value a:hover {
+      text-decoration: underline;
+    }
+
+    .package-info br {
+      margin-bottom: 0.5rem;
     }
 
     details {
@@ -274,6 +447,26 @@ function generateHtmlLicensesPage(licenses: LicenseData): string {
         border-color: #e5e7eb;
       }
 
+      .license-type {
+        color: #6b7280;
+      }
+
+      .copyright {
+        color: #6b7280;
+      }
+
+      .package-info {
+        background-color: #f9fafb;
+      }
+
+      .package-info-label {
+        color: #111827;
+      }
+
+      .package-info-value {
+        color: #6b7280;
+      }
+
       summary:hover {
         background-color: #f9fafb;
       }
@@ -346,18 +539,29 @@ async function main() {
 
     // Write the raw license data to a JSON file for debugging
     await fs.writeFile(
-      path.join(packageDir, "licenses.json"),
+      path.join(packageDir, "licenses-raw.json"),
       JSON.stringify(licenseData, null, 2),
       "utf-8",
     );
 
-    // Generate HTML from license data
-    const htmlContent = generateHtmlLicensesPage(licenseData);
+    // Augment license data with extracted copyright and filter fields
+    const augmentedData = augmentLicenseData(licenseData);
+
+    // Write augmented data to licenses.json
+    await fs.writeFile(
+      augmentedDataFile,
+      JSON.stringify(augmentedData, null, 2),
+      "utf-8",
+    );
+
+    // Generate HTML from augmented license data
+    const htmlContent = generateHtmlLicensesPage(augmentedData);
 
     // Write to file
     await fs.writeFile(outputFile, htmlContent, "utf-8");
 
     console.log(`✓ Generated licenses page at ${outputFile}`);
+    console.log(`✓ Generated augmented license data at ${augmentedDataFile}`);
   } catch (error) {
     console.error(
       "Error generating licenses:",

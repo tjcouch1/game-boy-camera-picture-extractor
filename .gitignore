@@ -244,3 +244,4 @@ packages/gbcam-extract-web/public/licenses.html
 
 # Raw license data (gitignored and not included in build, for debugging only)
 packages/gbcam-extract-web/licenses.json
+packages/gbcam-extract-web/licenses-raw.json
