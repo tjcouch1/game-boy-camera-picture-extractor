@@ -1,0 +1,46 @@
+{
+  "name": "gbcam-extract",
+  "version": "0.1.0",
+  "author": "TJ Couch",
+  "license": "MIT",
+  "description": "Library that extracts and cleans Game Boy Camera images from pictures",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tjcouch1/game-boy-camera-picture-extractor.git",
+    "directory": "packages/gbcam-extract"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "pnpm run generate:palettes && tsup src/index.ts --format esm --dts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:opencv-init-node": "tsup test-opencv-init-node.ts --format esm --out-dir dist-test --clean && node dist-test/test-opencv-init-node.js",
+    "typecheck": "tsc --noEmit",
+    "extract": "tsup scripts/extract.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/extract.js",
+    "test:pipeline": "tsup scripts/run-tests.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/run-tests.js",
+    "interleave": "tsup scripts/interleave-test.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/interleave-test.js",
+    "generate:palettes": "node scripts/generate-palettes.ts"
+  },
+  "dependencies": {
+    "@techstark/opencv-js": "^4.10.0-release.1",
+    "ml-regression-polynomial": "^3.0.0",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

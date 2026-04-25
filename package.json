@@ -1,0 +1,38 @@
+{
+  "name": "game-boy-camera-picture-extractor",
+  "author": "TJ Couch",
+  "license": "MIT",
+  "description": "Repository for extracting and cleaning Game Boy Camera images from pictures",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tjcouch1/game-boy-camera-picture-extractor.git",
+    "directory": "packages/gbcam-extract"
+  },
+  "private": true,
+  "packageManager": "pnpm@10.8.1",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "dev": "pnpm build && pnpm --filter gbcam-extract-web dev",
+    "dev:host": "pnpm build && pnpm --filter gbcam-extract-web dev:host",
+    "preview": "pnpm build && pnpm --filter gbcam-extract-web preview",
+    "preview:host": "pnpm build && pnpm --filter gbcam-extract-web preview:host",
+    "typecheck": "pnpm -r run typecheck",
+    "extract": "pnpm --filter gbcam-extract run extract",
+    "test:pipeline": "pnpm --filter gbcam-extract run test:pipeline"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  },
+  "volta": {
+    "node": "24.14.1",
+    "pnpm": "10.33.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "gbcam-extract-web": "link:packages\\gbcam-extract-web"
+  }
+}

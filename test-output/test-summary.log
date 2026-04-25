@@ -2,17 +2,17 @@
 TEST SUMMARY
 ============================================================
 
-  gbcam_extract : OK
+  sample extraction : OK
 
-  Test             Matching          Different         Verdict
-  ------------------------------------------------------------
-  thing-1          14306 ( 99.79%)      30 (  0.21%)   FAIL
-  thing-2          14276 ( 99.58%)      60 (  0.42%)   FAIL
-  thing-3          14290 ( 99.68%)      46 (  0.32%)   FAIL
-  zelda-poster-1   14336 (100.00%)       0 (  0.00%)   PASS
-  zelda-poster-2   14320 ( 99.89%)      16 (  0.11%)   FAIL
-  zelda-poster-3   14274 ( 99.57%)      62 (  0.43%)   FAIL
+  Test             Matching            Different           Verdict
+  ----------------------------------------------------------------
+  thing-1          14318 ( 99.87%)      18 (  0.13%)   FAIL
+  thing-2          14293 ( 99.70%)      43 (  0.30%)   FAIL
+  thing-3          14325 ( 99.92%)      11 (  0.08%)   FAIL
+  zelda-poster-1   14331 ( 99.97%)       5 (  0.03%)   FAIL
+  zelda-poster-2   14316 ( 99.86%)      20 (  0.14%)   FAIL
+  zelda-poster-3   14322 ( 99.90%)      14 (  0.10%)   FAIL
 
-  1/6 passed
+  0/6 passed
 
 ============================================================

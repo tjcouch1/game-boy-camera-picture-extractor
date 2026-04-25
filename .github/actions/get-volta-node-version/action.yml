@@ -1,0 +1,16 @@
+name: Get Volta Node Version
+description: Reads the volta.node version from package.json
+
+outputs:
+  node-version:
+    description: The Node version from volta.node field in package.json
+    value: ${{ steps.get-version.outputs.node-version }}
+
+runs:
+  using: composite
+  steps:
+    - id: get-version
+      shell: bash
+      run: |
+        NODE_VERSION=$(node -e "console.log(require('./package.json').volta.node)")
+        echo "node-version=$NODE_VERSION" >> $GITHUB_OUTPUT

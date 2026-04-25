@@ -1,272 +1,45 @@
 
-======================================================================
 PIPELINE RUN
   Input:      test-input\thing-1.jpg
   Output dir: test-output\thing-1
-  scale=8  threshold=180  poly_degree=2  dark_smooth=13
-======================================================================
-
-
-============================================================
-[warp] test-input\thing-1.jpg
-  Loaded 1299x1186 px
-  a -- Detecting screen corners
-  Contour: area=1393862  aspect=1.108 (expected~1.111)  thresh=180  quad_score=0.0345
-  Corners (TL TR BR BL): [[25, 21], [1269, 38], [1250, 1153], [17, 1150]]
-    [debug] test-output\thing-1\debug\thing-1__warp_a_corners.png
-  b -- Initial perspective warp
-  Initial warp -> 1280x1152  (scale=8)
-  Initial border validation:
-  Pass 0 inner border validation:
-    TL: expected=(120,120) detected=(117,123) error=(-3.0,+3.0) pixels
-    TR: expected=(1152,120) detected=(1150,120) error=(-2.0,+0.0) pixels
-    BL: expected=(120,1024) detected=(119,1027) error=(-1.0,+3.0) pixels
-    BR: expected=(1152,1024) detected=(1158,1032) error=(+6.0,+8.0) pixels
-    top edge straight: {'range': (np.int64(724), np.int64(1150)), 'variance': 15889.027777777777}
-    bottom edge straight: {'range': (np.int64(119), np.int64(1268)), 'variance': 167796.19555555555}
-    left edge straight: {'range': (np.int64(244), np.int64(1104)), 'variance': 48070.34451019067}
-    right edge straight: {'range': (np.int64(159), np.int64(969)), 'variance': 53610.92969172526}
-  Initial frame edge verification:
-    [verify] top      edge: error=87.0 (expect~[165, 255, 255], actual~[170, 180, 210]) [WARN]
-    [verify] bottom   edge: error=68.8 (expect~[165, 255, 255], actual~[173, 189, 234]) [WARN]
-    [verify] left     edge: error=96.6 (expect~[165, 255, 255], actual~[151, 167, 216]) [WARN]
-    [verify] right    edge: error=111.3 (expect~[165, 255, 255], actual~[140, 157, 207]) [WARN]
-    [debug] test-output\thing-1\debug\thing-1__warp_b_initial_color.png
-  c -- Refining (pass 1)
-  Pass 1 edge curvatures: top=-1.01, bot=-3.97, left=-2.13, right=+2.58
-  Pass 1 corners: TL=(118.3,119.4) err=(-1.7,-0.6)  TR=(1154.2,119.6) err=(+2.2,-0.4)  BR=(1154.1,1026.8) err=(+2.1,+2.8)  BL=(119.0,1026.1) err=(-1.0,+2.1)
-  Pass 1 border edges (avg): top=119.04(exp=120,err=-0.96), bot=1024.63(exp=1024,err=+0.63), left=117.72(exp=120,err=-2.28), right=1155.30(exp=1152,err=+3.30)
-  Pass 1 src corners: [[22, 19], [1271, 37], [1252, 1156], [15, 1152]]
-  Pass 1 inner border validation:
-    TL: expected=(120,120) detected=(119,122) error=(-1.0,+2.0) pixels
-    TR: expected=(1152,120) detected=(1148,120) error=(-4.0,+0.0) pixels
-    BL: expected=(120,1024) detected=(120,1025) error=(+0.0,+1.0) pixels
-    BR: expected=(1152,1024) detected=(1155,1029) error=(+3.0,+5.0) pixels
-    top edge straight: {'range': (np.int64(268), np.int64(1148)), 'variance': 36059.046875}
-    bottom edge straight: {'range': (np.int64(121), np.int64(654)), 'variance': 23601.685950413226}
-    left edge straight: {'range': (np.int64(124), np.int64(1149)), 'variance': 59141.66894617226}
-    right edge straight: {'range': (np.int64(159), np.int64(966)), 'variance': 45141.460861678}
-  Pass 1 frame edge verification:
-    [verify] top      edge: error=87.4 (expect~[165, 255, 255], actual~[170, 180, 210]) [WARN]
-    [verify] bottom   edge: error=74.7 (expect~[165, 255, 255], actual~[166, 183, 232]) [WARN]
-    [verify] left     edge: error=90.6 (expect~[165, 255, 255], actual~[152, 172, 219]) [WARN]
-    [verify] right    edge: error=102.7 (expect~[165, 255, 255], actual~[150, 163, 210]) [WARN]
-  c -- Refining (pass 2)
-  Pass 2 edge curvatures: top=-0.41, bot=-4.53, left=-0.73, right=+0.45
-  Pass 2 corners: TL=(119.2,119.5) err=(-0.8,-0.5)  TR=(1153.2,119.6) err=(+1.2,-0.4)  BR=(1153.1,1024.4) err=(+1.1,+0.4)  BL=(119.5,1024.1) err=(-0.5,+0.1)
-  Pass 2 border edges (avg): top=119.56(exp=120,err=-0.44), bot=1022.19(exp=1024,err=-1.81), left=119.04(exp=120,err=-0.96), right=1153.13(exp=1152,err=+1.13)
-  Pass 2 src corners: [[21, 19], [1273, 36], [1253, 1156], [15, 1152]]
-  Pass 2 inner border validation:
-    TL: expected=(120,120) detected=(120,123) error=(+0.0,+3.0) pixels
-    TR: expected=(1152,120) detected=(1137,121) error=(-15.0,+1.0) pixels
-    BL: expected=(120,1024) detected=(121,1025) error=(+1.0,+1.0) pixels
-    BR: expected=(1152,1024) detected=(1155,1029) error=(+3.0,+5.0) pixels
-    top edge straight: {'range': (np.int64(278), np.int64(1088)), 'variance': 61692.20408163265}
-    bottom edge straight: {'range': (np.int64(121), np.int64(653)), 'variance': 27592.913580246914}
-    left edge straight: {'range': (np.int64(123), np.int64(1149)), 'variance': 21444.022790357925}
-    right edge straight: {'range': (np.int64(160), np.int64(965)), 'variance': 42381.05730685754}
-  Pass 2 frame edge verification:
-    [verify] top      edge: error=88.4 (expect~[165, 255, 255], actual~[169, 179, 209]) [WARN]
-    [verify] bottom   edge: error=76.3 (expect~[165, 255, 255], actual~[164, 182, 231]) [WARN]
-    [verify] left     edge: error=90.6 (expect~[165, 255, 255], actual~[149, 172, 220]) [WARN]
-    [verify] right    edge: error=101.5 (expect~[165, 255, 255], actual~[152, 164, 210]) [WARN]
-    [debug] test-output\thing-1\debug\thing-1__warp_d_refined_color.png
-  Saved -> test-output\thing-1\thing-1_warp.png  (colour BGR)
-
-============================================================
-[correct/color] test-output\thing-1\thing-1_warp.png
-  Loaded 1280×1152 px (colour, scale=8)
-  R: Coons+poly -> 255 / 148
-    R refinement: 8116 interior DG pixels
-      DG[3,3]: raw=80.4 coons=86.6 corr=165.8
-      DG[3,4]: raw=97.5 coons=87.3 corr=163.2
-      DG[3,5]: raw=76.8 coons=88.0 corr=146.1
-      DG[3,6]: raw=111.8 coons=89.9 corr=161.0
-      DG[3,7]: raw=77.1 coons=89.8 corr=154.2
-  G: Coons+poly -> 255 / 148
-    G refinement: 9752 interior DG pixels
-  B: white-surface normalisation -> 165 (no global scaling)
-  Frame p85 before norm: R=255 G=249 B=172
-  Global scales: R=1.0000 G=1.0246 B=1.0000
-  Saved -> test-output\thing-1\thing-1_correct.png  (colour, frame normalised to #FFFFA5)
-  Camera area mean: R=160.0 G=133.3 B=153.6
-    [debug] test-output\thing-1\debug\thing-1_warp__correct_color_a_before_after.png
-    [debug] test-output\thing-1\debug\thing-1_warp__correct_color_b_white_surf_heatmap.png
-    [debug] test-output\thing-1\debug\thing-1_warp__correct_color_c_full.png
-  Metadata -> test-output\thing-1\thing-1_correct.json
-
-============================================================
-[crop] test-output\thing-1\thing-1_correct.png
-  Loaded 1280×1152 px (scale=8)
-  Camera region: (128,128) -> (1152,1024)  = 1024×896 px  (128×112 GB pixels)
-  Validation: inner border mean=148.1, white frame mean=207.7 (OK)
-    [debug] test-output\thing-1\debug\thing-1_correct__crop_a_region.png
-  Saved -> test-output\thing-1\thing-1_crop.png  (1024×896 px)
-
-============================================================
-[sample] test-output\thing-1\thing-1_crop.png
-  Loaded 1024×896 px  (128×112 GB pixels at scale=8)
-  Block 8×8  margins h=2 v=1  sample region 4×6  method=mean
-  Subpixel cols (scale=8): B=[1,3)  G=[3,5)  R=[5,7)
-  Saved -> test-output\thing-1\thing-1_sample.png  (colour, subpixel-aware, 128×112 px)
-  R: 40–255  G: 0–255  B: 67–182
-
-============================================================
-[quantize/color] test-output\thing-1\thing-1_sample.png
-  Loaded 128x112 colour sample
-  Global k-means RG: BK(1332)~(R86,G22,B100)  DG(8593)~(R149,G146,B157)  LG(2569)~(R238,G176,B136)  WH(1842)~(R248,G250,B138)
-  Strip ensemble: 7 strips, changed 201 px
-  G-valley threshold: 236.0  (LG centre 176.3, WH centre 250.4)
-  G-valley refinement (post-strip): threshold=236.0, changed 336 px
-  Final labels: BK(1335)~(R86,G22,B100)  DG(8610)~(R149,G146,B157)  LG(2707)~(R238,G179,B136)  WH(1684)~(R249,G252,B137)
-  Classification: strip-kmeans-RG+G-valley
-  Saved -> test-output\thing-1\thing-1_gbcam.png
-  Saved -> test-output\thing-1\thing-1_gbcam_rgb.png
-  BK:  1335 px (  9.3%)
-  DG:  8610 px ( 60.1%)
-  LG:  2707 px ( 18.9%)
-  WH:  1684 px ( 11.7%)
-    [debug] test-output\thing-1\debug\thing-1_sample__quantize_color_a_gray_8x.png
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14306  (99.79%)
-  Different    : 30   (0.21%)
+  Matching     : 14318  (99.87%)
+  Different    : 18   (0.13%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
-  BK  #000000                 1335        1336        -1
-  DG  #9494FF                 8610        8626       -16
-  LG  #FF9494                 2707        2690       +17
-  WH  #FFFFA5                 1684        1684        +0
+  BK  #000000                 1336        1336  +0
+  DG  #9494FF                 8608        8626  -18
+  LG  #FF9494                 2708        2690  +18
+  WH  #FFFFA5                 1684        1684  +0
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
-  BK  #000000                    1335 v                0                  0                  0      1335
-  DG  #9494FF                       1 X             8609 v                0                  0      8610
-  LG  #FF9494                       0                 17 X             2684 v                6 X    2707
-  WH  #FFFFA5                       0                  0                  6 X             1678 v    1684
+  BK  #000000                    1336 v                0                  0                  0      1336
+  DG  #9494FF                       0               8608 v                0                  0      8608
+  LG  #FF9494                       0                 18 X             2690 v                0      2708
+  WH  #FFFFA5                       0                  0                  0               1684 v    1684
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  DG  #9494FF  ->  BK  #000000 : 1 px
-  LG  #FF9494  ->  DG  #9494FF : 17 px
-  LG  #FF9494  ->  WH  #FFFFA5 : 6 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 6 px
-
-----------------------------------------------------------------------
-SPATIAL DISTRIBUTION OF ERRORS
-----------------------------------------------------------------------
-  Errors per row (0–111):
-    row   4 :    1  #
-    row   6 :    1  #
-    row  10 :    1  #
-    row  12 :    1  #
-    row  20 :    1  #
-    row  22 :    1  #
-    row  44 :    1  #
-    row  53 :    1  #
-    row  59 :    1  #
-    row  61 :    1  #
-    row  70 :    2  ##
-    row  71 :    1  #
-    row  72 :    2  ##
-    row  74 :    1  #
-    row  75 :    1  #
-    row  77 :    1  #
-    row  78 :    3  ###
-    row  79 :    1  #
-    row  80 :    1  #
-    row  81 :    1  #
-    row  82 :    2  ##
-    row  83 :    1  #
-    row  84 :    1  #
-    row  85 :    1  #
-    row  92 :    1  #
-  Errors per column (0–127):
-    col  28 :    1  #
-    col  34 :    1  #
-    col  35 :    1  #
-    col  36 :    1  #
-    col  42 :    1  #
-    col  45 :    1  #
-    col  69 :    1  #
-    col  75 :    1  #
-    col  77 :    2  ##
-    col  79 :    1  #
-    col  80 :    1  #
-    col  81 :    2  ##
-    col  82 :    1  #
-    col  83 :    1  #
-    col  85 :    4  ####
-    col  89 :    2  ##
-    col  93 :    1  #
-    col 120 :    1  #
-    col 123 :    1  #
-    col 125 :    5  #####
-
-----------------------------------------------------------------------
-FULL PIXEL ERROR LIST  (30 errors, sorted by row then column)
-----------------------------------------------------------------------
-   row   col              result           reference
-     4   123         WH  #FFFFA5         LG  #FF9494
-     6   125         WH  #FFFFA5         LG  #FF9494
-    10   125         WH  #FFFFA5         LG  #FF9494
-    12   125         WH  #FFFFA5         LG  #FF9494
-    20   125         WH  #FFFFA5         LG  #FF9494
-    22   125         WH  #FFFFA5         LG  #FF9494
-    44    42         LG  #FF9494         WH  #FFFFA5
-    53    45         LG  #FF9494         WH  #FFFFA5
-    59    69         LG  #FF9494         DG  #9494FF
-    61    93         LG  #FF9494         DG  #9494FF
-    70    81         LG  #FF9494         DG  #9494FF
-    70    83         LG  #FF9494         DG  #9494FF
-    71    80         LG  #FF9494         DG  #9494FF
-    72    75         LG  #FF9494         DG  #9494FF
-    72    77         LG  #FF9494         DG  #9494FF
-    74    36         LG  #FF9494         WH  #FFFFA5
-    75    35         LG  #FF9494         WH  #FFFFA5
-    77    89         LG  #FF9494         DG  #9494FF
-    78    34         LG  #FF9494         WH  #FFFFA5
-    78    81         LG  #FF9494         DG  #9494FF
-    78    89         LG  #FF9494         DG  #9494FF
-    79    77         LG  #FF9494         DG  #9494FF
-    80    85         LG  #FF9494         DG  #9494FF
-    81    79         LG  #FF9494         DG  #9494FF
-    82    28         LG  #FF9494         WH  #FFFFA5
-    82    85         LG  #FF9494         DG  #9494FF
-    83    85         LG  #FF9494         DG  #9494FF
-    84    85         LG  #FF9494         DG  #9494FF
-    85    82         LG  #FF9494         DG  #9494FF
-    92   120         DG  #9494FF         BK  #000000
-
-----------------------------------------------------------------------
-DIAGNOSTIC IMAGES  (in test-output\thing-1)
-----------------------------------------------------------------------
-  thing-1_diag_result.png     — pipeline output (colour palette)
-  thing-1_diag_reference.png  — reference image (colour palette)
-  thing-1_diag_side_by_side.png  — result (left) vs reference (right)
-  thing-1_diag_error_map.png  — white=correct, colours=error type
+  LG  #FF9494  ->  DG  #9494FF : 18 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14306  (99.79%)
-  Different    : 30   (0.21%)
-  BK  #000000                 1335        1336        -1
-  DG  #9494FF                 8610        8626       -16
-  LG  #FF9494                 2707        2690       +17
-  WH  #FFFFA5                 1684        1684        +0
+  Matching     : 14318  (99.87%)
+  Different    : 18   (0.13%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
 ======================================================================
-

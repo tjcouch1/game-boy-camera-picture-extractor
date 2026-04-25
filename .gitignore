@@ -219,3 +219,29 @@ test-output/**/*
 !test-output/**/*.log
 !test-output/**/*_gbcam.png
 !test-output/**/*_gbcam_rgb.png
+
+test-output-py/**/*
+!test-output-py/*/
+!test-output-py/**/*.log
+!test-output-py/**/*_gbcam.png
+!test-output-py/**/*_gbcam_rgb.png
+
+# Node
+node_modules/
+packages/*/dist/
+packages/*/dist-test/
+packages/*/dist-scripts/
+tsconfig.tsbuildinfo
+
+# pnpm
+.pnpm-store/
+
+# Claude superpowers plugin
+.superpowers/
+
+# Generated license files (gitignored but included in build)
+packages/gbcam-extract-web/public/licenses.html
+
+# Raw license data (gitignored and not included in build, for debugging only)
+packages/gbcam-extract-web/licenses.json
+packages/gbcam-extract-web/licenses-raw.json

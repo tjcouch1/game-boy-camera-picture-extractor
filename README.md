@@ -1,6 +1,6 @@
 # game-boy-camera-picture-extractor
 
-EXPERIMENTAL: Extracts and cleans a Game Boy Camera image from a picture
+EXPERIMENTAL: TypeScript library and offline-ready PWA that extract and clean Game Boy Camera images from pictures
 
 # Introduction
 
@@ -40,38 +40,130 @@ See `sample-pictures` for more examples of what the pictures need to look like.
 
 After processing, the output picture should look like the following:
 
-![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out/20260313_213430_gbcam.png)
+![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out-py/20260313_213430_gbcam.png)
 
-# Setup
+# Contents
+
+This repository is a pnpm monorepo that contains multiple packages in `/packages`:
+
+- `gbcam-extract` - TypeScript Game Boy Camera image processing pipeline
+- `gbcam-extract-web` - Static site hosting the TypeScript Game Boy Camera image processing pipeline for portable and offline use
+- `gbcam-extract-py` - original Python Game Boy Camera image processing pipeline (included for historical reasons but will not be updated)
+
+# TypeScript development instructions
+
+TODO: expand
+
+## TypeScript Setup
 
 ```bash
+pnpm i
+```
+
+If you get a message about "ignored build scripts" (`pnpm` seems to be having trouble seeing the build script approval for `esbuild`):
+
+```bash
+pnpm rebuild
+# or
+pnpm approve-builds #and select esbuild
+```
+
+## To build the TypeScript packages
+
+```bash
+pnpm build
+```
+
+## To run TypeScript tests
+
+```bash
+pnpm test
+pnpm test:pipeline
+```
+
+## To run the extraction pipeline locally in Node
+
+```bash
+pnpm extract --dir ../../sample-pictures --output-dir ../../sample-pictures-out --clean-steps
+```
+
+## To develop the website locally
+
+To run just on your computer:
+
+```bash
+pnpm dev
+```
+
+To run on your network:
+
+```bash
+pnpm dev:host
+```
+
+Note: these will enable hot reloading for the website code but not for the extraction pipeline. If you make changes to the extraction pipeline, re-run the script.
+
+## To build the website and host a production preview
+
+To run just on your computer:
+
+```bash
+pnpm preview
+```
+
+To run on your network:
+
+```bash
+pnpm preview:host
+```
+
+## To publish to GitHub Pages
+
+Create a PR merging `main` into `production` branch. Once this is merged, `deploy.yml` will automatically run and do the following:
+
+1. Publish the website to GitHub Pages
+2. Create a release in GitHub
+3. Bump the minor versions in the `package.json` files
+
+# Python development instructions
+
+## Python Setup
+
+```bash
+cd packages/gbcam-extract-py
 python -m venv .venv
+
 # Unix-based
 source .venv/bin/activate
 # Windows
 ./.venv/Scripts/activate
+
 pip install -r requirements.txt
 ```
 
-## To regenerate `requirements.txt`
+### To regenerate `requirements.txt`
+
+Inside `packages/gbcam-extract-py` after [activating the `.venv`](#python-setup):
 
 ```bash
 pip install pipreqs
 pipreqs . --ignore=.venv --encoding=utf8 --force
 ```
 
-# To run
+## To run the extraction pipeline locally in Python
+
+Inside `packages/gbcam-extract-py` after [activating the `.venv`](#python-setup):
 
 To generate the sample output pictures from the sample input pictures, run the script as follows:
 
 ```bash
-python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps
+python gbcam_extract.py --dir ../../sample-pictures --output-dir ../../sample-pictures-out-py --clean-steps
 ```
 
 To generate the sample images for each step for just one sample input picture, run the script as follows:
 
 ```bash
-python gbcam_extract.py sample-pictures/20260313_213430.jpg --output-dir ./sample-pictures-out
+python gbcam_extract.py ../../sample-pictures/20260313_213430.jpg --output-dir ../../sample-pictures-out-py
 ```
 
 The following command-line arguments are reasonably useful:
@@ -91,7 +183,9 @@ See the help information for additional details like usage examples (please note
 python gbcam_extract.py --help
 ```
 
-# To Test
+## To Test
+
+Inside `packages/gbcam-extract-py` after [activating the `.venv`](#python-setup):
 
 To run the full test suite that regenerates all the images checked into this repo, run the following:
 
@@ -102,11 +196,11 @@ python run_tests.py
 This will run commands like the following:
 
 ```bash
-python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
-python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
-python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
-python test_pipeline.py --input "test-input/thing-1.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-1 --keep-intermediates
-python test_pipeline.py --input "test-input/thing-2.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-2 --keep-intermediates
+python gbcam_extract.py --dir ../../sample-pictures --output-dir ../../sample-pictures-out-py --clean-steps --debug
+python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --reference "../../test-input/zelda-poster-output-corrected.png" --output-dir ../../test-output-py/zelda-poster-1 --keep-intermediates
+python test_pipeline.py --input "../../test-input/zelda-poster-2.jpg" --reference "../../test-input/zelda-poster-output-corrected.png" --output-dir ../../test-output-py/zelda-poster-2 --keep-intermediates
+python test_pipeline.py --input "../../test-input/thing-1.jpg" --reference "../../test-input/thing-output-corrected.png" --output-dir ../../test-output-py/thing-1 --keep-intermediates
+python test_pipeline.py --input "../../test-input/thing-2.jpg" --reference "../../test-input/thing-output-corrected.png" --output-dir ../../test-output-py/thing-2 --keep-intermediates
 ```
 
 To run a unit test to test the accuracy of the output, gather the following:
@@ -117,13 +211,27 @@ To run a unit test to test the accuracy of the output, gather the following:
 Then run the following:
 
 ```bash
-python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
+python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --reference "../../test-input/zelda-poster-output-corrected.png" --output-dir ../../test-output-py/zelda-poster-1 --keep-intermediates
 ```
+
+# Known issues
+
+- Conversion does not preserve the image with 100% accuracy
+- Unique palette name issues
+  - If you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists"
+  - Pasting the same new palette multiple times uses the same palette name incremented from the previous palette name
+- The progress bar does not display progress correctly.
+- PWA doesn't work properly and offline does not work
+- Images download at 2x scale and are not configurable to anything else
+- Debug mode in the website is completely untested
+- Copy/paste palette/palette colors is not working on mobile
 
 # Roadmap
 
+- Accuracy improvements
 - Initial crop from phone picture to cropped and rotated image that is input to "warp" step
-- Add color palette selection
-- WebAssembly
-- Make a GitHub Pages frontend
-- PWA for offline use
+- Add color palette selection (pipeline - already implemented in website)
+- Publish the GitHub Pages frontend
+  - Verify PWA works for offline use
+- Shadcn/ui
+- Credits page
