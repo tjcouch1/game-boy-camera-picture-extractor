@@ -1,6 +1,6 @@
 {
   "name": "gbcam-extract-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "TJ Couch",
   "license": "MIT",
   "description": "Static website and PWA that extracts and cleans Game Boy Camera images from pictures",
