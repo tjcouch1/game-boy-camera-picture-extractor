@@ -43,7 +43,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
   release:
-    needs: build
+    needs: deploy
     runs-on: ubuntu-latest
     permissions:
       contents: write

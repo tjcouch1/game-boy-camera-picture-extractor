@@ -2,6 +2,12 @@
 
 EXPERIMENTAL: TypeScript library and offline-ready PWA that extract and clean Game Boy Camera images from pictures
 
+# Try it now
+
+https://tjcouch1.github.io/game-boy-camera-picture-extractor/
+
+You can install the site as a PWA to use it offline - even on your phone.
+
 # Introduction
 
 WARNING: This script is not fully successful yet. Please back up your Game Boy Camera images in other ways before deleting them.
@@ -40,7 +46,7 @@ See `sample-pictures` for more examples of what the pictures need to look like.
 
 After processing, the output picture should look like the following:
 
-![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out-py/20260313_213430_gbcam.png)
+![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out/20260313_213430_gbcam.png)
 
 # Contents
 
@@ -217,21 +223,18 @@ python test_pipeline.py --input "../../test-input/zelda-poster-1.jpg" --referenc
 # Known issues
 
 - Conversion does not preserve the image with 100% accuracy
+- Output image is different on mobile vs on desktop using the same input image (means test results do not reflect accuracy on mobile)
 - Unique palette name issues
   - If you click "+ Custom" twice on the same selection to add two custom palettes that are in editing mode, they receive different names (different number at the end). But when you try to save one, the other displays "A palette with this name already exists"
   - Pasting the same new palette multiple times uses the same palette name incremented from the previous palette name
 - The progress bar does not display progress correctly.
-- PWA doesn't work properly and offline does not work
-- Images download at 2x scale and are not configurable to anything else
 - Debug mode in the website is completely untested
-- Copy/paste palette/palette colors is not working on mobile
 
 # Roadmap
 
+- Add instructions to the website
 - Accuracy improvements
+- Figure out output difference between mobile and desktop
 - Initial crop from phone picture to cropped and rotated image that is input to "warp" step
 - Add color palette selection (pipeline - already implemented in website)
-- Publish the GitHub Pages frontend
-  - Verify PWA works for offline use
 - Shadcn/ui
-- Credits page
