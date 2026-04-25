@@ -80,6 +80,19 @@ SUFFIX = STEP_SUFFIX["correct"]
 _TRUE_DARK  = 82
 _TRUE_WHITE = 255
 
+# Per-channel targets for the RGB palette (#9494FF dark-gray, #FFFFA5 white)
+# Only R and G are corrected; B is left uncorrected (gain would be inverted/tiny)
+_COLOR_TRUE_DARK_RG  = 148.0   # DG.R = DG.G = 148
+_COLOR_TRUE_WHITE_RG = 255.0   # WH.R = WH.G = 255
+
+# Warmth coefficients: per-channel (slope, bias) derived from a hand-edited reference.
+# Per-channel linear warmth transform derived from a hand-edited reference image
+# (thing-2.jpg edited to increase warmth until the palette colours matched their
+# intended appearance).  Fitted via least-squares on frame pixels:
+#   corrected_ch = _WARM_GAIN[ch] * raw_ch + _WARM_BIAS[ch]
+_WARM_GAIN = np.array([1.0856, 0.9861, 0.8784], dtype=np.float32)  # R,G,B
+_WARM_BIAS = np.array([24.85,  -3.54,  -28.24], dtype=np.float32)  # R,G,B
+
 
 # ─────────────────────────────────────────────────────────────
 # Reference sample collection
@@ -314,6 +327,523 @@ def _quick_sample(corrected, scale, h_margin=2, v_margin=1):
     return out
 
 
+def _quick_sample_color(corrected_rg, scale, h_margin=2, v_margin=1):
+    """
+    Fast inline sampling of the camera area from the per-channel corrected image.
+    Returns a (CAM_H, CAM_W, 2) float32 array of per-pixel (R, G) values.
+    corrected_rg is a (H, W, 2) float32 array with channels [R, G].
+    Uses subpixel-aware column ranges: R from right cols, G from middle cols.
+    """
+    # Channel 0 in corrected_rg is R (ch=0), channel 1 is G (ch=1)
+    r_lo, r_hi = _subpixel_col_range(0, scale)  # R = right columns
+    g_lo, g_hi = _subpixel_col_range(1, scale)  # G = middle columns
+    out = np.empty((CAM_H, CAM_W, 2), dtype=np.float32)
+    for gy in range(CAM_H):
+        y1 = (FRAME_THICK + gy) * scale + v_margin
+        y2 = (FRAME_THICK + gy + 1) * scale - v_margin
+        for gx in range(CAM_W):
+            x0 = (FRAME_THICK + gx) * scale
+            blk_r = corrected_rg[y1:y2, x0 + r_lo : x0 + r_hi, 0]
+            blk_g = corrected_rg[y1:y2, x0 + g_lo : x0 + g_hi, 1]
+            out[gy, gx, 0] = float(np.mean(blk_r)) if blk_r.size else 0.0
+            out[gy, gx, 1] = float(np.mean(blk_g)) if blk_g.size else 0.0
+    return out
+
+
+def _collect_border_dark_color(img_rgb, scale, dark_smooth, ch):
+    """
+    Return (border_y, border_x, border_v) arrays for the smoothed inner-border
+    dark-gray reference measurements for a single RGB channel (0=R, 1=G).
+    """
+    gy_range = range(INNER_TOP, INNER_BOT + 1)
+    gx_range = range(INNER_LEFT, INNER_RIGHT + 1)
+
+    col_lo, col_hi = _subpixel_col_range(ch, scale)
+    def smp(gy, gx):
+        x0 = gx * scale
+        block = img_rgb[gy*scale:(gy+1)*scale, x0 + col_lo : x0 + col_hi, ch]
+        return float(np.median(block)) if block.size > 0 else 0.0
+
+    left  = np.array([smp(gy, INNER_LEFT)  for gy in gy_range])
+    right = np.array([smp(gy, INNER_RIGHT) for gy in gy_range])
+    top   = np.array([smp(INNER_TOP, gx)   for gx in gx_range])
+    bot   = np.array([smp(INNER_BOT, gx)   for gx in gx_range])
+
+    ld = uniform_filter1d(left.astype(float),  size=dark_smooth, mode='nearest')
+    rd = uniform_filter1d(right.astype(float), size=dark_smooth, mode='nearest')
+    td = uniform_filter1d(top.astype(float),   size=dark_smooth, mode='nearest')
+    bd = uniform_filter1d(bot.astype(float),   size=dark_smooth, mode='nearest')
+
+    y_rows = np.array([gy*scale + scale//2 for gy in gy_range], dtype=float)
+    x_cols = np.array([gx*scale + scale//2 for gx in gx_range], dtype=float)
+
+    bdy, bdx, bdv = [], [], []
+    for i, _ in enumerate(gy_range):
+        bdy += [y_rows[i], y_rows[i]]
+        bdx += [x_cols[0], x_cols[-1]]
+        bdv += [ld[i], rd[i]]
+    for j, _ in enumerate(gx_range):
+        bdy += [y_rows[0], y_rows[-1]]
+        bdx += [x_cols[j], x_cols[j]]
+        bdv += [td[j], bd[j]]
+    return np.array(bdy), np.array(bdx), np.array(bdv)
+
+
+def _subpixel_col_range(ch, scale):
+    """Return (lo, hi) column offsets within a block for the given channel's subpixel.
+    BGR stripe layout: B=left, G=middle, R=right."""
+    inner_start = 1
+    inner_end = scale - 1
+    inner_w = inner_end - inner_start
+    third = inner_w // 3
+    if ch == 2:    # B — left columns
+        return inner_start, inner_start + third
+    elif ch == 1:  # G — middle columns
+        return inner_start + third, inner_start + 2 * third
+    else:          # R — right columns
+        return inner_start + 2 * third, inner_end
+
+
+def _gb_block_sample_ch_color(img_rgb, gy, gx, scale, ch, pct=50):
+    """Return the <pct>-th percentile of channel <ch> in the subpixel columns
+    of GB pixel block (gy, gx).  Uses subpixel-aware column ranges to match
+    what the sample step extracts."""
+    y1, y2 = gy * scale, (gy + 1) * scale
+    x0 = gx * scale
+    col_lo, col_hi = _subpixel_col_range(ch, scale)
+    block = img_rgb[y1:y2, x0 + col_lo : x0 + col_hi, ch]
+    return float(np.percentile(block, pct)) if block.size > 0 else 0.0
+
+
+def _sample_white_pixels_for_channel(img_rgb, scale, ch, frame_ascii=None, pct=85):
+    """
+    Sample white pixels from frame strips using frame_ascii for purity.
+    For frame pixels marked as yellow (space character), collect samples.
+    If frame_ascii is not available, fall back to the standard method.
+    """
+    if frame_ascii is None:
+        # Fall back to standard method
+        return None
+    
+    raw = []
+    # Sample only pixels in frame regions that are marked as yellow (colour index 0)
+    for gy in range(SCREEN_H):
+        for gx in range(SCREEN_W):
+            # Must be in frame region
+            if gy < FRAME_THICK or gy >= SCREEN_H - FRAME_THICK or \
+               gx < FRAME_THICK or gx >= SCREEN_W - FRAME_THICK:
+                # Must be marked as yellow in frame_ascii
+                if frame_ascii[gy][gx] == 0:  # 0 = yellow
+                    v = _gb_block_sample_ch_color(img_rgb, gy, gx, scale, ch, pct)
+                    raw.append((gy * scale + scale // 2, gx * scale + scale // 2, v))
+    
+    if not raw:
+        return None
+    
+    vals = np.array([v for _, _, v in raw])
+    med = float(np.median(vals))
+    kept = [(y, x, v) for y, x, v in raw if v > 0.75 * med]
+    
+    ys = [p[0] for p in kept]
+    xs = [p[1] for p in kept]
+    vs = [p[2] for p in kept]
+    return ys, xs, vs
+
+
+def collect_white_samples_ch_color(img_rgb, scale, ch, pct=85):
+    """
+    Collect (y_px, x_px, brightness) white-reference samples from the four
+    filmstrip frame strips for a single channel.  Mirrors collect_white_samples()
+    but operates on a float32 H×W×3 RGB array.
+    
+    IMPROVED: Only sample from the most stable central regions of each strip,
+    avoiding corners and edges where color distortion is worst.
+    """
+    raw = []
+
+    def _add_strip(gy_range, gx_range):
+        for gy in gy_range:
+            for gx in gx_range:
+                v = _gb_block_sample_ch_color(img_rgb, gy, gx, scale, ch, pct)
+                raw.append((gy * scale + scale // 2, gx * scale + scale // 2, v))
+
+    _add_strip(range(INNER_TOP),                    range(10, SCREEN_W - 10))
+    _add_strip(range(INNER_BOT + 1, SCREEN_H),      range(10, SCREEN_W - 10))
+    _add_strip(range(10, SCREEN_H - 10),             range(INNER_LEFT))
+    _add_strip(range(10, SCREEN_H - 10),             range(INNER_RIGHT + 1, SCREEN_W))
+
+    vals = np.array([v for _, _, v in raw])
+    med  = float(np.median(vals))
+    kept = [(y, x, v) for y, x, v in raw if v > 0.75 * med]
+    return [p[0] for p in kept], [p[1] for p in kept], [p[2] for p in kept]
+
+
+def _load_frame_ascii():
+    """Load frame_ascii.txt and return a 160×144 character grid."""
+    frame_path = Path('supporting-materials/frame_ascii.txt')
+    if not frame_path.exists():
+        return None
+    try:
+        with open(frame_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        lines = lines[:SCREEN_H]
+        frame = []
+        for line in lines:
+            row = []
+            for ch in line:
+                # Map unicode characters to internal representation
+                if ch == ' ':
+                    row.append(0)  # yellow/white
+                elif ch == '·':
+                    row.append(1)  # red/pink
+                elif ch == '▓':
+                    row.append(2)  # dark blue/purple
+                elif ch == '█':
+                    row.append(3)  # black
+                elif ch == '\n':
+                    break
+            while len(row) < SCREEN_W:
+                row.append(0)  # pad with yellow
+            frame.append(row[:SCREEN_W])
+        return frame
+    except Exception:
+        return None
+
+
+def _process_file_color(input_path, output_path, scale=8, poly_degree=2,
+                        dark_smooth=13, refine_passes=1,
+                        debug=False, debug_dir=None):
+    """
+    Colour-mode correction pipeline.
+
+    Three stages applied in sequence:
+
+    1. Per-channel spatial correction
+       Removes the front-light brightness gradient across the screen by fitting
+       a 2-D polynomial white surface to the filmstrip frame and normalising
+       every pixel against it.  The G channel additionally uses the inner
+       #9494FF border as a second (dark) anchor via a Coons bilinear patch
+       with an optional refinement pass using interior DG pixels.
+         R: white-surface normalisation -> target 255  (#FFFFA5.R)
+         G: Coons + polynomial, two anchors  -> target 255 / 148
+         B: white-surface normalisation -> target 165  (#FFFFA5.B)
+
+    2. Global colour normalisation
+       Measures the mean of the 85th-percentile block samples across all four
+       filmstrip frame strips (the solid yellow-white areas, ignoring dash
+       holes) and scales each channel globally so the frame matches EXACTLY
+       the target palette white colour (#FFFFA5 = R255 G255 B165).
+
+    3. Saves a colour BGR PNG and a sidecar JSON for downstream metadata.
+    """
+    from pathlib import Path as _Path
+    stem = _Path(input_path).stem
+    log(f"\n{'='*60}", always=True)
+    log(f"[correct/color] {input_path}", always=True)
+
+    bgr = cv2.imread(str(input_path))
+    if bgr is None:
+        raise RuntimeError(f"Cannot read image: {input_path}")
+    img_rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+    expected_w, expected_h = SCREEN_W * scale, SCREEN_H * scale
+    if img_rgb.shape[:2] != (expected_h, expected_w):
+        raise RuntimeError(
+            f"Unexpected input size {img_rgb.shape[1]}×{img_rgb.shape[0]}; "
+            f"expected {expected_w}×{expected_h}.")
+    H, W = img_rgb.shape[:2]
+    log(f"  Loaded {W}×{H} px (colour, scale={scale})")
+
+    # NOTE: Warmth pre-processing was already applied in the warp step.
+    # Do NOT apply it again here.
+
+    corrected_rgb = np.zeros((H, W, 3), dtype=np.float32)
+
+    # ── Stage 1a: R channel — Coons + polynomial, two anchors -> 255 / 148 ─────
+    # IMPROVED: Add dark anchor (DG border) to R channel, just like G channel.
+    # This gives R channel proper dynamic range calibration.
+    # Target: WH.R=255, DG.R=148
+    log("  R: Coons+poly -> 255 / 148")
+    # Try to use frame_ascii for purer white samples
+    frame_ascii = _load_frame_ascii()
+    wy_r, wx_r, wv_r = None, None, None
+    if frame_ascii is not None:
+        wy_r, wx_r, wv_r = _sample_white_pixels_for_channel(img_rgb, scale, 0, frame_ascii, pct=85)
+    if wy_r is None or len(wy_r) < 30:  # Fall back if not enough samples
+        wy_r, wx_r, wv_r = collect_white_samples_ch_color(img_rgb, scale, 0)
+    white_surf_R = fit_surface(wy_r, wx_r, wv_r, H, W, poly_degree)
+    obs_frame_R  = float(np.median(wv_r))
+
+    # Collect dark samples from DG inner border
+    left_r  = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_LEFT,  scale, 0)
+                         for gy in range(INNER_TOP, INNER_BOT + 1)])
+    right_r = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_RIGHT, scale, 0)
+                         for gy in range(INNER_TOP, INNER_BOT + 1)])
+    top_r   = np.array([_gb_block_sample_ch_color(img_rgb, INNER_TOP, gx, scale, 0)
+                         for gx in range(INNER_LEFT, INNER_RIGHT + 1)])
+    bot_r   = np.array([_gb_block_sample_ch_color(img_rgb, INNER_BOT, gx, scale, 0)
+                         for gx in range(INNER_LEFT, INNER_RIGHT + 1)])
+    dark_surf_R = build_dark_surface(left_r, right_r, top_r, bot_r, H, W, scale, dark_smooth)
+
+    # Two-anchor affine correction: DG.R=148, WH.R=255
+    span_R = np.maximum(white_surf_R - dark_surf_R, 5.0)
+    gain_R = (span_R / (255.0 - 148.0)).astype(np.float32)
+    off_R  = (dark_surf_R - gain_R * 148.0).astype(np.float32)
+    corr_R = np.clip((img_rgb[:, :, 0] - off_R) / gain_R, 0.0, 255.0).astype(np.float32)
+
+    # Refinement pass for R channel (same approach as G channel)
+    if refine_passes > 0:
+        border_y_r, border_x_r, border_v_r = _collect_border_dark_color(
+            img_rgb, scale, dark_smooth, 0)  # ch=0 for R
+        samp_R_approx = _quick_sample_color(
+            np.stack([corr_R, corr_R], axis=-1), scale)[:, :, 0]  # Just need R
+        # DG pixels have corrected R in [100, 196]
+        edge_margin = 3
+        dg_mask = (samp_R_approx >= 100.0) & (samp_R_approx <= 196.0)
+        cys, cxs = np.where(dg_mask)
+        valid = ((cys >= edge_margin) & (cys < CAM_H - edge_margin) &
+                (cxs >= edge_margin) & (cxs < CAM_W - edge_margin))
+        cys, cxs = cys[valid], cxs[valid]
+        n_cal = len(cys)
+        log(f"    R refinement: {n_cal} interior DG pixels")
+        if n_cal >= 50:
+            # Debug: print sample cal_v vs dark_surf_R at DG positions
+            r_lo, r_hi = _subpixel_col_range(0, scale)
+            sample_idxs = np.arange(0, min(n_cal, 20))
+            for i in sample_idxs[:5]:
+                gy, gx = cys[i], cxs[i]
+                py = (FRAME_THICK + gy) * scale + scale // 2
+                px = (FRAME_THICK + gx) * scale + scale // 2
+                raw_v = float(np.mean(img_rgb[(FRAME_THICK+gy)*scale:(FRAME_THICK+gy+1)*scale,
+                                               (FRAME_THICK+gx)*scale+r_lo:(FRAME_THICK+gx)*scale+r_hi, 0]))
+                coons_v = float(dark_surf_R[py, px])
+                corr_v = float(corr_R[py, px])
+                log(f"      DG[{gy},{gx}]: raw={raw_v:.1f} coons={coons_v:.1f} corr={corr_v:.1f}")
+            cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2 for gy in cys], float)
+            cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2 for gx in cxs], float)
+            cal_v = np.array([float(np.mean(img_rgb[(FRAME_THICK+gy)*scale:(FRAME_THICK+gy+1)*scale,
+                                                     (FRAME_THICK+gx)*scale+r_lo:(FRAME_THICK+gx)*scale+r_hi, 0]))
+                               for gy, gx in zip(cys, cxs)], float)
+            dark_surf_R2 = _fit_surface_poly(
+                np.concatenate([border_y_r, cal_y]),
+                np.concatenate([border_x_r, cal_x]),
+                np.concatenate([border_v_r, cal_v]),
+                H, W, degree=3)
+            dark_surf_R2 = np.maximum(dark_surf_R2, dark_surf_R)
+            # Blend near edges
+            blend_margin = 4 * scale
+            y_cam_start, y_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_H) * scale
+            x_cam_start, x_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_W) * scale
+            for y in range(H):
+                for x in range(W):
+                    if y_cam_start <= y < y_cam_end and x_cam_start <= x < x_cam_end:
+                        y_rel = y - y_cam_start
+                        x_rel = x - x_cam_start
+                        cam_h = y_cam_end - y_cam_start
+                        cam_w = x_cam_end - x_cam_start
+                        dist_to_edge = min(y_rel, cam_h - 1 - y_rel, x_rel, cam_w - 1 - x_rel)
+                        if dist_to_edge < blend_margin:
+                            blend_factor = dist_to_edge / blend_margin
+                            dark_surf_R2[y, x] = ((1 - blend_factor) * dark_surf_R[y, x] +
+                                                   blend_factor * dark_surf_R2[y, x])
+            span_R2 = np.maximum(white_surf_R - dark_surf_R2, 5.0)
+            gain_R2 = (span_R2 / (255.0 - 148.0)).astype(np.float32)
+            off_R2  = (dark_surf_R2 - gain_R2 * 148.0).astype(np.float32)
+            corr_R  = np.clip((img_rgb[:, :, 0] - off_R2) / gain_R2, 0.0, 255.0).astype(np.float32)
+
+    corrected_rgb[:, :, 0] = corr_R
+
+    # ── Stage 1b: G channel — Coons + polynomial, two anchors -> 255 / 148 ─────
+    log("  G: Coons+poly -> 255 / 148")
+    wy_g, wx_g, wv_g = None, None, None
+    if frame_ascii is not None:
+        wy_g, wx_g, wv_g = _sample_white_pixels_for_channel(img_rgb, scale, 1, frame_ascii, pct=85)
+    if wy_g is None or len(wy_g) < 30:  # Fall back if not enough samples
+        wy_g, wx_g, wv_g = collect_white_samples_ch_color(img_rgb, scale, 1)
+    white_surf_G = fit_surface(wy_g, wx_g, wv_g, H, W, poly_degree)
+    left_g  = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_LEFT,  scale, 1)
+                         for gy in range(INNER_TOP, INNER_BOT + 1)])
+    right_g = np.array([_gb_block_sample_ch_color(img_rgb, gy, INNER_RIGHT, scale, 1)
+                         for gy in range(INNER_TOP, INNER_BOT + 1)])
+    top_g   = np.array([_gb_block_sample_ch_color(img_rgb, INNER_TOP, gx, scale, 1)
+                         for gx in range(INNER_LEFT, INNER_RIGHT + 1)])
+    bot_g   = np.array([_gb_block_sample_ch_color(img_rgb, INNER_BOT, gx, scale, 1)
+                         for gx in range(INNER_LEFT, INNER_RIGHT + 1)])
+    dark_surf_G = build_dark_surface(left_g, right_g, top_g, bot_g, H, W, scale, dark_smooth)
+    span_G = np.maximum(white_surf_G - dark_surf_G, 5.0)
+    gain_G = (span_G / (255.0 - 148.0)).astype(np.float32)
+    off_G  = (dark_surf_G - gain_G * 148.0).astype(np.float32)
+    corr_G = np.clip((img_rgb[:, :, 1] - off_G) / gain_G, 0.0, 255.0).astype(np.float32)
+
+    if refine_passes > 0:
+        border_y_g, border_x_g, border_v_g = _collect_border_dark_color(
+            img_rgb, scale, dark_smooth, 1)
+        samp_G_approx = _quick_sample_color(
+            np.stack([corr_R, corr_G], axis=-1), scale)[:, :, 1]
+        # DG pixels have corrected G in [100, 196] — the range between BK (~0) and WH (~255).
+        # LG pixels also land in this range (LG.G ~ 148) but their contamination of the
+        # calibration surface is smaller than the benefit of the refinement pass.
+        # Exclude pixels within 3 GB pixels of the camera area edge to avoid edge artifacts
+        edge_margin = 3
+        dg_mask = (samp_G_approx >= 100.0) & (samp_G_approx <= 196.0)
+        cys, cxs = np.where(dg_mask)
+        # Filter out pixels near edges
+        valid = ((cys >= edge_margin) & (cys < CAM_H - edge_margin) &
+                 (cxs >= edge_margin) & (cxs < CAM_W - edge_margin))
+        cys, cxs = cys[valid], cxs[valid]
+        n_cal = len(cys)
+        log(f"    G refinement: {n_cal} interior DG pixels")
+        if n_cal >= 50:
+            g_lo, g_hi = _subpixel_col_range(1, scale)
+            cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2 for gy in cys], float)
+            cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2 for gx in cxs], float)
+            cal_v = np.array([float(np.mean(img_rgb[(FRAME_THICK+gy)*scale:(FRAME_THICK+gy+1)*scale,
+                                                     (FRAME_THICK+gx)*scale+g_lo:(FRAME_THICK+gx)*scale+g_hi, 1]))
+                               for gy, gx in zip(cys, cxs)], float)
+            dark_surf_G2 = _fit_surface_poly(
+                np.concatenate([border_y_g, cal_y]),
+                np.concatenate([border_x_g, cal_x]),
+                np.concatenate([border_v_g, cal_v]),
+                H, W, degree=3)
+            # Clamp: the refined surface must not go BELOW the initial Coons estimate.
+            # Interior DG calibration should only raise our knowledge of the dark floor,
+            # never lower it.  Without this, a degree-4 polynomial can overshoot downward
+            # in corner regions with sparse calibration, making bright pixels (LG/WH)
+            # appear to have anomalously high corrected G there.
+            dark_surf_G2 = np.maximum(dark_surf_G2, dark_surf_G)
+            # Near camera edges, blend toward the Coons estimate to reduce polynomial edge artifacts
+            blend_margin = 4 * scale  # 4 GB pixels worth of edge blending
+            y_cam_start, y_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_H) * scale
+            x_cam_start, x_cam_end = FRAME_THICK * scale, (FRAME_THICK + CAM_W) * scale
+            for y in range(H):
+                for x in range(W):
+                    if y_cam_start <= y < y_cam_end and x_cam_start <= x < x_cam_end:
+                        y_rel = y - y_cam_start
+                        x_rel = x - x_cam_start
+                        cam_h = y_cam_end - y_cam_start
+                        cam_w = x_cam_end - x_cam_start
+                        # Distance from nearest camera edge
+                        dist_to_edge = min(y_rel, cam_h - 1 - y_rel, x_rel, cam_w - 1 - x_rel)
+                        if dist_to_edge < blend_margin:
+                            # Blend from Coons (at edge) to refined (at blend_margin)
+                            blend_factor = dist_to_edge / blend_margin
+                            dark_surf_G2[y, x] = ((1 - blend_factor) * dark_surf_G[y, x] +
+                                                   blend_factor * dark_surf_G2[y, x])
+            span_G2 = np.maximum(white_surf_G - dark_surf_G2, 5.0)
+            gain_G2 = (span_G2 / (255.0 - 148.0)).astype(np.float32)
+            off_G2  = (dark_surf_G2 - gain_G2 * 148.0).astype(np.float32)
+            corr_G  = np.clip((img_rgb[:, :, 1] - off_G2) / gain_G2, 0.0, 255.0).astype(np.float32)
+
+    corrected_rgb[:, :, 1] = corr_G
+
+    # ── Stage 1c: B channel — white-surface normalisation -> 165 ───────────────
+    # Target WH.B = 165 (#FFFFA5 is warm yellow, not pure white).
+    # After warmth correction, the frame and DG border B are both near saturation,
+    # leaving almost no span for reliable two-anchor correction. We normalize the
+    # white frame to B=165 (not 255), and skip global B scaling in Stage 2.
+    # This gives us:
+    #   - WH frame: B ≈ 165 (correct)
+    #   - DG pixels: B ≈ 150-160 (lower than target 255, but acceptable)
+    #   - LG pixels: B ≈ 140-150 (close to target 148)
+    #   - BK pixels: B ≈ 50-100 (closer to target 0)
+    log("  B: white-surface normalisation -> 165 (no global scaling)")
+    wy_b, wx_b, wv_b = None, None, None
+    if frame_ascii is not None:
+        wy_b, wx_b, wv_b = _sample_white_pixels_for_channel(img_rgb, scale, 2, frame_ascii, pct=85)
+    if wy_b is None or len(wy_b) < 30:  # Fall back if not enough samples
+        wy_b, wx_b, wv_b = collect_white_samples_ch_color(img_rgb, scale, 2)
+    white_surf_B = fit_surface(wy_b, wx_b, wv_b, H, W, poly_degree)
+    corr_B = np.clip(img_rgb[:, :, 2] * (165.0 / np.maximum(white_surf_B, 5.0)),
+                     0.0, 255.0).astype(np.float32)
+    corrected_rgb[:, :, 2] = corr_B
+
+    # Store for debug visualization
+    dark_surf_B = white_surf_B
+
+    # ── Stage 2: Global colour normalisation — frame -> exactly #FFFFA5 ─────────
+    # After the per-channel spatial corrections the frame should be approximately
+    # (255, 255, 165), but polynomial fit residuals leave a small offset.
+    # Measuring the p85 of each frame-strip block and scaling globally makes the
+    # frame flat #FFFFA5 by construction, which the sample step can then use as
+    # an absolute colour reference.
+    # EXCEPTION: B channel is NOT scaled in Stage 2, because DG.B (255) > WH.B (165),
+    # and we need to preserve DG at 255 rather than forcing frame to exactly 165.
+    _TARGET_FRAME = np.array([255.0, 255.0, 165.0])  # #FFFFA5
+    global_scales = np.ones(3, dtype=np.float32)
+    frame_p85 = np.zeros(3, dtype=np.float32)
+    for ch in range(3):
+        vals = []
+        for gy in range(INNER_TOP):
+            for gx in range(10, SCREEN_W - 10):
+                blk = corrected_rgb[gy*scale:(gy+1)*scale, gx*scale:(gx+1)*scale, ch]
+                if blk.size > 0:
+                    vals.append(float(np.percentile(blk, 85)))
+        if vals:
+            arr = np.array(vals)
+            med = float(np.median(arr))
+            arr = arr[arr > 0.5 * med]  # reject outliers (dark dashes)
+            frame_p85[ch] = float(np.median(arr)) if arr.size else med
+        # Skip B channel global scaling (ch==2) to preserve DG.B=255
+        if frame_p85[ch] > 10.0 and ch != 2:
+            global_scales[ch] = _TARGET_FRAME[ch] / frame_p85[ch]
+            corrected_rgb[:, :, ch] = np.clip(
+                corrected_rgb[:, :, ch] * global_scales[ch], 0, 255)
+
+    log(f"  Frame p85 before norm: R={frame_p85[0]:.0f} G={frame_p85[1]:.0f} B={frame_p85[2]:.0f}")
+    log(f"  Global scales: R={global_scales[0]:.4f} G={global_scales[1]:.4f} B={global_scales[2]:.4f}")
+
+    # Observed border R (for downstream k-means seeding)
+    obs_border_R = float(np.median(
+        [_gb_block_sample_ch_color(img_rgb, gy, gx_b, scale, 0)
+         for gy in range(INNER_TOP, INNER_BOT + 1)
+         for gx_b in (INNER_LEFT, INNER_RIGHT)] +
+        [_gb_block_sample_ch_color(img_rgb, gy_b, gx, scale, 0)
+         for gx in range(INNER_LEFT, INNER_RIGHT + 1)
+         for gy_b in (INNER_TOP, INNER_BOT)]))
+
+    out_bgr = cv2.cvtColor(np.clip(corrected_rgb, 0, 255).astype(np.uint8),
+                            cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(output_path), out_bgr)
+    log(f"  Saved -> {output_path}  (colour, frame normalised to #FFFFA5)", always=True)
+
+    # Verify: sample the camera area and check inner border
+    cam_rgb = corrected_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
+                            FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale, :]
+    log(f"  Camera area mean: R={cam_rgb[:,:,0].mean():.1f} G={cam_rgb[:,:,1].mean():.1f} B={cam_rgb[:,:,2].mean():.1f}")
+
+    # ── Debug images ─────────────────────────────────────────────────────────
+    if debug and debug_dir and stem:
+        # a: Side-by-side before/after (camera area only)
+        orig_cam = img_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
+                           FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale, :]
+        corr_cam = corrected_rgb[FRAME_THICK*scale:(FRAME_THICK+CAM_H)*scale,
+                                 FRAME_THICK*scale:(FRAME_THICK+CAM_W)*scale, :]
+        side_bgr = cv2.cvtColor(
+            np.hstack([np.clip(orig_cam,0,255).astype(np.uint8),
+                       np.clip(corr_cam,0,255).astype(np.uint8)]),
+            cv2.COLOR_RGB2BGR)
+        save_debug(side_bgr, debug_dir, stem, "correct_color_a_before_after")
+        # b: Correction surface as false-colour heatmap (warm=high, cool=low) in BGR
+        # Note: B channel uses dark_surf_B (DG border) instead of white_surf_B
+        ws_avg = (white_surf_R + white_surf_G + dark_surf_B) / 3.0
+        ws_norm = np.clip((ws_avg - ws_avg.min()) / max(ws_avg.max() - ws_avg.min(), 1) * 255,
+                          0, 255).astype(np.uint8)
+        ws_heatmap = cv2.applyColorMap(ws_norm, cv2.COLORMAP_JET)
+        save_debug(ws_heatmap, debug_dir, stem, "correct_color_b_white_surf_heatmap")
+        # c: Full corrected image
+        save_debug(out_bgr, debug_dir, stem, "correct_color_c_full")
+
+    # Sidecar JSON
+    import json as _json
+    meta_path = _Path(output_path).with_suffix('.json')
+    _json.dump({"obs_frame_R": obs_frame_R, "obs_border_R": obs_border_R,
+                "frame_p85_R": float(frame_p85[0]),
+                "frame_p85_G": float(frame_p85[1]),
+                "frame_p85_B": float(frame_p85[2])},
+               open(str(meta_path), 'w'))
+    log(f"  Metadata -> {meta_path}")
+
+
 def _fit_surface_poly(ys, xs, vals, H, W, degree=4):
     """
     Fit a bivariate polynomial of the given degree to scatter points (ys, xs, vals)
@@ -367,165 +897,12 @@ def _collect_border_dark(gray, scale, dark_smooth):
 # ─────────────────────────────────────────────────────────────
 
 def process_file(input_path, output_path, scale=8, poly_degree=2,
-                 dark_smooth=13, refine_passes=1, debug=False, debug_dir=None):
-    """
-    Compute brightness-corrected output for a single warp-step image.
-
-    Parameters
-    ----------
-    input_path : str or Path
-        Path to the <stem>_warp.png from the warp step.
-    output_path : str or Path
-        Destination for the corrected image.
-    scale : int
-        Pixels per GB pixel; must match the warp step.
-    poly_degree : int
-        Degree of the bivariate polynomial used for the white reference surface.
-    dark_smooth : int
-        Smoothing window (GB pixels) applied to each inner-border curve before
-        building the initial Coons patch dark surface.
-    refine_passes : int
-        Number of refinement passes after the initial Coons correction.
-        Each pass collects confident dark-gray interior pixels from the previous
-        corrected image, uses their warp-centre brightness as additional calibration
-        points, and re-fits the dark surface with a degree-4 polynomial over the
-        combined border + interior dataset.
-        Default: 1 (one refinement pass after initial Coons patch).
-        Set to 0 to disable and use only the Coons patch.
-    """
-    stem = Path(input_path).stem
-    log(f"\n{'='*60}", always=True)
-    log(f"[correct] {input_path}", always=True)
-
-    gray = cv2.imread(str(input_path), cv2.IMREAD_GRAYSCALE)
-    if gray is None:
-        raise RuntimeError(f"Cannot read image: {input_path}")
-
-    expected_w, expected_h = SCREEN_W * scale, SCREEN_H * scale
-    if gray.shape != (expected_h, expected_w):
-        raise RuntimeError(
-            f"Unexpected input size {gray.shape[1]}×{gray.shape[0]}; "
-            f"expected {expected_w}×{expected_h}. "
-            f"Did you pass a warp-step output with the correct --scale?")
-    H, W = gray.shape
-    log(f"  Loaded {W}×{H} px (scale={scale})")
-
-    log(f"  Collecting reference samples (white poly degree={poly_degree}, dark smooth_k={dark_smooth})…")
-    wy, wx, wv             = collect_white_samples(gray, scale)
-    left, right, top, bot  = collect_dark_samples(gray, scale)
-
-    log("  Fitting brightness surfaces…")
-    white_surf = fit_surface(wy, wx, wv, H, W, poly_degree)
-    dark_surf  = build_dark_surface(left, right, top, bot, H, W, scale, dark_smooth)
-
-    # Log corner values of each surface for sanity
-    corners = [(0, 0), (0, W-1), (H-1, 0), (H-1, W-1)]
-    for r, c in corners:
-        log(f"    ({r:4d},{c:4d}): white={white_surf[r,c]:.1f}  dark={dark_surf[r,c]:.1f}")
-
-    def _apply_correction(ds):
-        span   = np.maximum(white_surf - ds, 5.0)
-        gain   = (span / (_TRUE_WHITE - _TRUE_DARK)).astype(np.float32)
-        offset = (ds - gain * _TRUE_DARK).astype(np.float32)
-        return np.clip(np.round((gray.astype(np.float32) - offset) / gain),
-                       0, 255).astype(np.uint8)
-
-    log("  Applying per-pixel affine correction (pass 1 — Coons patch dark surface)…")
-    corrected = _apply_correction(dark_surf)
-
-    # ── Iterative refinement passes ──────────────────────────────
-    if refine_passes > 0:
-        border_y, border_x, border_v = _collect_border_dark(gray, scale, dark_smooth)
-        for pass_n in range(1, refine_passes + 1):
-            # Lightweight inline sample of the current corrected image
-            sample_approx = _quick_sample(corrected, scale, h_margin=2, v_margin=1)
-
-            # Collect confident dark-gray interior pixels as additional calibration.
-            # These pixels have sample value in [60, 110] — well above the noise floor
-            # (~4) and the black/dg boundary (~40) yet below the dg/lg boundary (~120).
-            # Their warp-centre brightness directly measures dark_surf at that location.
-            _DG_SMIN, _DG_SMAX = 60, 110
-            # Rough classify: below midpoint → black, in DG band → candidate
-            rough_thresh = 42.0
-            dg_mask = (sample_approx >= _DG_SMIN) & (sample_approx <= _DG_SMAX)
-            cys, cxs = np.where(dg_mask)
-            n_cal = len(cys)
-            log(f"  Refinement pass {pass_n}: {n_cal} interior dark-gray calibration pixels…")
-
-            if n_cal < 50:
-                log(f"    Too few calibration pixels — skipping further refinement.")
-                break
-
-            cal_y = np.array([(FRAME_THICK + gy) * scale + scale // 2
-                               for gy, gx in zip(cys, cxs)], dtype=float)
-            cal_x = np.array([(FRAME_THICK + gx) * scale + scale // 2
-                               for gy, gx in zip(cys, cxs)], dtype=float)
-            cal_v = np.array([float(gray[(FRAME_THICK + gy) * scale + scale // 2,
-                                         (FRAME_THICK + gx) * scale + scale // 2])
-                               for gy, gx in zip(cys, cxs)], dtype=float)
-
-            # Fit degree-4 polynomial to border + interior calibration
-            all_y = np.concatenate([border_y, cal_y])
-            all_x = np.concatenate([border_x, cal_x])
-            all_v = np.concatenate([border_v, cal_v])
-            dark_surf_ref = _fit_surface_poly(all_y, all_x, all_v, H, W, degree=4)
-            log(f"    Dark surface refined — corner delta: "
-                + ", ".join(f"({r},{c}): {dark_surf_ref[r,c]-dark_surf[r,c]:+.1f}"
-                            for r, c in corners))
-            dark_surf = dark_surf_ref
-            corrected = _apply_correction(dark_surf)
-
-    # Validation: inner border mean after correction should be near 82
-    cam_y1 = FRAME_THICK * scale;  cam_y2 = (FRAME_THICK + CAM_H) * scale
-    cam_x1 = FRAME_THICK * scale;  cam_x2 = (FRAME_THICK + CAM_W) * scale
-    lc1, lc2 = INNER_LEFT * scale, (INNER_LEFT + 1) * scale
-    rc1, rc2 = INNER_RIGHT * scale, (INNER_RIGHT + 1) * scale
-    tc1, tc2 = INNER_TOP * scale, (INNER_TOP + 1) * scale
-    bc1, bc2 = INNER_BOT * scale, (INNER_BOT + 1) * scale
-
-    orig_bdr = np.concatenate([
-        gray[cam_y1:cam_y2, lc1:lc2].ravel().astype(float),
-        gray[cam_y1:cam_y2, rc1:rc2].ravel().astype(float),
-        gray[tc1:tc2, cam_x1:cam_x2].ravel().astype(float),
-        gray[bc1:bc2, cam_x1:cam_x2].ravel().astype(float),
-    ])
-    corr_bdr = np.concatenate([
-        corrected[cam_y1:cam_y2, lc1:lc2].ravel().astype(float),
-        corrected[cam_y1:cam_y2, rc1:rc2].ravel().astype(float),
-        corrected[tc1:tc2, cam_x1:cam_x2].ravel().astype(float),
-        corrected[bc1:bc2, cam_x1:cam_x2].ravel().astype(float),
-    ])
-    log(f"  Inner border (#525252 ref, target=82): "
-        f"before mean={orig_bdr.mean():.1f} (err={orig_bdr.mean()-82:.1f}), "
-        f"after mean={corr_bdr.mean():.1f} (err={corr_bdr.mean()-82:.1f}) "
-        f"({'improved' if abs(corr_bdr.mean()-82) < abs(orig_bdr.mean()-82) else 'check'})")
-
-    cv2.imwrite(str(output_path), corrected)
-    log(f"  Saved → {output_path}", always=True)
-
-    if debug and debug_dir and stem:
-        # Gain map: recompute for visualisation only
-        _span = np.maximum(white_surf - dark_surf, 5.0)
-        _gain = (_span / (_TRUE_WHITE - _TRUE_DARK)).astype(np.float32)
-        g_min, g_max = _gain.min(), _gain.max()
-        gain_vis = ((_gain - g_min) / max(g_max - g_min, 1e-6) * 255).astype(np.uint8)
-        save_debug(gain_vis, debug_dir, stem, "correct_a_gain_map")
-
-        # Side-by-side camera area: original left, corrected right
-        orig_cam = gray[cam_y1:cam_y2, cam_x1:cam_x2]
-        corr_cam = corrected[cam_y1:cam_y2, cam_x1:cam_x2]
-        save_debug(np.hstack([orig_cam, corr_cam]), debug_dir, stem, "correct_b_before_after")
-
-        # White surface visualised
-        ws_vis = np.clip(white_surf, 0, 255).astype(np.uint8)
-        save_debug(ws_vis, debug_dir, stem, "correct_c_white_surface")
-
-        # Dark surface visualised
-        ds_vis = np.clip(dark_surf, 0, 255).astype(np.uint8)
-        save_debug(ds_vis, debug_dir, stem, "correct_d_dark_surface")
-
-        # Full corrected image
-        save_debug(corrected, debug_dir, stem, "correct_e_full")
+                 dark_smooth=13, refine_passes=1,
+                 debug=False, debug_dir=None):
+    _process_file_color(input_path, output_path, scale=scale,
+                        poly_degree=poly_degree, dark_smooth=dark_smooth,
+                        refine_passes=refine_passes,
+                        debug=debug, debug_dir=debug_dir)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -567,9 +944,9 @@ def main():
                              "polynomial. Default: 1 (one pass). Set to 0 for Coons-only.")
     parser.add_argument("--debug", action="store_true",
                         help="Enable verbose logging and save diagnostic images: "
-                             "correct_a_gain_map, correct_b_before_after, "
-                             "correct_c_white_surface, correct_d_dark_surface, "
-                             "correct_e_full. All saved to <output-dir>/debug/.")
+                             "correct_color_a_before_after, "
+                             "correct_color_b_white_surf_heatmap, "
+                             "correct_color_c_full. All saved to <output-dir>/debug/.")
     args = parser.parse_args()
 
     set_verbose(args.debug)

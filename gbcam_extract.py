@@ -58,7 +58,7 @@ def _build_help():
             "and pixel-gap/bleeding artifacts — this pipeline corrects all of them."
         ),
         "",
-        "PIPELINE STEPS  (run in order: warp → crop → sample → quantize)",
+        "PIPELINE STEPS  (run in order: warp -> crop -> sample -> quantize)",
         rule(),
     ]
 
@@ -293,14 +293,8 @@ def run_pipeline(input_files, output_dir,
 
                 if not is_final:
                     intermediates.append(out_path)
-                    if step_name == "sample":
-                        # The sample step also writes auxiliary stat images used
-                        # by the quantize step's spatial smoother.  Track them so
-                        # --clean-steps removes / moves them along with the main
-                        # sample output.
-                        sp = Path(out_path)
-                        intermediates.append(str(sp.parent / (sp.stem + "_med" + sp.suffix)))
-                        intermediates.append(str(sp.parent / (sp.stem + "_zc"  + sp.suffix)))
+                    if step_name == "correct":
+                        intermediates.append(str(Path(out_path).with_suffix(".json")))
                 current_file = out_path
 
         except Exception as exc:
@@ -541,7 +535,7 @@ def main():
                   file=sys.stderr)
         sys.exit(1)
 
-    active_steps = " → ".join(STEP_ORDER[start_idx : end_idx + 1])
+    active_steps = " -> ".join(STEP_ORDER[start_idx : end_idx + 1])
     print(f"Pipeline: {active_steps}  |  scale={args.scale}  |  "
           f"{len(input_files)} input file(s)")
 

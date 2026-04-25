@@ -22,8 +22,8 @@ Though I didn't try any other hardware, I expect other hardware like moderate-qu
 
 I performed the following steps to get the pictures the way they need to be to work with this script:
 
-1. Find a very dark room.
-2. Turn on the Game Boy Advance SP. Make sure the frontlight is turned on. While it boots up, hold B+Left to use the [Grayscale Game Boy Color palette](https://tcrf.net/Notes:Game_Boy_Color_Bootstrap_ROM#Assigned_Palette_Configurations).
+1. Find a very dark room (ideally; the script aims to work with various lighting environments).
+2. Turn on the Game Boy Advance SP. Make sure the frontlight is turned on. While it boots up, hold Down to use the [0x17 Game Boy Color palette](https://tcrf.net/Notes:Game_Boy_Color_Bootstrap_ROM#Assigned_Palette_Configurations).
 3. In the Game Boy Camera game, navigate through the menu options to view the album.
 4. Select an image. Once you select it, change the frame to [Frame 02](https://tcrf.net/images/5/50/GBCamera-Frame02-INT.png) (white with black dashes):
 
@@ -34,13 +34,13 @@ I performed the following steps to get the pictures the way they need to be to w
 
 The picture should look like the following:
 
-![Sample picture ready for processing](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures/20260216_130838~2.jpg)
+![Sample picture ready for processing](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures/20260313_213430.jpg)
 
 See `sample-pictures` for more examples of what the pictures need to look like.
 
 After processing, the output picture should look like the following:
 
-![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out/20260216_130838~2_gbcam.png)
+![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out/20260313_213430_gbcam.png)
 
 # Setup
 
@@ -71,7 +71,7 @@ python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out
 To generate the sample images for each step for just one sample input picture, run the script as follows:
 
 ```bash
-python gbcam_extract.py sample-pictures/20260216_130838~2.jpg --output-dir ./sample-pictures-out
+python gbcam_extract.py sample-pictures/20260313_213430.jpg --output-dir ./sample-pictures-out
 ```
 
 The following command-line arguments are reasonably useful:
@@ -93,6 +93,22 @@ python gbcam_extract.py --help
 
 # To Test
 
+To run the full test suite that regenerates all the images checked into this repo, run the following:
+
+```bash
+python run_tests.py
+```
+
+This will run commands like the following:
+
+```bash
+python gbcam_extract.py --dir sample-pictures --output-dir ./sample-pictures-out --clean-steps --debug
+python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
+python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
+python test_pipeline.py --input "test-input/thing-1.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-1 --keep-intermediates
+python test_pipeline.py --input "test-input/thing-2.jpg" --reference "test-input/thing-output-corrected.png" --output-dir ./test-output/thing-2 --keep-intermediates
+```
+
 To run a unit test to test the accuracy of the output, gather the following:
 
 - Input image: an input picture of a Game Boy Camera picture [as described above](#taking-pictures-that-work-with-this-script) (e.g. `test-input/zelda-poster-1.jpg`)
@@ -102,12 +118,12 @@ Then run the following:
 
 ```bash
 python test_pipeline.py --input "test-input/zelda-poster-1.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-1 --keep-intermediates
-python test_pipeline.py --input "test-input/zelda-poster-2.jpg" --reference "test-input/zelda-poster-output-corrected.png" --output-dir ./test-output/zelda-poster-2 --keep-intermediates
 ```
 
 # Roadmap
 
-- Adjust parameters to find the best settings and make them default
-  - Hand-edit an existing image to be correct, then make unit test and have the AI run it until it matches?
 - Initial crop from phone picture to cropped and rotated image that is input to "warp" step
 - Add color palette selection
+- WebAssembly
+- Make a GitHub Pages frontend
+- PWA for offline use

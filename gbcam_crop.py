@@ -42,14 +42,18 @@ from gbcam_common import (
 SUFFIX = STEP_SUFFIX["crop"]
 
 
-def process_file(input_path, output_path, scale=8, debug=False, debug_dir=None):
+def process_file(input_path, output_path, scale=8,
+                 debug=False, debug_dir=None):
     stem = Path(input_path).stem
     log(f"\n{'='*60}", always=True)
     log(f"[crop] {input_path}", always=True)
 
-    gray = cv2.imread(str(input_path), cv2.IMREAD_GRAYSCALE)
-    if gray is None:
+    raw = cv2.imread(str(input_path))
+    if raw is None:
         raise RuntimeError(f"Cannot read image: {input_path}")
+
+    # Use grayscale for geometry / validation; preserve colour for the crop output
+    gray = cv2.cvtColor(raw, cv2.COLOR_BGR2GRAY)
 
     expected_w, expected_h = SCREEN_W * scale, SCREEN_H * scale
     if gray.shape != (expected_h, expected_w):
@@ -61,7 +65,7 @@ def process_file(input_path, output_path, scale=8, debug=False, debug_dir=None):
 
     y1, x1 = FRAME_THICK * scale, FRAME_THICK * scale
     y2, x2 = y1 + CAM_H * scale, x1 + CAM_W * scale
-    log(f"  Camera region: ({x1},{y1}) → ({x2},{y2})  "
+    log(f"  Camera region: ({x1},{y1}) -> ({x2},{y2})  "
         f"= {x2-x1}×{y2-y1} px  ({CAM_W}×{CAM_H} GB pixels)")
 
     # Validate: the inner border band just outside the crop should be darker
@@ -78,17 +82,18 @@ def process_file(input_path, output_path, scale=8, debug=False, debug_dir=None):
         f"white frame mean={white_mean:.1f} "
         f"({'OK' if ok else 'WARNING — border not clearly darker than frame'})")
 
-    crop = gray[y1:y2, x1:x2]
+    # Crop: preserve colour channels if present
+    crop = raw[y1:y2, x1:x2]   # BGR or grayscale-as-BGR, same slice either way
 
     if debug and debug_dir and stem:
-        dbg = cv2.cvtColor(gray.copy(), cv2.COLOR_GRAY2BGR)
+        dbg = raw.copy()
         cv2.rectangle(dbg, (x1, y1), (x2, y2), (0, 200, 0), 3)
         cv2.rectangle(dbg, (x1 - scale, y1 - scale),
                       (x2 + scale, y2 + scale), (0, 100, 255), scale)
         save_debug(dbg, debug_dir, stem, "crop_a_region")
 
     cv2.imwrite(str(output_path), crop)
-    log(f"  Saved → {output_path}  ({crop.shape[1]}×{crop.shape[0]} px)", always=True)
+    log(f"  Saved -> {output_path}  ({crop.shape[1]}×{crop.shape[0]} px)", always=True)
 
 
 def main():
