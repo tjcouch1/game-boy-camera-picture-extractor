@@ -1,6 +1,6 @@
 # game-boy-camera-picture-extractor
 
-EXPERIMENTAL: Extracts and cleans a Game Boy Camera image from a picture
+EXPERIMENTAL: TypeScript library and offline-ready PWA that extract and clean Game Boy Camera images from pictures
 
 # Introduction
 
@@ -119,9 +119,11 @@ pnpm preview:host
 
 ## To publish to GitHub Pages
 
-1. Create a PR merging changes into `production` branch (once merge, will run `deploy.yml`)
+Create a PR merging `main` into `production` branch. Once this is merged, `deploy.yml` will automatically run and do the following:
+
+1. Publish the website to GitHub Pages
 2. Create a release in GitHub
-3. Bump the versions in the `package.json` files
+3. Bump the minor versions in the `package.json` files
 
 # Python development instructions
 

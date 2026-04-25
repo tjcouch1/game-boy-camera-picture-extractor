@@ -18,10 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/get-volta-node-version
+        id: volta
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ steps.volta.outputs.node-version }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter gbcam-extract build
@@ -39,3 +41,110 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/get-volta-node-version
+        id: volta
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.volta.outputs.node-version }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter gbcam-extract build
+      - run: pnpm --filter gbcam-extract-web build
+
+      # Get version from gbcam-extract-web package.json
+      - id: version
+        run: |
+          VERSION=$(node -e "console.log(require('./packages/gbcam-extract-web/package.json').version)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # Zip the dist folder
+      - run: cd packages/gbcam-extract-web && zip -r gbcam-extract-static-site-v${{ steps.version.outputs.version }}.zip dist
+
+      # Create release
+      - uses: softprops/action-gh-release@v3.0.0
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          body_path: .github/assets/release-body.md
+          files: packages/gbcam-extract-web/gbcam-extract-static-site-v${{ steps.version.outputs.version }}.zip
+          target_commitish: production
+          generate_release_notes: true
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  version-bump:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: ./.github/actions/get-volta-node-version
+        id: volta
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.volta.outputs.node-version }}
+
+      # Get current versions
+      - id: current-version
+        run: |
+          EXTRACT_VERSION=$(node -e "console.log(require('./packages/gbcam-extract/package.json').version)")
+          WEB_VERSION=$(node -e "console.log(require('./packages/gbcam-extract-web/package.json').version)")
+          echo "extract-version=$EXTRACT_VERSION" >> $GITHUB_OUTPUT
+          echo "web-version=$WEB_VERSION" >> $GITHUB_OUTPUT
+
+      # Bump minor version (set patch to 0)
+      - id: bumped-version
+        run: |
+          EXTRACT_VERSION="${{ steps.current-version.outputs.extract-version }}"
+          WEB_VERSION="${{ steps.current-version.outputs.web-version }}"
+
+          # Parse and bump minor version
+          IFS='.' read -r major minor patch <<< "$EXTRACT_VERSION"
+          NEW_EXTRACT_VERSION="$major.$((minor + 1)).0"
+
+          IFS='.' read -r major minor patch <<< "$WEB_VERSION"
+          NEW_WEB_VERSION="$major.$((minor + 1)).0"
+
+          echo "extract-version=$NEW_EXTRACT_VERSION" >> $GITHUB_OUTPUT
+          echo "web-version=$NEW_WEB_VERSION" >> $GITHUB_OUTPUT
+
+      # Update gbcam-extract package.json
+      - run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = require('./packages/gbcam-extract/package.json');
+            pkg.version = '${{ steps.bumped-version.outputs.extract-version }}';
+            fs.writeFileSync('./packages/gbcam-extract/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      # Update gbcam-extract-web package.json
+      - run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = require('./packages/gbcam-extract-web/package.json');
+            pkg.version = '${{ steps.bumped-version.outputs.web-version }}';
+            fs.writeFileSync('./packages/gbcam-extract-web/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      # Commit and push
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/gbcam-extract/package.json packages/gbcam-extract-web/package.json
+          git commit -m "Bump versions: gbcam-extract to ${{ steps.bumped-version.outputs.extract-version }}, gbcam-extract-web to ${{ steps.bumped-version.outputs.web-version }}"
+          git push
