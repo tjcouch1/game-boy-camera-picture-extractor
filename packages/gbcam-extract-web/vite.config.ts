@@ -12,7 +12,7 @@ export default defineConfig({
       includeAssets: ["opencv.js"],
       manifest: false,
       workbox: {
-        globPatterns: ["**/*.{js,css,html,wasm}"],
+        globPatterns: ["**/*.{js,css,html,wasm,png,svg,json}"],
         maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
         runtimeCaching: [
           {
