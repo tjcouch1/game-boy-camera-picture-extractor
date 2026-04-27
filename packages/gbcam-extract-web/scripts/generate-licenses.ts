@@ -186,8 +186,8 @@ function generateHtmlLicensesPage(
   augmentedLicenses: Record<string, AugmentedLicense>,
 ): string {
   // Convert to array and sort by package name
-  const licenseArray = Object.entries(augmentedLicenses)
-    .sort(([aKey, aLicense], [bKey, bLicense]) => {
+  const licenseEntries = Object.entries(augmentedLicenses).sort(
+    ([aKey, aLicense], [bKey, bLicense]) => {
       if (
         aKey.startsWith(ADDITIONAL_LICENSES_PREFIX) &&
         !bKey.startsWith(ADDITIONAL_LICENSES_PREFIX)
@@ -204,11 +204,11 @@ function generateHtmlLicensesPage(
       )
         return 0; // Maintain order of additional licenses as they appear in the file
       return aLicense.name.localeCompare(bLicense.name);
-    })
-    .map(([, license]) => license);
+    },
+  );
 
-  const licenseList = licenseArray
-    .map((license) => {
+  const licenseList = licenseEntries
+    .map(([key, license]) => {
       const licenseText = license.licenseText || "License text not available";
       const escaped = licenseText
         .replace(/&/g, "&amp;")
@@ -220,8 +220,11 @@ function generateHtmlLicensesPage(
       // Build package info lines
       const infoLines: string[] = [];
 
-      // Package name as link to NPM
-      const packageLink = `<a href="https://www.npmjs.com/package/${license.name}" target="_blank" rel="noopener noreferrer">${license.name}</a>`;
+      // Package name: use link for NPM packages, plain text for additional licenses
+      const isAdditionalLicense = key.startsWith(ADDITIONAL_LICENSES_PREFIX);
+      const packageLink = isAdditionalLicense
+        ? license.name
+        : `<a href="https://www.npmjs.com/package/${license.name}" target="_blank" rel="noopener noreferrer">${license.name}</a>`;
 
       // Add version if available
       if (license.version) {
@@ -419,7 +422,6 @@ function generateHtmlLicensesPage(
 
     .package-info-value {
       color: #9ca3af;
-      word-break: break-all;
     }
 
     .package-info-value a {
@@ -562,7 +564,7 @@ function generateHtmlLicensesPage(
         Open Source Licenses
       </h1>
       <p>
-        This application uses the following ${Object.keys(licenseArray).length} open source dependencies. Thank you to all the maintainers!
+        This application uses the following ${licenseEntries.length} open source dependencies. Thank you to all the maintainers!
       </p>
     </header>
 
