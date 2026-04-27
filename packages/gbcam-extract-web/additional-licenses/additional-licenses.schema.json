@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Additional Licenses Schema",
+  "description": "Schema for additional licenses that should be included in the generated licenses page. These are non-pnpm dependencies that still need attribution.",
+  "type": "object",
+  "required": ["additionalLicenses"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Schema version"
+    },
+    "additionalLicenses": {
+      "type": "array",
+      "description": "Array of additional license entries to be prepended to the generated licenses page",
+      "items": {
+        "type": "object",
+        "required": ["name", "version", "licenses", "copyright", "licenseText"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Package name"
+          },
+          "version": {
+            "type": "string",
+            "description": "Package version"
+          },
+          "licenses": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "License type (e.g., 'MIT', 'Apache-2.0')"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of license types"
+              }
+            ]
+          },
+          "copyright": {
+            "type": "string",
+            "description": "Copyright statement"
+          },
+          "licenseText": {
+            "type": "string",
+            "description": "Full license text"
+          },
+          "repository": {
+            "type": "string",
+            "description": "Repository URL"
+          },
+          "publisher": {
+            "type": "string",
+            "description": "Package publisher/author"
+          },
+          "email": {
+            "type": "string",
+            "description": "Contact email"
+          },
+          "url": {
+            "type": "string",
+            "description": "Package URL"
+          },
+          "description": {
+            "type": "string",
+            "description": "Package description"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

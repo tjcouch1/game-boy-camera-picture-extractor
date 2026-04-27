@@ -11,6 +11,8 @@ import { PalettePicker } from "./components/PalettePicker.js";
 import { IntermediateViewer } from "./components/IntermediateViewer.js";
 import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
+import { CollapsibleInstructions } from "./components/CollapsibleInstructions.js";
+import { USER_INSTRUCTIONS_MARKDOWN } from "./generated/UserInstructions.js";
 
 const APP_SETTINGS_KEY = "gbcam-app-settings";
 
@@ -284,6 +286,9 @@ export default function App() {
           </div>
         )}
 
+        {/* Collapsible Instructions */}
+        <CollapsibleInstructions markdown={USER_INSTRUCTIONS_MARKDOWN} />
+
         {status === "loading" && (
           <div className="mb-6">
             <LoadingBar progress={cvProgress} label="Loading OpenCV.js..." />
@@ -503,16 +508,7 @@ export default function App() {
             rel="noopener noreferrer"
             className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
           >
-            Open Source Licenses
-          </a>
-          <span className="text-xs text-gray-600">•</span>
-          <a
-            href="./lucide-license"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
-          >
-            Lucide 'Image Down' Icon license
+            Open Source Licenses and Credits
           </a>
         </div>
       </footer>
