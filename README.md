@@ -62,7 +62,7 @@ See [`sample-pictures-out`](https://github.com/tjcouch1/game-boy-camera-picture-
 
 ## Helping to improve the extraction accuracy
 
-The more test cases (input picture + perfect Game Boy Camera image) there are to check the algorithm's accuracy, the higher the chances are that the algorithm will improve with continued development. If you would like to help to improve the accuracy of this script, please [submit a new issue](https://github.com/tjcouch1/game-boy-camera-picture-extractor/issues/new) containing the following:
+The more test cases (input picture + perfect Game Boy Camera image) there are to check the algorithm's accuracy, the higher the chances are that the algorithm will improve with continued development. If you would like to help to improve the accuracy of this script, please [submit a new issue](https://github.com/tjcouch1/game-boy-camera-picture-extractor/issues/new?template=test-images.md) containing the following:
 
 - Unmodified input pictures (photos taken of a Game Boy Camera image - but these should not be cropped or rotated as opposed to the normal input pictures)
 - Reference images (128x112 perfect Game Boy Camera output images) - you need [special hardware](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera) to collect these from an actual Game Boy Camera.
