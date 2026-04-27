@@ -49,7 +49,7 @@ function extractUserInstructions(): string {
 function processMarkdown(markdown: string): string {
   const githubBase =
     "https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/";
-  const newBase = "/instructions-assets/";
+  const newBase = "./instructions-assets/";
 
   // Ensure assets directory exists
   if (!fs.existsSync(assetsDir)) {
