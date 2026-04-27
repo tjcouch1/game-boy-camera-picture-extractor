@@ -508,16 +508,7 @@ export default function App() {
             rel="noopener noreferrer"
             className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
           >
-            Open Source Licenses
-          </a>
-          <span className="text-xs text-gray-600">•</span>
-          <a
-            href="./lucide-license"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
-          >
-            Lucide 'Image Down' Icon license
+            Open Source Licenses and Credits
           </a>
         </div>
       </footer>

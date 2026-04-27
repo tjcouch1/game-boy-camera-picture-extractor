@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "gbcam-extract": "workspace:*",
+    "lucide-react": "^1.11.0",
     "markdown-to-jsx": "^9.7.16",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

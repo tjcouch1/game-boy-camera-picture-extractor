@@ -29,6 +29,14 @@ const publicDir = path.join(packageDir, "public");
 const configPath = path.join(packageDir, "license-checker.config.json");
 const outputFile = path.join(publicDir, "licenses.html");
 const augmentedDataFile = path.join(packageDir, "licenses.json");
+const additionalLicensesPath = path.join(
+  packageDir,
+  "additional-licenses",
+  "additional-licenses.json",
+);
+
+/* Prefix to ensure additional licenses sort to top */
+const ADDITIONAL_LICENSES_PREFIX = "00_";
 
 interface LicenseData extends ModuleInfos {}
 
@@ -107,6 +115,46 @@ function isBodeLine(line: string): boolean {
   return bodyIndicators.some((pattern) => pattern.test(line));
 }
 
+// Load additional licenses from the supplementary JSON file
+async function loadAdditionalLicenses(): Promise<AugmentedLicense[]> {
+  try {
+    const content = await fs.readFile(additionalLicensesPath, "utf-8");
+    const data = JSON.parse(content);
+
+    if (!data.additionalLicenses || !Array.isArray(data.additionalLicenses)) {
+      throw new Error(
+        "additionalLicenses field must be an array in additional-licenses.json",
+      );
+    }
+
+    // Validate each license has required fields
+    for (const license of data.additionalLicenses) {
+      if (
+        !license.name ||
+        !license.version ||
+        !license.licenses ||
+        !license.copyright ||
+        !license.licenseText
+      ) {
+        throw new Error(
+          `Invalid license entry in additional-licenses.json: missing required fields (name, version, licenses, copyright, licenseText)`,
+        );
+      }
+    }
+
+    console.log(
+      `✓ Loaded ${data.additionalLicenses.length} additional licenses from ${additionalLicensesPath}`,
+    );
+    return data.additionalLicenses;
+  } catch (error) {
+    console.error(
+      "Error loading additional licenses:",
+      error instanceof Error ? error.message : String(error),
+    );
+    throw error;
+  }
+}
+
 // Augment license data with extracted copyright and filter to relevant fields
 function augmentLicenseData(
   licenses: LicenseData,
@@ -139,8 +187,25 @@ function generateHtmlLicensesPage(
 ): string {
   // Convert to array and sort by package name
   const licenseArray = Object.entries(augmentedLicenses)
-    .map(([, license]) => license)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(([aKey, aLicense], [bKey, bLicense]) => {
+      if (
+        aKey.startsWith(ADDITIONAL_LICENSES_PREFIX) &&
+        !bKey.startsWith(ADDITIONAL_LICENSES_PREFIX)
+      )
+        return -1; // Additional licenses first
+      if (
+        !aKey.startsWith(ADDITIONAL_LICENSES_PREFIX) &&
+        bKey.startsWith(ADDITIONAL_LICENSES_PREFIX)
+      )
+        return 1;
+      if (
+        aKey.startsWith(ADDITIONAL_LICENSES_PREFIX) &&
+        bKey.startsWith(ADDITIONAL_LICENSES_PREFIX)
+      )
+        return 0; // Maintain order of additional licenses as they appear in the file
+      return aLicense.name.localeCompare(bLicense.name);
+    })
+    .map(([, license]) => license);
 
   const licenseList = licenseArray
     .map((license) => {
@@ -334,6 +399,7 @@ function generateHtmlLicensesPage(
       color: #9ca3af;
       margin-bottom: 0.5rem;
       font-style: italic;
+      white-space: pre-wrap;
     }
 
     .package-info {
@@ -517,6 +583,9 @@ async function main() {
     // Ensure public directory exists
     await fs.mkdir(publicDir, { recursive: true });
 
+    // Load additional licenses first
+    const additionalLicenses = await loadAdditionalLicenses();
+
     // Use license-checker to get all licenses
     console.log("Resolving licenses...");
 
@@ -547,15 +616,30 @@ async function main() {
     // Augment license data with extracted copyright and filter fields
     const augmentedData = augmentLicenseData(licenseData);
 
+    // Prepend additional licenses to augmented data
+    // Create a merged object with additional licenses first
+    const mergedAugmentedData: Record<string, AugmentedLicense> = {};
+
+    // Add additional licenses first (they'll appear at the top after sorting)
+    // We give them a special prefix to ensure they sort to the top
+    for (const license of additionalLicenses) {
+      // Use a numeric prefix to sort to top: "0_" ensures these come before packages
+      const key = `${ADDITIONAL_LICENSES_PREFIX}${license.name.toLowerCase().replace(/\s+/g, "-")}`;
+      mergedAugmentedData[key] = license;
+    }
+
+    // Then add all the npm packages
+    Object.assign(mergedAugmentedData, augmentedData);
+
     // Write augmented data to licenses.json
     await fs.writeFile(
       augmentedDataFile,
-      JSON.stringify(augmentedData, null, 2),
+      JSON.stringify(mergedAugmentedData, null, 2),
       "utf-8",
     );
 
-    // Generate HTML from augmented license data
-    const htmlContent = generateHtmlLicensesPage(augmentedData);
+    // Generate HTML from merged license data
+    const htmlContent = generateHtmlLicensesPage(mergedAugmentedData);
 
     // Write to file
     await fs.writeFile(outputFile, htmlContent, "utf-8");
