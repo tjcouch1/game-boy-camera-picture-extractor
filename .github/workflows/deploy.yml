@@ -88,6 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -141,10 +142,27 @@ jobs:
             fs.writeFileSync('./packages/gbcam-extract-web/package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      # Commit and push
+      # Create feature branch and commit changes
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b bump-${{ steps.bumped-version.outputs.web-version }}
           git add packages/gbcam-extract/package.json packages/gbcam-extract-web/package.json
           git commit -m "Bump versions: gbcam-extract to ${{ steps.bumped-version.outputs.extract-version }}, gbcam-extract-web to ${{ steps.bumped-version.outputs.web-version }}"
-          git push
+          git push origin bump-${{ steps.bumped-version.outputs.web-version }}
+
+      # Create pull request
+      - id: create-pr
+        run: |
+          PR_URL=$(gh pr create \
+            --base main \
+            --head bump-${{ steps.bumped-version.outputs.web-version }} \
+            --title "Bump versions: gbcam-extract to ${{ steps.bumped-version.outputs.extract-version }}, gbcam-extract-web to ${{ steps.bumped-version.outputs.web-version }}" \
+            --body "Version bump for release ${{ steps.bumped-version.outputs.web-version }}" \
+            --repo ${{ github.repository }})
+          echo "pr-url=$PR_URL" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Print the pull request link
+      - run: echo "Pull Request created: ${{ steps.create-pr.outputs.pr-url }}"
