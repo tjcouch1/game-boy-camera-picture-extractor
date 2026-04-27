@@ -11,6 +11,8 @@ import { PalettePicker } from "./components/PalettePicker.js";
 import { IntermediateViewer } from "./components/IntermediateViewer.js";
 import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
+import { CollapsibleInstructions } from "./components/CollapsibleInstructions.js";
+import { USER_INSTRUCTIONS_MARKDOWN } from "./generated/UserInstructions.js";
 
 const APP_SETTINGS_KEY = "gbcam-app-settings";
 
@@ -283,6 +285,9 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {/* Collapsible Instructions */}
+        <CollapsibleInstructions markdown={USER_INSTRUCTIONS_MARKDOWN} />
 
         {status === "loading" && (
           <div className="mb-6">

@@ -10,13 +10,19 @@ You can install the site as a PWA to use it offline - even on your phone.
 
 # Introduction
 
-WARNING: This script is not fully successful yet. Please back up your Game Boy Camera images in other ways before deleting them.
-
-This repository contains a script that accepts a picture of a Game Boy Camera screen displaying a Game Boy Camera image and outputs the GameBoy Camera image in 128x112 in four colors. This script is intended to clean Game Boy Camera images retrieved via taking a picture, but it probably would also work with relatively high-quality [Video Capture](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera#video_capture) (I tried using my [Dazzle DVC100](https://www.pinnaclesys.com/en/products/dazzle/dvd-recorder-hd/), notorious for its low quality video capture, but it did not work). Please note that this is admittedly probably the lowest-quality method of transferring Game Boy Camera images; if you do not have the hardware needed to use this script, you will likely find more success at a more affordable price by pursuing [other avenues](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera) for transferring your Game Boy Camera images. This script aims to accomplish the goal of transferring Game Boy Camera images with specific hardware that I already own.
+This repository contains a script and an offline-ready web interface that accept a picture of a Game Boy Camera screen displaying a Game Boy Camera image and output the Game Boy Camera image in 128x112 in four colors. This project is intended to clean Game Boy Camera images retrieved via taking a picture, but it probably would also work with relatively high-quality [Video Capture](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera#video_capture) (I tried using my [Dazzle DVC100](https://www.pinnaclesys.com/en/products/dazzle/dvd-recorder-hd/), notorious for its low quality video capture, but it did not work). Please note that this is admittedly probably the lowest-quality method of transferring Game Boy Camera images; if you do not have the hardware needed to use this tool, you will likely find more success at a more affordable price by pursuing [other avenues](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera) for transferring your Game Boy Camera images. This tool aims to accomplish the goal of transferring Game Boy Camera images with specific hardware that I already own.
 
 DISCLAIMER: Though this `README.md` is not AI-generated, the code in this repo is almost exclusively AI-generated. It likely contains errors, bad code quality and standards, and does not satisfy the need perfectly.
 
-# Taking pictures that work with this script
+(Note that the following [User Instructions](#user-instructions) section is mirrored in the website, so its introduction repeats some information from the previous sections.)
+
+# User Instructions
+
+WARNING: This extraction algorithm is not fully accurate. Please back up your Game Boy Camera images in other ways before deleting them.
+
+You can use this tool on desktop or mobile (fully offline if you install it as a PWA) to transform pictures of a Game Boy Camera image into the actual Game Boy Camera image in 128x112 in four colors.
+
+## Taking pictures that work with this script
 
 To collect the pictures I used with this script, I used the following hardware:
 
@@ -24,11 +30,11 @@ To collect the pictures I used with this script, I used the following hardware:
 - Game Boy Camera (US/Europe)
 - Samsung Galaxy S20 Camera
 
-Though I didn't try any other hardware, I expect other hardware like moderate-quality screenshots from video capture devices or pictures from the Game Boy Advance SP AGS-101 may work. The picture needs to contain the entire Game Boy screen (not the entire SP screen, but just the 160x144 region representing the Game Boy screen) and needs to be clear and bright enough to distinguish the pixels on the screen relatively well. I suspect Japanese Game Boy Cameras may not work very well because [their Frame 02 is different than the Frame 02 in the US/Europe version](https://tcrf.net/Game_Boy_Camera/Regional_Differences#Frames), and I don't see a matching frame in the Japanese version.
+Though I didn't try any other hardware, I expect other hardware like moderate-quality screenshots from video capture devices or pictures of the Game Boy Advance SP AGS-101 screen may work. The picture needs to contain the entire Game Boy screen (not the entire SP screen; just the 160x144 region representing the Game Boy screen) and needs to be clear and bright enough to distinguish the pixels on the screen relatively well. I suspect Japanese Game Boy Cameras may not work very well because [their Frame 02 is different than the Frame 02 in the US/Europe version](https://tcrf.net/Game_Boy_Camera/Regional_Differences#Frames), and I don't see a matching frame in the Japanese version.
 
 I performed the following steps to get the pictures the way they need to be to work with this script:
 
-1. Find a very dark room (ideally; the script aims to work with various lighting environments).
+1. Ideally, find a very dark room (though the script aims to work with various lighting environments).
 2. Turn on the Game Boy Advance SP. Make sure the frontlight is turned on. While it boots up, hold Down to use the [0x17 Game Boy Color palette](https://tcrf.net/Notes:Game_Boy_Color_Bootstrap_ROM#Assigned_Palette_Configurations).
 3. In the Game Boy Camera game, navigate through the menu options to view the album.
 4. Select an image. Once you select it, change the frame to [Frame 02](https://tcrf.net/images/5/50/GBCamera-Frame02-INT.png) (white with black dashes):
@@ -42,11 +48,26 @@ The picture should look like the following:
 
 ![Sample picture ready for processing](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures/20260313_213430.jpg)
 
-See `sample-pictures` for more examples of what the pictures need to look like.
+See [`sample-pictures`](https://github.com/tjcouch1/game-boy-camera-picture-extractor/tree/main/sample-pictures) for more examples of what the pictures need to look like.
 
-After processing, the output picture should look like the following:
+## Transforming the picture into a Game Boy Camera image
+
+Upload the picture on [the Game Boy Camera Picture Extractor site](https://tjcouch1.github.io/game-boy-camera-picture-extractor/), and it will automatically begin processing the picture.
+
+After processing, the output Game Boy Camera image should look like the following:
 
 ![Sample output picture](https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/sample-pictures-out/20260313_213430_gbcam.png)
+
+See [`sample-pictures-out`](https://github.com/tjcouch1/game-boy-camera-picture-extractor/tree/main/sample-pictures-out) for more examples of what the processed images look like.
+
+## Helping to improve the extraction accuracy
+
+The more test cases (input picture + perfect Game Boy Camera image) there are to check the algorithm's accuracy, the higher the chances are that the algorithm will improve with continued development. If you would like to help to improve the accuracy of this script, please [submit a new issue](https://github.com/tjcouch1/game-boy-camera-picture-extractor/issues/new) containing the following:
+
+- Unmodified input pictures (photos taken of a Game Boy Camera image - but these should not be cropped or rotated as opposed to the normal input pictures)
+- Reference images (128x112 perfect Game Boy Camera output images) - you need [special hardware](https://funtography.online/wiki/Exporting_images_from_the_Game_Boy_Camera) to collect these from an actual Game Boy Camera.
+
+Or feel free to [submit a pull request](https://github.com/tjcouch1/game-boy-camera-picture-extractor/compare) if you improve the algorithm directly!
 
 # Contents
 
