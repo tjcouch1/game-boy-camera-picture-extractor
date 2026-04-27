@@ -1,9 +1,25 @@
 ---
 name: Submit Test Images for Accuracy Improvement
-description: Help improve the Game Boy Camera extraction accuracy by submitting test images
+about: Help improve the Game Boy Camera extraction accuracy by submitting test images
 title: "[Test Images] "
-labels: ["test-images", "accuracy-improvement"]
-assignees: []
+labels: ''
+assignees: ''
+
+---
+
+## Environment
+
+Please provide information about how you took the pictures:
+
+- **Hardware used to take photos:**
+  - Game Boy model:
+  - Game Boy Camera model:
+  - Camera used:
+
+- **Lighting conditions:**
+
+- **Any other general notes about the images:**
+
 ---
 
 ## Unmodified Input Pictures
@@ -20,22 +36,17 @@ Please upload unmodified input pictures (photos taken of a Game Boy Camera image
 
 **Upload here:**
 
-<!-- Replace the following with your input images -->
-
 ### Input Picture 1
 
-- **Filename:**
-- **Image:**
+<!-- Replace this line with your input image or add your image below this line. Feel free to include notes about the image as desired -->
 
 ### Input Picture 2
 
-- **Filename:**
-- **Image:**
+<!-- Replace this line with your input image or add your image below this line. Feel free to include notes about the image as desired -->
 
 ### Input Picture 3
 
-- **Filename:**
-- **Image:**
+<!-- Replace this line with your input image or add your image below this line. Feel free to include notes about the image as desired -->
 
 ---
 
@@ -63,33 +74,21 @@ You need special hardware to extract perfect Game Boy Camera images. See [the Ga
 
 ### Reference Image 1
 
-- **Matches Input Picture:** 1
-- **Image:**
+- **Matches Input Picture(s):** 1
+
+<!-- Replace this line with your reference image or add your image below this line. Feel free to include notes about the image as desired -->
 
 ### Reference Image 2
 
-- **Matches Input Picture:** 2
-- **Image:**
+- **Matches Input Picture(s):** 2
+
+<!-- Replace this line with your reference image or add your image below this line. Feel free to include notes about the image as desired -->
 
 ### Reference Image 3
 
-- **Matches Input Picture:** 3
-- **Image:**
+- **Matches Input Picture(s):** 3
 
----
-
-## Additional Context
-
-Please provide any additional information that might be helpful:
-
-- **Hardware used to take photos:**
-  - Game Boy model:
-  - Camera model:
-  - Camera used:
-
-- **Lighting conditions:**
-
-- **Any notes about the images:**
+<!-- Replace this line with your reference image or add your image below this line. Feel free to include notes about the image as desired -->
 
 ---
 
