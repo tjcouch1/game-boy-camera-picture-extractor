@@ -75,8 +75,11 @@ function PaletteSwatch({
       onClick={onClick}
       className={cn(
         "justify-start gap-2 h-auto px-2 py-1.5",
-        isSelected && "ring-2 ring-primary",
-        doesMatchColors && !isSelected && "border-primary/60",
+        isSelected &&
+          "bg-primary/25 hover:bg-primary/35 border-primary inset-ring-2 inset-ring-primary dark:bg-primary/25 dark:hover:bg-primary/35 dark:border-primary",
+        doesMatchColors &&
+          !isSelected &&
+          "bg-primary/10 hover:bg-primary/20 border-primary dark:bg-primary/15 dark:hover:bg-primary/25 dark:border-primary",
       )}
     >
       <div className="flex shrink-0">
@@ -290,6 +293,9 @@ export function PalettePicker({
       delete updated[id];
       return updated;
     });
+    if (!isExpanded("User Palettes")) {
+      toggleExpanded("User Palettes");
+    }
   };
 
   const handleCancelEdit = (id: string) => {
@@ -415,7 +421,7 @@ export function PalettePicker({
                         ? "border-primary bg-primary/20 ring-2 ring-primary"
                         : doesMatchColors
                           ? "border-primary/60 bg-primary/10 hover:bg-primary/20"
-                          : "border-border bg-card hover:bg-muted",
+                          : "border-border bg-card hover:bg-muted/30",
                     )}
                     onClick={() => {
                       handleSelectEditingPalette(palette.id);
@@ -425,9 +431,11 @@ export function PalettePicker({
                     {/* Color pickers */}
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       {palette.colors.map((c, i) => (
-                        <Field key={i} className="items-center gap-1 w-auto">
-                          <Input
-                            id={`palette-color-${palette.id}-${i}`}
+                        <label
+                          key={i}
+                          className="flex flex-col items-center gap-1"
+                        >
+                          <input
                             type="color"
                             value={c}
                             onChange={(e) => {
@@ -438,15 +446,12 @@ export function PalettePicker({
                                 e.target.value,
                               );
                             }}
-                            className="size-8 cursor-pointer bg-transparent p-0"
+                            className="size-8 cursor-pointer rounded bg-transparent p-0 border border-input"
                           />
-                          <FieldLabel
-                            htmlFor={`palette-color-${palette.id}-${i}`}
-                            className={PALETTE_LABEL_CLASS}
-                          >
+                          <span className={PALETTE_LABEL_CLASS}>
                             {PALETTE_COLOR_LABELS[i]}
-                          </FieldLabel>
-                        </Field>
+                          </span>
+                        </label>
                       ))}
                       <div className="flex gap-1 ms-auto">
                         {clipboardEnabled && (

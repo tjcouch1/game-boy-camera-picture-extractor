@@ -415,16 +415,18 @@ export default function App() {
                       }}
                     >
                       <SelectTrigger id="preview-scale" className="w-fit">
-                        <SelectValue />
+                        <span className="flex flex-1 text-start">
+                          {previewScale}x
+                        </span>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="1">1x</SelectItem>
-                          <SelectItem value="2">2x</SelectItem>
-                          <SelectItem value="3">3x</SelectItem>
-                          <SelectItem value="4">4x</SelectItem>
-                          <SelectItem value="8">8x</SelectItem>
-                          <SelectItem value="16">16x</SelectItem>
+                          <SelectItem value="1">1x (128x112)</SelectItem>
+                          <SelectItem value="2">2x (256x224)</SelectItem>
+                          <SelectItem value="3">3x (384x336)</SelectItem>
+                          <SelectItem value="4">4x (512x448)</SelectItem>
+                          <SelectItem value="8">8x (1024x896)</SelectItem>
+                          <SelectItem value="16">16x (2048x1792)</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>

@@ -9,7 +9,12 @@ import {
 import { sanitizePaletteName } from "../utils/filenames.js";
 import { Button } from "@/shadcn/components/button";
 import { Badge } from "@/shadcn/components/badge";
-import { Card, CardContent, CardHeader } from "@/shadcn/components/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+} from "@/shadcn/components/card";
 import { toast } from "sonner";
 import { X, Download, Share2, Copy as CopyIcon } from "lucide-react";
 
@@ -158,8 +163,8 @@ export function ResultCard({
 
   return (
     <Card className="p-3 sm:p-4">
-      <CardHeader className="flex-row items-start gap-2 p-0 mb-3 space-y-0">
-        <div className="flex-1 min-w-0">
+      <CardHeader className="p-0 mb-3">
+        <div className="min-w-0">
           <p className="text-sm font-medium truncate" title={filename}>
             {filename}
           </p>
@@ -168,15 +173,17 @@ export function ResultCard({
           </Badge>
         </div>
         {onDelete && (
-          <Button
-            variant="destructive"
-            size="icon"
-            onClick={onDelete}
-            aria-label="Delete result"
-            className="size-7"
-          >
-            <X />
-          </Button>
+          <CardAction>
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={onDelete}
+              aria-label="Delete result"
+              className="size-7"
+            >
+              <X />
+            </Button>
+          </CardAction>
         )}
       </CardHeader>
       <CardContent className="flex flex-col sm:flex-row gap-3 p-0">
