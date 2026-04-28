@@ -165,4 +165,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Print the pull request link
-      - run: echo "Pull Request created: ${{ steps.create-pr.outputs.pr-url }}"
+      - run: 'echo "Pull Request created: ${{ steps.create-pr.outputs.pr-url }}"'
