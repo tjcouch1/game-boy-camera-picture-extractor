@@ -24,6 +24,8 @@ import {
   CollapsibleTrigger,
 } from "@/shadcn/components/collapsible";
 import { Button } from "@/shadcn/components/button";
+import { Card, CardContent } from "@/shadcn/components/card";
+import { Separator } from "@/shadcn/components/separator";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -50,21 +52,21 @@ function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
   return (
     <div className="mt-4 space-y-2">
       <div>
-        <div className="flex justify-between text-xs text-gray-400 mb-1">
+        <div className="flex justify-between text-xs text-muted-foreground mb-1">
           <span>
             Image {progress.currentImageProgress.index + 1} of{" "}
             {progress.totalImages}: {progress.currentImageProgress.filename}
           </span>
           <span>{progress.overallProgress}%</span>
         </div>
-        <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
           <div
-            className="bg-blue-500 h-full transition-all"
+            className="bg-primary h-full transition-all"
             style={{ width: `${progress.overallProgress}%` }}
           />
         </div>
       </div>
-      <div className="text-xs text-gray-400">
+      <div className="text-xs text-muted-foreground">
         Step: {progress.currentImageProgress.currentStep || "Starting..."}
       </div>
     </div>
@@ -189,7 +191,7 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       <div className="container mx-auto px-4 py-8 max-w-4xl flex-1">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
@@ -201,13 +203,12 @@ export default function App() {
           <div className="flex items-center gap-2">
             <ModeToggle />
             {isInstallable && (
-              <button
+              <Button
                 onClick={handleInstallApp}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
                 title="Install this app on your device"
               >
                 Install App
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -224,13 +225,15 @@ export default function App() {
                 <strong>"Add to Home Screen"</strong>.
               </p>
             </div>
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setShowIOSInstallTip(false)}
-              className="shrink-0 text-blue-400 hover:text-blue-200 text-lg leading-none"
-              title="Dismiss"
+              aria-label="Dismiss"
+              className="shrink-0"
             >
-              ✕
-            </button>
+              <span aria-hidden>×</span>
+            </Button>
           </div>
         )}
 
@@ -252,7 +255,7 @@ export default function App() {
         {status === "ready" && (
           <>
             <div className="mb-6 flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
                 <input
                   type="checkbox"
                   checked={debug}
@@ -261,7 +264,7 @@ export default function App() {
                 />
                 Debug mode
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
                 <input
                   type="checkbox"
                   checked={clipboardEnabled}
@@ -291,7 +294,7 @@ export default function App() {
               <>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   {results.length > 1 && (
-                    <button
+                    <Button
                       onClick={() => {
                         results.forEach((r) => {
                           downloadResult(
@@ -303,19 +306,18 @@ export default function App() {
                           );
                         });
                       }}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
                     >
                       Download All ({results.length})
-                    </button>
+                    </Button>
                   )}
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>Output Scale:</span>
                     <select
                       value={outputScale}
                       onChange={(e) =>
                         setOutputScale(parseInt(e.target.value, 10))
                       }
-                      className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
+                      className="px-2 py-1 bg-input rounded text-xs text-foreground border border-input focus:border-ring outline-none"
                     >
                       <option value={1}>1x (128x112)</option>
                       <option value={2}>2x (256x224)</option>
@@ -325,14 +327,14 @@ export default function App() {
                       <option value={16}>16x (2048x1792)</option>
                     </select>
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>Preview Scale:</span>
                     <select
                       value={previewScale}
                       onChange={(e) =>
                         setPreviewScale(parseInt(e.target.value, 10))
                       }
-                      className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
+                      className="px-2 py-1 bg-input rounded text-xs text-foreground border border-input focus:border-ring outline-none"
                     >
                       <option value={1}>1x</option>
                       <option value={2}>2x</option>
@@ -413,44 +415,47 @@ export default function App() {
                             ),
                           })
                         }
-                        className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none w-16"
+                        className="px-2 py-1 bg-input rounded text-xs text-foreground border border-input focus:border-ring outline-none w-16"
                       />
-                      <label className="text-xs text-gray-400 flex items-center">
+                      <label className="text-xs text-muted-foreground flex items-center">
                         max images to keep in history
                       </label>
-                      <button
+                      <Button
+                        variant="destructive"
+                        size="sm"
                         onClick={deleteAllHistory}
-                        className="ml-auto px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-xs font-medium transition-colors"
+                        className="ms-auto"
                       >
                         Delete All History
-                      </button>
+                      </Button>
                     </div>
 
                     {history.map((batch) => (
-                      <div
-                        key={batch.id}
-                        className="bg-gray-800/50 rounded-lg p-4"
-                      >
-                        <div className="text-xs text-gray-500 mb-3">
-                          {new Date(batch.timestamp).toLocaleString()} (
-                          {batch.results.length} images)
-                        </div>
-                        <div className="grid gap-3">
-                          {batch.results.map((result, idx) => (
-                            <ResultCard
-                              key={`${batch.id}-${idx}`}
-                              result={result.result}
-                              filename={result.filename}
-                              processingTime={result.processingTime}
-                              palette={paletteEntry.colors}
-                              paletteName={paletteEntry.name}
-                              outputScale={outputScale}
-                              previewScale={previewScale}
-                              onDelete={() => deleteFromHistory(batch.id, idx)}
-                            />
-                          ))}
-                        </div>
-                      </div>
+                      <Card key={batch.id} className="bg-muted/40 p-4">
+                        <CardContent className="p-0">
+                          <div className="text-xs text-muted-foreground mb-3">
+                            {new Date(batch.timestamp).toLocaleString()} (
+                            {batch.results.length} images)
+                          </div>
+                          <div className="grid gap-3">
+                            {batch.results.map((result, idx) => (
+                              <ResultCard
+                                key={`${batch.id}-${idx}`}
+                                result={result.result}
+                                filename={result.filename}
+                                processingTime={result.processingTime}
+                                palette={paletteEntry.colors}
+                                paletteName={paletteEntry.name}
+                                outputScale={outputScale}
+                                previewScale={previewScale}
+                                onDelete={() =>
+                                  deleteFromHistory(batch.id, idx)
+                                }
+                              />
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 </CollapsibleContent>
@@ -459,13 +464,14 @@ export default function App() {
           </>
         )}
       </div>
-      <footer className="mt-8 border-t border-gray-700 bg-gray-900/50">
+      <Separator className="mt-8" />
+      <footer className="bg-background/50">
         <div className="container mx-auto px-4 py-4 max-w-4xl flex justify-center gap-4">
           <a
             href="./licenses.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Open Source Licenses and Credits
           </a>

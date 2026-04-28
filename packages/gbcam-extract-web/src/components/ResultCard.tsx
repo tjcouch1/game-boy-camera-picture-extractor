@@ -7,6 +7,9 @@ import {
   copyImageToClipboard,
 } from "../utils/shareImage.js";
 import { sanitizePaletteName } from "../utils/filenames.js";
+import { Button } from "@/shadcn/components/button";
+import { Badge } from "@/shadcn/components/badge";
+import { Card, CardContent, CardHeader } from "@/shadcn/components/card";
 
 interface ResultCardProps {
   result: PipelineResult;
@@ -157,62 +160,46 @@ export function ResultCard({
   }, [result, palette, outputScale]);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
-      {/* Header row: filename + delete */}
-      <div className="flex items-start gap-2 mb-3">
+    <Card className="p-3 sm:p-4">
+      <CardHeader className="flex-row items-start gap-2 p-0 mb-3 space-y-0">
         <div className="flex-1 min-w-0">
-          <p
-            className="text-sm font-medium text-gray-200 truncate"
-            title={filename}
-          >
+          <p className="text-sm font-medium truncate" title={filename}>
             {filename}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <Badge variant="secondary" className="mt-0.5">
             {processingTime.toFixed(0)}ms
-          </p>
+          </Badge>
         </div>
         {onDelete && (
-          <button
+          <Button
+            variant="destructive"
+            size="icon"
             onClick={onDelete}
-            className="shrink-0 w-7 h-7 flex items-center justify-center bg-red-600 hover:bg-red-700 rounded text-white transition-colors text-xs"
-            title="Delete result"
+            aria-label="Delete result"
+            className="size-7"
           >
-            ✕
-          </button>
+            <span aria-hidden>×</span>
+          </Button>
         )}
-      </div>
-
-      {/* Canvas + action buttons */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      </CardHeader>
+      <CardContent className="flex flex-col sm:flex-row gap-3 p-0">
         <canvas
           ref={canvasRef}
-          className="border border-gray-700 rounded self-start"
+          className="rounded border self-start"
           style={{ imageRendering: "pixelated", maxWidth: "100%" }}
         />
         <div className="flex flex-wrap gap-2 items-start content-start">
-          <button
-            onClick={handleDownload}
-            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
-          >
-            Download PNG
-          </button>
+          <Button onClick={handleDownload}>Download PNG</Button>
           {shareSupported && (
-            <button
-              onClick={handleShare}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
-            >
+            <Button variant="secondary" onClick={handleShare}>
               Share
-            </button>
+            </Button>
           )}
-          <button
-            onClick={handleCopy}
-            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-xs font-medium transition-colors"
-            title="Copy image to clipboard"
-          >
+          <Button variant="secondary" onClick={handleCopy} aria-label="Copy image">
             {showCopyFeedback || "Copy"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

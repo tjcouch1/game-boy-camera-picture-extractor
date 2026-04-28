@@ -1,4 +1,7 @@
 import { useRef, useState, useCallback } from "react";
+import { Upload } from "lucide-react";
+import { Button } from "@/shadcn/components/button";
+import { cn } from "@/shadcn/utils/utils";
 
 interface ImageInputProps {
   onImagesSelected: (files: File[]) => void;
@@ -41,68 +44,48 @@ export function ImageInput({ onImagesSelected, disabled }: ImageInputProps) {
     [disabled],
   );
 
-  const handleDragLeave = useCallback(() => {
-    setDragOver(false);
-  }, []);
+  const handleDragLeave = useCallback(() => setDragOver(false), []);
 
   return (
     <div>
-      {/* Drop zone */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          disabled
-            ? "border-gray-700 text-gray-600 cursor-not-allowed"
-            : dragOver
-              ? "border-green-500 bg-green-500/10 text-green-400"
-              : "border-gray-600 text-gray-400 hover:border-gray-500 cursor-pointer"
-        }`}
         onClick={() => !disabled && fileInputRef.current?.click()}
+        className={cn(
+          "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+          disabled
+            ? "border-border text-muted-foreground/50 cursor-not-allowed"
+            : dragOver
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:border-foreground/40 cursor-pointer",
+        )}
       >
         <div className="flex flex-col items-center gap-3">
-          <svg
-            className="w-10 h-10 opacity-50"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-            />
-          </svg>
-          <p className="text-sm">
-            Drag and drop images here, or click to browse
-          </p>
-          <p className="text-xs text-gray-500">
-            Supports multiple files
-          </p>
+          <Upload className="opacity-50 size-10" />
+          <p className="text-sm">Drag and drop images here, or click to browse</p>
+          <p className="text-xs text-muted-foreground">Supports multiple files</p>
         </div>
       </div>
 
-      {/* Buttons row */}
       <div className="flex gap-3 mt-3">
-        <button
+        <Button
+          variant="secondary"
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
         >
           Choose Files
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
           onClick={() => cameraInputRef.current?.click()}
           disabled={disabled}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
         >
           Camera Capture
-        </button>
+        </Button>
       </div>
 
-      {/* Hidden file inputs */}
       <input
         ref={fileInputRef}
         type="file"

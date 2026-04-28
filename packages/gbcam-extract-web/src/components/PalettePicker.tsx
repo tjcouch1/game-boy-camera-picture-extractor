@@ -17,6 +17,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/shadcn/components/accordion";
+import { Button } from "@/shadcn/components/button";
+import { Card, CardContent } from "@/shadcn/components/card";
+import { cn } from "@/shadcn/utils/utils";
 import { useClipboardPaletteCheck } from "../hooks/useClipboardPalette.js";
 import {
   PALETTE_COLOR_LABELS,
@@ -52,24 +55,22 @@ function PaletteSwatch({
   onClick: () => void;
   onEdit?: () => void;
 }) {
-  const bgClass = isSelected
-    ? "bg-blue-600 ring-2 ring-blue-400"
-    : doesMatchColors && isEditing
-      ? "bg-blue-500 hover:bg-blue-400"
-      : doesMatchColors
-        ? "bg-blue-800 hover:bg-blue-700"
-        : "bg-gray-700 hover:bg-gray-600";
-
   return (
-    <button
+    <Button
+      variant="outline"
+      size="sm"
       onClick={onClick}
-      className={`flex items-center gap-2 px-2 py-1.5 rounded transition-colors ${PALETTE_TEXT_CLASS} ${bgClass}`}
+      className={cn(
+        "justify-start gap-2 h-auto px-2 py-1.5",
+        isSelected && "ring-2 ring-primary",
+        doesMatchColors && !isSelected && "border-primary/60",
+      )}
     >
       <div className="flex shrink-0">
         {entry.colors.map((c, i) => (
           <div
             key={i}
-            className="w-4 h-4 first:rounded-l last:rounded-r"
+            className="size-4 first:rounded-s last:rounded-e"
             style={{ backgroundColor: c }}
           />
         ))}
@@ -81,13 +82,13 @@ function PaletteSwatch({
             e.stopPropagation();
             onEdit();
           }}
-          className="ml-auto text-blue-400 hover:text-blue-300 cursor-pointer"
+          className="ms-auto text-primary hover:text-primary/80 cursor-pointer"
           title="Edit palette"
         >
-          ✏️
+          <span aria-hidden>✏️</span>
         </span>
       )}
-    </button>
+    </Button>
   );
 }
 
@@ -398,38 +399,36 @@ export function PalettePicker({
   const savedUserPalettes = userPalettes.filter((p) => !p.isEditing);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4">
+    <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-200">Palette</h2>
+        <h2 className="text-sm font-semibold">Palette</h2>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex">
             {selected.colors.map((c: string, i: number) => (
               <div
                 key={i}
-                className="w-5 h-5 first:rounded-l last:rounded-r border border-gray-600"
+                className="size-5 first:rounded-s last:rounded-e border"
                 style={{ backgroundColor: c }}
               />
             ))}
           </div>
-          <button
-            onClick={handleCreateCustom}
-            className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
-          >
+          <Button variant="secondary" size="sm" onClick={handleCreateCustom}>
             + Custom
-          </button>
+          </Button>
           {clipboardEnabled && (
-            <button
+            <Button
+              variant="secondary"
+              size="icon-sm"
               onClick={handlePasteNewPalette}
               disabled={!hasClipboardPalette}
-              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs transition-colors"
-              title={
+              aria-label={
                 hasClipboardPalette
                   ? "Paste palette from clipboard"
                   : "Clipboard does not contain a palette"
               }
             >
-              {buttonFeedback["paste-new"] || "📋"}
-            </button>
+              {buttonFeedback["paste-new"] || <span aria-hidden>📋</span>}
+            </Button>
           )}
         </div>
       </div>
@@ -438,11 +437,11 @@ export function PalettePicker({
         {/* Editing Palettes Section */}
         {editingPalettes.length > 0 && (
           <div>
-            <div className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            <div className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1">
               <span className="text-xs">v</span>
               ✏️ EDITING ({editingPalettes.length})
             </div>
-            <div className="ml-3 space-y-2">
+            <div className="ms-3 space-y-2">
               {editingPalettes.map((palette) => {
                 const isSelected = isPaletteSelected(palette);
                 const doesMatchColors = palette.colors.every(
@@ -452,13 +451,14 @@ export function PalettePicker({
                 return (
                   <div
                     key={palette.id}
-                    className={`p-3 rounded border-2 ${
+                    className={cn(
+                      "p-3 rounded border-2 cursor-pointer transition-colors",
                       isSelected
-                        ? "border-blue-400 bg-blue-900 ring-2 ring-blue-400"
+                        ? "border-primary bg-primary/20 ring-2 ring-primary"
                         : doesMatchColors
-                          ? "border-blue-400 bg-blue-950 hover:bg-blue-900"
-                          : "border-gray-600 bg-gray-900 hover:bg-gray-800"
-                    } cursor-pointer transition-colors`}
+                          ? "border-primary/60 bg-primary/10 hover:bg-primary/20"
+                          : "border-border bg-card hover:bg-muted",
+                    )}
                     onClick={() => {
                       handleSelectEditingPalette(palette.id);
                       setSelectedEditingPaletteId(palette.id);
@@ -489,34 +489,40 @@ export function PalettePicker({
                           </span>
                         </label>
                       ))}
-                      <div className="flex gap-1 ml-auto">
+                      <div className="flex gap-1 ms-auto">
                         {clipboardEnabled && (
                           <>
-                            <button
+                            <Button
+                              variant="secondary"
+                              size="icon-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleCopyPaletteToClipboard(palette);
                               }}
-                              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
-                              title="Copy palette colors to clipboard"
+                              aria-label="Copy palette colors to clipboard"
                             >
-                              {buttonFeedback[`copy-${palette.id}`] || "📄"}
-                            </button>
-                            <button
+                              {buttonFeedback[`copy-${palette.id}`] || (
+                                <span aria-hidden>📄</span>
+                              )}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="icon-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handlePastePaletteColors(palette.id);
                               }}
                               disabled={!hasClipboardPalette}
-                              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs transition-colors"
-                              title={
+                              aria-label={
                                 hasClipboardPalette
                                   ? "Paste palette colors from clipboard"
                                   : "Clipboard does not contain a palette"
                               }
                             >
-                              {buttonFeedback[`paste-${palette.id}`] || "📋"}
-                            </button>
+                              {buttonFeedback[`paste-${palette.id}`] || (
+                                <span aria-hidden>📋</span>
+                              )}
+                            </Button>
                           </>
                         )}
                       </div>
@@ -536,7 +542,7 @@ export function PalettePicker({
 
                     {/* Error message */}
                     {editingPaletteErrors[palette.id] && (
-                      <p className="text-red-400 text-[10px] mb-2">
+                      <p className="text-destructive text-[10px] mb-2">
                         {editingPaletteErrors[palette.id]}
                       </p>
                     )}
@@ -544,35 +550,37 @@ export function PalettePicker({
                     {/* Action buttons */}
                     <div className="flex gap-1 justify-end">
                       {palette.savedName && (
-                        <button
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCancelEdit(palette.id);
                           }}
-                          className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-[10px] transition-colors"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
+                        variant="destructive"
+                        size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeletePalette(palette.id);
                         }}
-                        className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-[10px] text-white transition-colors"
                       >
                         Delete
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleSavePalette(palette.id);
                         }}
                         disabled={!!editingPaletteErrors[palette.id]}
-                        className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-[10px] text-white font-medium transition-colors"
                       >
                         Save
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 );
@@ -646,6 +654,6 @@ export function PalettePicker({
           );
         })()}
       </div>
-    </div>
+    </Card>
   );
 }
