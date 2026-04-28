@@ -1,0 +1,27 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Pre-commit hook that runs check-and-test for the gbcam-extract package
+# if there are working changes in the relevant files.
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# Check for changes in the gbcam-extract package
+WORKING_CHANGES=$(git diff --name-only -- packages/gbcam-extract/ 2>/dev/null || echo "")
+STAGED_CHANGES=$(git diff --cached --name-only -- packages/gbcam-extract/ 2>/dev/null || echo "")
+
+# Combine and deduplicate changes
+ALL_CHANGES=$(printf "%s\n%s" "$WORKING_CHANGES" "$STAGED_CHANGES" | grep -v '^$' | sort -u)
+
+# Check if there are any relevant changes by looking for matching patterns
+if echo "$ALL_CHANGES" | grep -qE '^packages/gbcam-extract/(src/|scripts/|tsconfig\.json|package\.json)'; then
+  echo "🔍 Pre-commit: Changes detected in gbcam-extract. Running check-and-test..."
+  cd packages/gbcam-extract || exit 1
+  
+  if ! pnpm check-and-test; then
+    echo "❌ Pre-commit: Tests failed. Commit blocked."
+    exit 1
+  fi
+fi
+
+exit 0

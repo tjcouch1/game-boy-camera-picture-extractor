@@ -19,7 +19,8 @@
     "preview:host": "pnpm build && pnpm --filter gbcam-extract-web preview:host",
     "typecheck": "pnpm -r run typecheck",
     "extract": "pnpm --filter gbcam-extract run extract",
-    "test:pipeline": "pnpm --filter gbcam-extract run test:pipeline"
+    "test:pipeline": "pnpm --filter gbcam-extract run test:pipeline",
+    "prepare": "husky install"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
-    "gbcam-extract-web": "link:packages\\gbcam-extract-web"
+    "gbcam-extract-web": "link:packages\\gbcam-extract-web",
+    "husky": "^9.1.7"
   }
 }
