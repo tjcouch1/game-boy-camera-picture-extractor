@@ -1,16 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
-import type { PipelineResult } from "gbcam-extract";
 import {
   serializePipelineResult,
   deserializePipelineResult,
   isSerializedPipelineResult,
 } from "../utils/serialization.js";
+import type { ProcessingResult } from "./useProcessing.js";
 
-export interface ProcessingResult {
-  result: PipelineResult;
-  filename: string;
-  processingTime: number;
-}
+export type { ProcessingResult };
 
 export interface ImageHistoryBatch {
   id: string;

@@ -13,6 +13,7 @@ import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
 import { CollapsibleInstructions } from "./components/CollapsibleInstructions.js";
 import { USER_INSTRUCTIONS_MARKDOWN } from "./generated/UserInstructions.js";
+import { DebugLogPanel } from "./components/DebugLogPanel.js";
 
 const APP_SETTINGS_KEY = "gbcam-app-settings";
 
@@ -394,6 +395,10 @@ export default function App() {
                       <option value={16}>16x</option>
                     </select>
                   </label>
+                </div>
+
+                <div className="mb-4">
+                  <DebugLogPanel results={results} />
                 </div>
 
                 <div className="grid gap-4">

@@ -1,17 +1,25 @@
 import { useState, useCallback, useEffect } from "react";
 import { flushSync } from "react-dom";
-import type { PipelineResult, GBImageData } from "gbcam-extract";
+import type { PipelineResult } from "gbcam-extract";
 import { processPicture } from "gbcam-extract";
 import {
   serializePipelineResult,
   deserializePipelineResult,
   isSerializedPipelineResult,
 } from "../utils/serialization.js";
+import {
+  loadImageWithDiagnostics,
+  computeOutputDiagnostics,
+  type LoadDiagnostics,
+  type OutputDiagnostics,
+} from "../utils/imageDiagnostics.js";
 
 export interface ProcessingResult {
   result: PipelineResult;
   filename: string;
   processingTime: number;
+  loadDiagnostics?: LoadDiagnostics;
+  outputDiagnostics?: OutputDiagnostics;
 }
 
 export interface CurrentImageProgress {
@@ -61,31 +69,6 @@ function saveResultsToStorage(results: ProcessingResult[]) {
     result: serializePipelineResult(item.result),
   }));
   localStorage.setItem(RESULTS_STORAGE_KEY, JSON.stringify(serialized));
-}
-
-function fileToGBImageData(file: File): Promise<GBImageData> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, img.width, img.height);
-      resolve({
-        data: imageData.data,
-        width: img.width,
-        height: img.height,
-      });
-      URL.revokeObjectURL(img.src);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(img.src);
-      reject(new Error(`Failed to load image: ${file.name}`));
-    };
-    img.src = URL.createObjectURL(file);
-  });
 }
 
 export function useProcessing() {
@@ -184,7 +167,8 @@ export function useProcessing() {
           ),
         }));
 
-        const gbImage = await fileToGBImageData(file);
+        const { image: gbImage, diagnostics: loadDiagnostics } =
+          await loadImageWithDiagnostics(file);
 
         const start = performance.now();
         const result = await processPicture(gbImage, {
@@ -210,8 +194,18 @@ export function useProcessing() {
           },
         });
         const processingTime = performance.now() - start;
+        const outputDiagnostics = computeOutputDiagnostics(
+          result.grayscale,
+          result.intermediates,
+        );
 
-        newResults.push({ result, filename: file.name, processingTime });
+        newResults.push({
+          result,
+          filename: file.name,
+          processingTime,
+          loadDiagnostics,
+          outputDiagnostics,
+        });
         setResults([...newResults]);
 
         const completedCount = fileIndex + 1;
