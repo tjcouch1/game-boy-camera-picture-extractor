@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { ThemeProvider } from "next-themes";
 import App from "./App.js";
 import "./index.css";
 
@@ -57,6 +58,13 @@ function showUpdateNotification() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <App />
+    </ThemeProvider>
   </React.StrictMode>,
 );

@@ -14,6 +14,9 @@ import type { PaletteEntry } from "./data/palettes.js";
 import { CollapsibleInstructions } from "./components/CollapsibleInstructions.js";
 import { USER_INSTRUCTIONS_MARKDOWN } from "./generated/UserInstructions.js";
 import { useAppSettings } from "./hooks/useAppSettings.js";
+import { useTheme } from "next-themes";
+import { useFaviconSwap } from "./hooks/useFaviconSwap.js";
+import { ModeToggle } from "./components/ModeToggle.js";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -103,6 +106,13 @@ export default function App() {
   const [isInstallable, setIsInstallable] = useState(false);
   const [showIOSInstallTip, setShowIOSInstallTip] = useState(false);
 
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  useFaviconSwap();
+  const iconSrc =
+    mounted && resolvedTheme === "dark" ? "./icon-dark.svg" : "./icon.svg";
+
   // Handle PWA install prompt
   useEffect(() => {
     // iOS Safari never fires beforeinstallprompt — show a manual tip instead
@@ -176,20 +186,23 @@ export default function App() {
       <div className="container mx-auto px-4 py-8 max-w-4xl flex-1">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <img src="./icon.svg" alt="App Icon" className="w-8 h-8" />
+            <img src={iconSrc} alt="App Icon" className="size-8" />
             <h1 className="text-2xl font-bold">
               Game Boy Camera Picture Extractor
             </h1>
           </div>
-          {isInstallable && (
-            <button
-              onClick={handleInstallApp}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
-              title="Install this app on your device"
-            >
-              Install App
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <ModeToggle />
+            {isInstallable && (
+              <button
+                onClick={handleInstallApp}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
+                title="Install this app on your device"
+              >
+                Install App
+              </button>
+            )}
+          </div>
         </div>
 
         {/* iOS install tip — Safari doesn't fire beforeinstallprompt */}
