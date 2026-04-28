@@ -50,7 +50,8 @@
       "Bash(pnpm test:pipeline)",
       "Bash(pnpm test *)",
       "Bash(pnpm add *)",
-      "Bash(pnpm dev *)"
+      "Bash(pnpm dev *)",
+      "Bash(pnpm extract *)"
     ],
     "deny": [
       "Bash(rm -rf /)",
