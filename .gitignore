@@ -209,6 +209,9 @@ __marimo__/
 # Output debug files
 sample-pictures-out/debug
 
+# Python output files - unnecessary to check in both
+sample-pictures-out-py
+
 # Some extra folders claude created at some point
 test-output-debug
 diagnostic-output
@@ -249,3 +252,7 @@ packages/gbcam-extract-web/licenses-raw.json
 # Generated instructions file and assets
 packages/gbcam-extract-web/src/generated/UserInstructions.tsx
 packages/gbcam-extract-web/public/instructions-assets
+
+# Generated skills - npx skills add shadcn/ui
+skills-lock.json
+.claude/skills/shadcn
