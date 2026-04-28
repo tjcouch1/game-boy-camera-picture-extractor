@@ -20,6 +20,12 @@ import {
 import { Button } from "@/shadcn/components/button";
 import { Card, CardContent } from "@/shadcn/components/card";
 import { cn } from "@/shadcn/utils/utils";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@/shadcn/components/field";
+import { Input } from "@/shadcn/components/input";
 import { useClipboardPaletteCheck } from "../hooks/useClipboardPalette.js";
 import {
   PALETTE_COLOR_LABELS,
@@ -467,11 +473,9 @@ export function PalettePicker({
                     {/* Color pickers */}
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       {palette.colors.map((c, i) => (
-                        <label
-                          key={i}
-                          className="flex flex-col items-center gap-1"
-                        >
-                          <input
+                        <Field key={i} className="items-center gap-1 w-auto">
+                          <Input
+                            id={`palette-color-${palette.id}-${i}`}
                             type="color"
                             value={c}
                             onChange={(e) => {
@@ -482,12 +486,15 @@ export function PalettePicker({
                                 e.target.value,
                               );
                             }}
-                            className="w-8 h-8 rounded cursor-pointer bg-transparent"
+                            className="size-8 cursor-pointer bg-transparent p-0"
                           />
-                          <span className={PALETTE_LABEL_CLASS}>
+                          <FieldLabel
+                            htmlFor={`palette-color-${palette.id}-${i}`}
+                            className={PALETTE_LABEL_CLASS}
+                          >
                             {PALETTE_COLOR_LABELS[i]}
-                          </span>
-                        </label>
+                          </FieldLabel>
+                        </Field>
                       ))}
                       <div className="flex gap-1 ms-auto">
                         {clipboardEnabled && (
@@ -529,23 +536,37 @@ export function PalettePicker({
                     </div>
 
                     {/* Name input */}
-                    <input
-                      type="text"
-                      value={palette.name}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handlePaletteNameChange(palette.id, e.target.value);
-                      }}
-                      placeholder="Palette name"
-                      className={`${PALETTE_INPUT_CLASS} mb-2`}
-                    />
-
-                    {/* Error message */}
-                    {editingPaletteErrors[palette.id] && (
-                      <p className="text-destructive text-[10px] mb-2">
-                        {editingPaletteErrors[palette.id]}
-                      </p>
-                    )}
+                    <Field
+                      className="mb-2"
+                      data-invalid={
+                        editingPaletteErrors[palette.id] ? true : undefined
+                      }
+                    >
+                      <FieldLabel
+                        htmlFor={`palette-name-${palette.id}`}
+                        className="sr-only"
+                      >
+                        Palette name
+                      </FieldLabel>
+                      <Input
+                        id={`palette-name-${palette.id}`}
+                        type="text"
+                        value={palette.name}
+                        placeholder="Palette name"
+                        aria-invalid={
+                          editingPaletteErrors[palette.id] ? true : undefined
+                        }
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handlePaletteNameChange(palette.id, e.target.value);
+                        }}
+                      />
+                      {editingPaletteErrors[palette.id] && (
+                        <FieldDescription className="text-destructive text-[10px]">
+                          {editingPaletteErrors[palette.id]}
+                        </FieldDescription>
+                      )}
+                    </Field>
 
                     {/* Action buttons */}
                     <div className="flex gap-1 justify-end">

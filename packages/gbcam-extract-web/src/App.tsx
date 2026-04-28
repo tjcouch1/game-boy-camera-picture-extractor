@@ -26,6 +26,17 @@ import {
 import { Button } from "@/shadcn/components/button";
 import { Card, CardContent } from "@/shadcn/components/card";
 import { Separator } from "@/shadcn/components/separator";
+import { Checkbox } from "@/shadcn/components/checkbox";
+import { Field, FieldGroup, FieldLabel } from "@/shadcn/components/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shadcn/components/select";
+import { Input } from "@/shadcn/components/input";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -254,26 +265,26 @@ export default function App() {
 
         {status === "ready" && (
           <>
-            <div className="mb-6 flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                <input
-                  type="checkbox"
+            <FieldGroup className="mb-6 flex-row flex-wrap items-center gap-4">
+              <Field orientation="horizontal" className="w-auto gap-2">
+                <Checkbox
+                  id="debug-mode"
                   checked={debug}
-                  onChange={(e) => setDebug(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(v) => setDebug(v === true)}
                 />
-                Debug mode
-              </label>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                <input
-                  type="checkbox"
+                <FieldLabel htmlFor="debug-mode">Debug mode</FieldLabel>
+              </Field>
+              <Field orientation="horizontal" className="w-auto gap-2">
+                <Checkbox
+                  id="clipboard-enabled"
                   checked={clipboardEnabled}
-                  onChange={(e) => setClipboardEnabled(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(v) => setClipboardEnabled(v === true)}
                 />
-                Enable Copy/Paste Palettes
-              </label>
-            </div>
+                <FieldLabel htmlFor="clipboard-enabled">
+                  Enable Copy/Paste Palettes
+                </FieldLabel>
+              </Field>
+            </FieldGroup>
 
             <ImageInput
               onImagesSelected={handleImagesSelected}
@@ -310,40 +321,58 @@ export default function App() {
                       Download All ({results.length})
                     </Button>
                   )}
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>Output Scale:</span>
-                    <select
-                      value={outputScale}
-                      onChange={(e) =>
-                        setOutputScale(parseInt(e.target.value, 10))
-                      }
-                      className="px-2 py-1 bg-input rounded text-xs text-foreground border border-input focus:border-ring outline-none"
+                  <Field orientation="horizontal" className="w-auto gap-2">
+                    <FieldLabel htmlFor="output-scale">
+                      Output Scale:
+                    </FieldLabel>
+                    <Select
+                      value={String(outputScale)}
+                      onValueChange={(v) => {
+                        if (typeof v === "string")
+                          setOutputScale(parseInt(v, 10));
+                      }}
                     >
-                      <option value={1}>1x (128x112)</option>
-                      <option value={2}>2x (256x224)</option>
-                      <option value={3}>3x (384x336)</option>
-                      <option value={4}>4x (512x448)</option>
-                      <option value={8}>8x (1024x896)</option>
-                      <option value={16}>16x (2048x1792)</option>
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>Preview Scale:</span>
-                    <select
-                      value={previewScale}
-                      onChange={(e) =>
-                        setPreviewScale(parseInt(e.target.value, 10))
-                      }
-                      className="px-2 py-1 bg-input rounded text-xs text-foreground border border-input focus:border-ring outline-none"
+                      <SelectTrigger id="output-scale" className="w-fit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="1">1x (128x112)</SelectItem>
+                          <SelectItem value="2">2x (256x224)</SelectItem>
+                          <SelectItem value="3">3x (384x336)</SelectItem>
+                          <SelectItem value="4">4x (512x448)</SelectItem>
+                          <SelectItem value="8">8x (1024x896)</SelectItem>
+                          <SelectItem value="16">16x (2048x1792)</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field orientation="horizontal" className="w-auto gap-2">
+                    <FieldLabel htmlFor="preview-scale">
+                      Preview Scale:
+                    </FieldLabel>
+                    <Select
+                      value={String(previewScale)}
+                      onValueChange={(v) => {
+                        if (typeof v === "string")
+                          setPreviewScale(parseInt(v, 10));
+                      }}
                     >
-                      <option value={1}>1x</option>
-                      <option value={2}>2x</option>
-                      <option value={3}>3x</option>
-                      <option value={4}>4x</option>
-                      <option value={8}>8x</option>
-                      <option value={16}>16x</option>
-                    </select>
-                  </label>
+                      <SelectTrigger id="preview-scale" className="w-fit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="1">1x</SelectItem>
+                          <SelectItem value="2">2x</SelectItem>
+                          <SelectItem value="3">3x</SelectItem>
+                          <SelectItem value="4">4x</SelectItem>
+                          <SelectItem value="8">8x</SelectItem>
+                          <SelectItem value="16">16x</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
                 </div>
 
                 <div className="grid gap-4">
@@ -402,24 +431,27 @@ export default function App() {
                 <CollapsibleContent>
                   <div className="space-y-4">
                     <div className="flex gap-2 mb-3">
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={historySettings.maxSize}
-                        onChange={(e) =>
-                          updateHistorySettings({
-                            maxSize: Math.max(
-                              1,
-                              parseInt(e.target.value, 10) || 1,
-                            ),
-                          })
-                        }
-                        className="px-2 py-1 bg-input rounded text-xs text-foreground border border-input focus:border-ring outline-none w-16"
-                      />
-                      <label className="text-xs text-muted-foreground flex items-center">
-                        max images to keep in history
-                      </label>
+                      <Field orientation="horizontal" className="w-auto gap-2">
+                        <Input
+                          id="history-max-size"
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={historySettings.maxSize}
+                          onChange={(e) =>
+                            updateHistorySettings({
+                              maxSize: Math.max(
+                                1,
+                                parseInt(e.target.value, 10) || 1,
+                              ),
+                            })
+                          }
+                          className="w-16"
+                        />
+                        <FieldLabel htmlFor="history-max-size">
+                          max images to keep in history
+                        </FieldLabel>
+                      </Field>
                       <Button
                         variant="destructive"
                         size="sm"
