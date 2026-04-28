@@ -144,10 +144,81 @@ pnpm interleave -- --image thing-2 --py warp,correct,crop,sample --ts quantize
 
 ### Inspecting test results
 
-- `test-output/<test-name>/` (TypeScript) or `test-output-py/<test-name>/` (Python) contains the pipeline output and debug images
+- `test-output/<test-name>/` (TypeScript) or `test-output-py/<test-name>/` (Python) contains the final outputs and reference-comparison diagnostics
 - `test-output/test-summary.log` / `test-output-py/test-summary.log` has accuracy numbers (matching/different pixel counts and percentages)
-- Debug images show where pixels differ from the reference (error maps, side-by-side comparisons)
-- `test-output/<test-name>/debug/` contains intermediate step images when run with debug enabled
+- `test-output/<test-name>/<test-name>.log` is the per-image log: pipeline diagnostics, comparison summary, color distribution, confusion matrix, error breakdown
+- `test-output/<test-name>/<test-name>_diag_*.png` are reference-comparison images (error map, side-by-side, etc.)
+- `test-output/<test-name>/debug/` holds everything emitted by the pipeline itself when `debug: true` (see next section)
+
+### Pipeline debug output (`debug/` folder)
+
+When the TS pipeline runs with `debug: true` (always on for `pnpm test:pipeline` and `pnpm extract` against `sample-pictures/`), each test/sample directory gets a `debug/` subfolder containing per-step images plus a structured JSON metrics file. **Both visual debugging and programmatic analysis are first-class targets** — every metric printed in the log is also in the JSON.
+
+#### Debug images per step
+
+All filenames are prefixed with the input stem (e.g. `thing-1_`).
+
+**warp**
+- `<stem>_warp.png` — final warped (160·scale)×(144·scale) RGBA image (post both refinement passes). This is the regular pipeline intermediate, not strictly a "debug" image.
+- `<stem>_warp_a_corners.png` — original input photo with the four detected screen corners drawn as green discs and a green polyline. Use this to verify the corner-detection step found the right quadrilateral.
+
+**correct**
+- `<stem>_correct.png` — final brightness-corrected RGBA image (regular intermediate).
+- `<stem>_correct_a_before_after.png` — camera region (128·scale × 112·scale) shown side-by-side: warped input on the left, corrected output on the right. Quickest visual check of whether the brightness gradient was removed.
+- `<stem>_correct_b_white_surface.png` — JET heatmap (red=high, blue=low) of the average of the R-channel and G-channel white-reference surfaces. Visualises the front-light brightness gradient model — should be smooth.
+- `<stem>_correct_c_dark_surface.png` — same but for the dark-reference (DG) surfaces. Both surfaces together define the per-pixel affine correction.
+
+**crop**
+- `<stem>_crop.png` — cropped (128·scale)×(112·scale) RGBA image (regular intermediate).
+- `<stem>_crop_a_region.png` — full warp output with the crop rectangle (green) and the inner-border band (orange) overlaid. Confirms the crop is taking pixels from the right place.
+
+**sample**
+- `<stem>_sample.png` — 128×112 RGBA image, one pixel per GB pixel, holding the per-channel sub-pixel-aware brightness samples (regular intermediate).
+- `<stem>_sample_a_8x.png` — 8× nearest-neighbour upscale of the sample image so individual GB pixels are visible.
+
+**quantize**
+- `<stem>_gbcam.png` (in the parent directory, not `debug/`) — final 128×112 grayscale, values exactly 0/82/165/255.
+- `<stem>_gbcam_rgb.png` (in the parent directory) — same image rendered with the "Down" palette colors.
+- `<stem>_quantize_a_gray_8x.png` — 8× upscaled grayscale output.
+- `<stem>_quantize_b_rgb_8x.png` — 8× upscaled palette-rendered output (matching the "Down" palette).
+- `<stem>_quantize_c_rg_scatter.png` — 256×256 RG color-space scatter of every pixel sample, coloured by its final palette label, with per-cluster centers (white +) and palette targets (yellow ○) overlaid. **The single most useful image for diagnosing classification problems** — clusters should sit close to their targets, and the four point clouds should be cleanly separated.
+
+#### Structured metrics: `<stem>_debug.json`
+
+Lives at `test-output/<test-name>/debug/<test-name>_debug.json`. JSON with two top-level keys:
+
+- `metrics` — per-step structured data (numbers, arrays, nested objects). Use `jq` for programmatic inspection, e.g.:
+  - `jq .metrics.warp.quadScore <stem>_debug.json` — corner detection score (lower is better; > 0.15 logs a warning)
+  - `jq .metrics.warp.pass2.cornerErrors <stem>_debug.json` — sub-pixel corner errors after the second refinement pass
+  - `jq .metrics.correct.framePostCorrectionP85 <stem>_debug.json` — frame R/G/B post-correction (target #FFFFA5 = R255 G255 B165)
+  - `jq .metrics.quantize.clusterCenters <stem>_debug.json` — palette-ordered RG cluster centers from k-means
+  - `jq .metrics.quantize.counts.final <stem>_debug.json` — final per-palette pixel counts
+- `log` — chronological array of human-readable diagnostic strings, exactly the lines that also appear under "PIPELINE DIAGNOSTICS" in the per-image `.log` file.
+
+Schema by step:
+
+| Step | Key fields |
+|------|------------|
+| `warp` | `threshold`, `contourArea`, `aspect`, `quadScore`, `sourceCorners`, `pass1.{edgeCurvatures, cornerErrors, refined}`, `pass2.{...}` |
+| `correct` | `whiteSamples.{R,G}` (count of frame blocks kept), `whiteSurfaceRange.{R,G}`, `darkSurfaceRange.{R,G}`, `dgCalibrationPixels.{R,G}` (interior DG pixels used in refinement), `framePostCorrectionP85.{R,G,B}` |
+| `crop` | `cameraRegion`, `borderMean`, `whiteFrameMean`, `borderToFrameRatio`, `validation` ("ok" \| "warn") |
+| `sample` | `ranges.{R,G,B}`, `subpixelCols.{B,G,R}`, `vMargin` |
+| `quantize` | `clusterCenters` (palette-ordered), `stripEnsemble.{strips, changed}`, `valleyRefinement.{threshold, changed}`, `counts.{afterGlobalKmeans, afterStripEnsemble, final}` |
+
+#### Enabling debug from the API
+
+In code (e.g. when calling `processPicture()` from a custom script):
+
+```ts
+const result = await processPicture(input, { scale: 8, debug: true });
+// result.intermediates: { warp, correct, crop, sample } — RGBA GBImageData each
+// result.debug.images:  Record<string, GBImageData> — keyed by debug-image name
+//                       (e.g. "warp_a_corners", "quantize_c_rg_scatter")
+// result.debug.log:     string[] — chronological diagnostic lines
+// result.debug.metrics: Record<step, Record<key, value>> — structured metrics
+```
+
+Both `pnpm test:pipeline` and the sample-pictures portion of the same script always run with `debug: true`; the standalone `pnpm extract` script does not currently surface debug output.
 
 ### Website
 

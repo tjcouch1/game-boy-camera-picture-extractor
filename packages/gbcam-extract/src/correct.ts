@@ -33,6 +33,12 @@ import {
   INNER_RIGHT,
   createGBImageData,
 } from "./common.js";
+import {
+  type DebugCollector,
+  cropImage,
+  hstack,
+  renderHeatmap,
+} from "./debug.js";
 
 // ─── Constants ───
 
@@ -46,6 +52,7 @@ export interface CorrectOptions {
   polyDegree?: number;
   darkSmooth?: number;
   refinePasses?: number;
+  debug?: DebugCollector;
 }
 
 /**
@@ -62,6 +69,7 @@ export function correct(
   const polyDegree = options?.polyDegree ?? 2;
   const darkSmooth = options?.darkSmooth ?? 13;
   const refinePasses = options?.refinePasses ?? 1;
+  const dbg = options?.debug;
 
   const expectedW = SCREEN_W * scale;
   const expectedH = SCREEN_H * scale;
@@ -125,7 +133,30 @@ export function correct(
   // For simplicity, keep B as-is or apply light correction
   let correctedB = new Float32Array(chB);
 
+  if (dbg) {
+    dbg.log(
+      `[correct] R: white samples kept=${whiteVsR.length} ` +
+        `(median ${median(whiteVsR).toFixed(1)}, range ` +
+        `${Math.min(...whiteVsR).toFixed(0)}–${Math.max(...whiteVsR).toFixed(0)})`,
+    );
+    dbg.log(
+      `[correct] G: white samples kept=${whiteVsG.length} ` +
+        `(median ${median(whiteVsG).toFixed(1)}, range ` +
+        `${Math.min(...whiteVsG).toFixed(0)}–${Math.max(...whiteVsG).toFixed(0)})`,
+    );
+    dbg.log(
+      `[correct] white surface R: ${surfRange(whiteSurfaceR)}; ` +
+        `G: ${surfRange(whiteSurfaceG)}`,
+    );
+    dbg.log(
+      `[correct] dark surface  R: ${surfRange(darkSurfaceR)}; ` +
+        `G: ${surfRange(darkSurfaceG)}`,
+    );
+  }
+
   // ── Iterative refinement (optional: can apply per channel) ──
+  let calCountR = 0;
+  let calCountG = 0;
   for (let pass = 0; pass < refinePasses; pass++) {
     const refinedR = refinePassChannel(
       correctedR,
@@ -142,6 +173,7 @@ export function correct(
     if (refinedR !== null) {
       darkSurfaceR = refinedR.darkSurface;
       correctedR = refinedR.corrected;
+      calCountR = refinedR.calCount;
     }
 
     const refinedG = refinePassChannel(
@@ -159,7 +191,14 @@ export function correct(
     if (refinedG !== null) {
       darkSurfaceG = refinedG.darkSurface;
       correctedG = refinedG.corrected;
+      calCountG = refinedG.calCount;
     }
+  }
+
+  if (dbg && refinePasses > 0) {
+    dbg.log(
+      `[correct] interior DG calibration: R=${calCountR}px G=${calCountG}px`,
+    );
   }
 
   // ── Build output RGBA ──
@@ -172,7 +211,148 @@ export function correct(
     output.data[j + 3] = 255;
   }
 
+  if (dbg) {
+    // a — Side-by-side camera region: input | output
+    const camX = FRAME_THICK * scale;
+    const camY = FRAME_THICK * scale;
+    const camW = CAM_W * scale;
+    const camH = CAM_H * scale;
+    const beforeCam = cropImage(input, camX, camY, camW, camH);
+    const afterCam = cropImage(output, camX, camY, camW, camH);
+    dbg.addImage("correct_a_before_after", hstack(beforeCam, afterCam));
+
+    // b — White surface heatmap (avg of R and G channels)
+    const whiteAvg = new Float32Array(H * W);
+    for (let i = 0; i < H * W; i++) {
+      whiteAvg[i] = (whiteSurfaceR[i] + whiteSurfaceG[i]) / 2;
+    }
+    dbg.addImage("correct_b_white_surface", renderHeatmap(whiteAvg, W, H));
+
+    // c — Dark surface heatmap (avg of R and G channels)
+    const darkAvg = new Float32Array(H * W);
+    for (let i = 0; i < H * W; i++) {
+      darkAvg[i] = (darkSurfaceR[i] + darkSurfaceG[i]) / 2;
+    }
+    dbg.addImage("correct_c_dark_surface", renderHeatmap(darkAvg, W, H));
+
+    // Frame post-correction p85 — verifies the correction landed where expected
+    const framePost = framePost85(output);
+    dbg.log(
+      `[correct] frame post-correction p85: ` +
+        `R=${framePost.R.toFixed(0)} G=${framePost.G.toFixed(0)} B=${framePost.B.toFixed(0)} ` +
+        `(target #FFFFA5 = R255 G255 B165)`,
+    );
+    dbg.log(
+      `[correct] camera region mean: ` +
+        cameraRegionMean(output, scale)
+          .map((v, i) => `${"RGB"[i]}=${v.toFixed(1)}`)
+          .join(" "),
+    );
+
+    dbg.setMetrics("correct", {
+      whiteSamples: { R: whiteVsR.length, G: whiteVsG.length },
+      whiteSurfaceRange: {
+        R: [Number(min(whiteSurfaceR).toFixed(2)), Number(max(whiteSurfaceR).toFixed(2))],
+        G: [Number(min(whiteSurfaceG).toFixed(2)), Number(max(whiteSurfaceG).toFixed(2))],
+      },
+      darkSurfaceRange: {
+        R: [Number(min(darkSurfaceR).toFixed(2)), Number(max(darkSurfaceR).toFixed(2))],
+        G: [Number(min(darkSurfaceG).toFixed(2)), Number(max(darkSurfaceG).toFixed(2))],
+      },
+      dgCalibrationPixels: { R: calCountR, G: calCountG },
+      framePostCorrectionP85: {
+        R: Math.round(framePost.R),
+        G: Math.round(framePost.G),
+        B: Math.round(framePost.B),
+      },
+    });
+  }
+
   return output;
+}
+
+// ─── Debug helpers (correct step) ───
+
+function median(values: number[] | Float64Array | Float32Array): number {
+  const arr = Array.from(values).sort((a, b) => a - b);
+  const n = arr.length;
+  if (n === 0) return 0;
+  if (n % 2 === 0) return (arr[n / 2 - 1] + arr[n / 2]) / 2;
+  return arr[(n - 1) / 2];
+}
+
+function min(arr: Float32Array): number {
+  let m = Infinity;
+  for (let i = 0; i < arr.length; i++) if (arr[i] < m) m = arr[i];
+  return m;
+}
+
+function max(arr: Float32Array): number {
+  let m = -Infinity;
+  for (let i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
+  return m;
+}
+
+function surfRange(arr: Float32Array): string {
+  return `${min(arr).toFixed(0)}–${max(arr).toFixed(0)}`;
+}
+
+/** Compute p85 of each RGB channel across the top filmstrip strip blocks. */
+function framePost85(img: GBImageData): { R: number; G: number; B: number } {
+  // Reuse logic from Python: top strip GB rows 0..INNER_TOP-1, cols 10..SCREEN_W-10
+  // We don't have scale here directly, derive from image width:
+  const scale = img.width / SCREEN_W;
+  const result = { R: 0, G: 0, B: 0 };
+  for (const ch of [0, 1, 2] as const) {
+    const vals: number[] = [];
+    for (let gy = 0; gy < INNER_TOP; gy++) {
+      for (let gx = 10; gx < SCREEN_W - 10; gx++) {
+        const block: number[] = [];
+        const y1 = gy * scale;
+        const y2 = (gy + 1) * scale;
+        const x1 = gx * scale;
+        const x2 = (gx + 1) * scale;
+        for (let y = y1; y < y2; y++) {
+          for (let x = x1; x < x2; x++) {
+            block.push(img.data[(y * img.width + x) * 4 + ch]);
+          }
+        }
+        if (block.length > 0) {
+          block.sort((a, b) => a - b);
+          const idx = Math.floor(0.85 * (block.length - 1));
+          vals.push(block[idx]);
+        }
+      }
+    }
+    if (vals.length > 0) {
+      const med = median(vals);
+      const filtered = vals.filter((v) => v > 0.5 * med);
+      const v = filtered.length > 0 ? median(filtered) : med;
+      if (ch === 0) result.R = v;
+      else if (ch === 1) result.G = v;
+      else result.B = v;
+    }
+  }
+  return result;
+}
+
+function cameraRegionMean(img: GBImageData, scale: number): [number, number, number] {
+  const x0 = FRAME_THICK * scale;
+  const y0 = FRAME_THICK * scale;
+  const x1 = (FRAME_THICK + CAM_W) * scale;
+  const y1 = (FRAME_THICK + CAM_H) * scale;
+  let sR = 0, sG = 0, sB = 0;
+  let n = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * img.width + x) * 4;
+      sR += img.data[i];
+      sG += img.data[i + 1];
+      sB += img.data[i + 2];
+      n++;
+    }
+  }
+  return n > 0 ? [sR / n, sG / n, sB / n] : [0, 0, 0];
 }
 
 // ─── Helper: GB block sample ───
@@ -762,7 +942,7 @@ function refinePassChannel(
   darkSmooth: number,
   whiteTarget: number,
   darkTarget: number,
-): { darkSurface: Float32Array; corrected: Float32Array } | null {
+): { darkSurface: Float32Array; corrected: Float32Array; calCount: number } | null {
   // Quick-sample the corrected image to get per-GB-pixel brightness
   const sampled = quickSample(corrected, W, scale);
 
@@ -859,5 +1039,5 @@ function refinePassChannel(
     darkTarget,
   );
 
-  return { darkSurface: newDarkSurface, corrected: newCorrected };
+  return { darkSurface: newDarkSurface, corrected: newCorrected, calCount: calY.length };
 }

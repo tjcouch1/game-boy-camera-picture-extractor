@@ -35,6 +35,15 @@ export interface PipelineResult {
     crop: GBImageData;
     sample: GBImageData;
   };
+  /**
+   * Populated when `options.debug` is true. Contains diagnostic images,
+   * structured per-step metrics, and a chronological log.
+   */
+  debug?: {
+    images: Record<string, GBImageData>;
+    log: string[];
+    metrics: Record<string, Record<string, unknown>>;
+  };
 }
 
 export interface PipelineOptions {

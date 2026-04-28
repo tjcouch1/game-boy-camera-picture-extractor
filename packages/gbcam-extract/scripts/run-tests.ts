@@ -358,12 +358,18 @@ async function savePaletteImage(
 
 // ─── Pipeline runner ───
 
+interface PipelineRunResult {
+  grayscale: GBImageData;
+  /** Per-step diagnostic log lines (empty if debug was off). */
+  debugLog: string[];
+}
+
 async function runPipeline(
   inputPath: string,
   outputDir: string,
   stem: string,
   scale: number = 8
-): Promise<GBImageData> {
+): Promise<PipelineRunResult> {
   const input = await loadImage(inputPath);
   const result = await processPicture(input, {
     scale,
@@ -382,19 +388,57 @@ async function runPipeline(
   const rgb = applyPalette(result.grayscale, DOWN_PALETTE);
   await saveImage(rgb, join(outputDir, `${stem}_gbcam_rgb.png`));
 
-  // Save intermediates for debugging
+  await writeDebugArtifacts(result, outputDir, stem);
+
+  return {
+    grayscale: result.grayscale,
+    debugLog: result.debug?.log ?? [],
+  };
+}
+
+/**
+ * Write all debug artifacts for a pipeline run, all under `<outputDir>/debug/`:
+ *   <stem>_<step>.png       — base step intermediates (warp/correct/crop/sample)
+ *   <stem>_<dbgname>.png    — per-step debug images (e.g. warp_a_corners)
+ *   <stem>_debug.json       — structured metrics + chronological log
+ */
+async function writeDebugArtifacts(
+  result: {
+    intermediates?: Record<string, GBImageData>;
+    debug?: {
+      images: Record<string, GBImageData>;
+      log: string[];
+      metrics: Record<string, Record<string, unknown>>;
+    };
+  },
+  outputDir: string,
+  stem: string
+): Promise<void> {
+  if (!result.intermediates && !result.debug) return;
+  const debugDir = join(outputDir, "debug");
+  if (!existsSync(debugDir)) mkdirSync(debugDir, { recursive: true });
+
   if (result.intermediates) {
-    const debugDir = join(outputDir, "debug");
-    if (!existsSync(debugDir)) mkdirSync(debugDir, { recursive: true });
     for (const [stepName, img] of Object.entries(result.intermediates)) {
-      await saveImage(
-        img as GBImageData,
-        join(debugDir, `${stem}_${stepName}.png`)
-      );
+      await saveImage(img, join(debugDir, `${stem}_${stepName}.png`));
     }
   }
-
-  return result.grayscale;
+  if (result.debug?.images) {
+    for (const [name, img] of Object.entries(result.debug.images)) {
+      await saveImage(img, join(debugDir, `${stem}_${name}.png`));
+    }
+  }
+  if (result.debug) {
+    writeFileSync(
+      join(debugDir, `${stem}_debug.json`),
+      JSON.stringify(
+        { metrics: result.debug.metrics, log: result.debug.log },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+  }
 }
 
 // ─── Log parsing ───
@@ -535,16 +579,7 @@ async function main() {
             join(SAMPLE_PICTURES_OUT, `${stem}_gbcam_rgb.png`)
           );
 
-          if (result.intermediates) {
-            const debugDir = join(SAMPLE_PICTURES_OUT, "debug");
-            if (!existsSync(debugDir)) mkdirSync(debugDir, { recursive: true });
-            for (const [stepName, img] of Object.entries(result.intermediates)) {
-              await saveImage(
-                img as GBImageData,
-                join(debugDir, `${stem}_${stepName}.png`)
-              );
-            }
-          }
+          await writeDebugArtifacts(result, SAMPLE_PICTURES_OUT, stem);
         } catch (err) {
           console.error(
             `  ERROR: ${err instanceof Error ? err.message : String(err)}`
@@ -613,8 +648,14 @@ async function main() {
             8
           );
 
+          // Echo per-step diagnostic logs into the test log
+          if (pipelineResult.debugLog.length > 0) {
+            log(`\nPIPELINE DIAGNOSTICS`);
+            for (const line of pipelineResult.debugLog) log(`  ${line}`);
+          }
+
           // Load and compare
-          const resultGray = extractGrayscale(pipelineResult);
+          const resultGray = extractGrayscale(pipelineResult.grayscale);
           const referenceGray = await loadReference(refPath);
 
           const cmp = compare(resultGray, referenceGray, outputDir, stem, log);
