@@ -1,29 +1,16 @@
-import { useState, useEffect } from "react";
+import { useLocalStorage } from "../hooks/useLocalStorage.js";
 import { MarkdownRenderer } from "./MarkdownRenderer.js";
 
 const INSTRUCTIONS_STORAGE_KEY = "gbcam-instructions-open";
 
 /**
- * Collapsible instructions panel that persists open/closed state to localStorage
+ * Collapsible instructions panel that persists open/closed state to localStorage.
  */
 export function CollapsibleInstructions({ markdown }: { markdown: string }) {
-  const [isOpen, setIsOpen] = useState(() => {
-    try {
-      const stored = localStorage.getItem(INSTRUCTIONS_STORAGE_KEY);
-      return stored !== "false"; // Default to open
-    } catch {
-      return true;
-    }
-  });
-
-  // Persist to localStorage when state changes
-  useEffect(() => {
-    try {
-      localStorage.setItem(INSTRUCTIONS_STORAGE_KEY, String(isOpen));
-    } catch {
-      // localStorage might not be available (incognito mode, etc)
-    }
-  }, [isOpen]);
+  const [isOpen, setIsOpen] = useLocalStorage<boolean>(
+    INSTRUCTIONS_STORAGE_KEY,
+    true,
+  );
 
   return (
     <div className="mb-6 border border-gray-600 rounded-lg overflow-hidden">

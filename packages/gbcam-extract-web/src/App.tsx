@@ -13,8 +13,7 @@ import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
 import { CollapsibleInstructions } from "./components/CollapsibleInstructions.js";
 import { USER_INSTRUCTIONS_MARKDOWN } from "./generated/UserInstructions.js";
-
-const APP_SETTINGS_KEY = "gbcam-app-settings";
+import { useAppSettings } from "./hooks/useAppSettings.js";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -82,90 +81,27 @@ export default function App() {
     updateSettings: updateHistorySettings,
     settings: historySettings,
   } = useImageHistory();
-  const [paletteEntry, setPaletteEntry] = useState<PaletteEntry>({
+  const { settings, updateSetting } = useAppSettings();
+  const debug = settings.debug;
+  const clipboardEnabled = settings.clipboardEnabled;
+  const outputScale = settings.outputScale;
+  const previewScale = settings.previewScale;
+  const paletteEntry = settings.paletteSelection ?? {
     name: "Down",
     colors: ["#FFFFA5", "#FF9494", "#9494FF", "#000000"],
-  });
-  const [debug, setDebugInternal] = useState(false);
-  const [clipboardEnabled, setClipboardEnabledInternal] = useState(false);
-  const [outputScale, setOutputScaleInternal] = useState(1);
-  const [previewScale, setPreviewScaleInternal] = useState(2);
+  };
+
+  const setDebug = (value: boolean) => updateSetting("debug", value);
+  const setClipboardEnabled = (value: boolean) =>
+    updateSetting("clipboardEnabled", value);
+  const setOutputScale = (value: number) => updateSetting("outputScale", value);
+  const setPreviewScale = (value: number) =>
+    updateSetting("previewScale", value);
+
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [showIOSInstallTip, setShowIOSInstallTip] = useState(false);
-
-  const setDebug = useCallback((value: boolean) => {
-    setDebugInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, debug: value }),
-    );
-  }, []);
-
-  const setClipboardEnabled = useCallback((value: boolean) => {
-    setClipboardEnabledInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, clipboardEnabled: value }),
-    );
-  }, []);
-
-  const setOutputScale = useCallback((value: number) => {
-    setOutputScaleInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, outputScale: value }),
-    );
-  }, []);
-
-  const setPreviewScale = useCallback((value: number) => {
-    setPreviewScaleInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, previewScale: value }),
-    );
-  }, []);
-
-  // Load settings from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(APP_SETTINGS_KEY);
-      if (stored) {
-        const {
-          debug: storedDebug,
-          clipboardEnabled: storedClipboard,
-          outputScale: storedOutputScale,
-          previewScale: storedPreviewScale,
-          paletteSelection: storedPaletteSelection,
-        } = JSON.parse(stored);
-        if (typeof storedDebug === "boolean") setDebugInternal(storedDebug);
-        if (typeof storedClipboard === "boolean")
-          setClipboardEnabledInternal(storedClipboard);
-        if (typeof storedOutputScale === "number")
-          setOutputScaleInternal(storedOutputScale);
-        if (typeof storedPreviewScale === "number")
-          setPreviewScaleInternal(storedPreviewScale);
-        if (storedPaletteSelection) {
-          setPaletteEntry(storedPaletteSelection);
-        }
-      }
-    } catch (e) {
-      console.error("Error loading app settings from storage:", e);
-    }
-  }, []);
 
   // Handle PWA install prompt
   useEffect(() => {
@@ -200,16 +136,8 @@ export default function App() {
     };
   }, []);
 
-  const handlePaletteSelected = useCallback((entry: PaletteEntry) => {
-    setPaletteEntry(entry);
-    // Save selection to localStorage
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, paletteSelection: entry }),
-    );
-  }, []);
+  const handlePaletteSelected = (entry: PaletteEntry) =>
+    updateSetting("paletteSelection", entry);
 
   const handleInstallApp = async () => {
     if (!installPrompt) return;

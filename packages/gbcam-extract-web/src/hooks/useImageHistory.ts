@@ -5,6 +5,7 @@ import {
   deserializePipelineResult,
   isSerializedPipelineResult,
 } from "../utils/serialization.js";
+import { useLocalStorage } from "./useLocalStorage.js";
 
 export interface ProcessingResult {
   result: PipelineResult;
@@ -31,111 +32,88 @@ function generateId(): string {
   return `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function loadHistoryFromStorage(): ImageHistoryBatch[] {
-  try {
-    const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Return the raw parsed data - deserialization happens async in useEffect
-      return parsed;
-    }
-  } catch (e) {
-    console.error("Error parsing history from storage:", e);
-  }
-  return [];
-}
+// Serialized form on disk (each result has a serialized PipelineResult).
+type SerializedHistory = Array<{
+  id: string;
+  timestamp: number;
+  results: Array<{
+    filename: string;
+    processingTime: number;
+    result: unknown;
+  }>;
+}>;
 
 async function deserializeHistoryBatches(
-  batches: ImageHistoryBatch[],
+  raw: SerializedHistory,
 ): Promise<ImageHistoryBatch[]> {
   return Promise.all(
-    batches.map(async (batch) => ({
+    raw.map(async (batch) => ({
       ...batch,
       results: await Promise.all(
-        batch.results.map(async (item: any) => ({
+        batch.results.map(async (item) => ({
           ...item,
           result: isSerializedPipelineResult(item.result)
             ? await deserializePipelineResult(item.result)
-            : item.result,
+            : (item.result as PipelineResult),
         })),
       ),
     })),
   );
 }
 
-function loadSettingsFromStorage(): HistorySettings {
-  try {
-    const stored = localStorage.getItem(HISTORY_SETTINGS_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error("Error parsing history settings from storage:", e);
-  }
-  return { maxSize: DEFAULT_MAX_SIZE };
-}
-
-function saveHistoryToStorage(history: ImageHistoryBatch[]) {
-  // Serialize before storing to use compact base64 representation
-  const serialized = history.map((batch) => ({
+function serializeHistoryBatches(
+  history: ImageHistoryBatch[],
+): SerializedHistory {
+  return history.map((batch) => ({
     ...batch,
     results: batch.results.map((item) => ({
       ...item,
       result: serializePipelineResult(item.result),
     })),
   }));
-  localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(serialized));
-}
-
-function saveSettingsToStorage(settings: HistorySettings) {
-  localStorage.setItem(HISTORY_SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export function useImageHistory() {
-  const [history, setHistory] = useState<ImageHistoryBatch[]>([]);
-  const [settings, setSettings] = useState<HistorySettings>(
-    loadSettingsFromStorage,
+  // Raw serialized form persisted via the localStorage hook.
+  const [serializedHistory, setSerializedHistory] =
+    useLocalStorage<SerializedHistory>(HISTORY_STORAGE_KEY, []);
+  const [settings, setSettings] = useLocalStorage<HistorySettings>(
+    HISTORY_SETTINGS_KEY,
+    { maxSize: DEFAULT_MAX_SIZE },
   );
+
+  // Deserialized in-memory form (async deserialize on mount).
+  const [history, setHistory] = useState<ImageHistoryBatch[]>([]);
   const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
-  // Load history from storage on mount
   useEffect(() => {
-    let isMounted = true;
-    const rawBatches = loadHistoryFromStorage();
-    deserializeHistoryBatches(rawBatches)
+    let mounted = true;
+    deserializeHistoryBatches(serializedHistory)
       .then((deserialized) => {
-        if (isMounted) {
+        if (mounted) {
           setHistory(deserialized);
           setIsHistoryLoaded(true);
-          // Save the loaded history back to storage to ensure consistency
-          saveHistoryToStorage(deserialized);
         }
       })
       .catch(() => {
-        // If loading fails, mark as loaded and clear storage
-        if (isMounted) {
+        if (mounted) {
           setHistory([]);
           setIsHistoryLoaded(true);
-          localStorage.removeItem(HISTORY_STORAGE_KEY);
+          setSerializedHistory([]);
         }
       });
     return () => {
-      isMounted = false;
+      mounted = false;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only re-deserialize on mount; in-memory updates flow the other way.
 
-  // Save history whenever it changes (only after initial load)
+  // Re-serialize and persist whenever in-memory history changes after load.
   useEffect(() => {
-    if (isHistoryLoaded) {
-      saveHistoryToStorage(history);
-    }
-  }, [history, isHistoryLoaded]);
-
-  // Save settings whenever they change
-  useEffect(() => {
-    saveSettingsToStorage(settings);
-  }, [settings]);
+    if (!isHistoryLoaded) return;
+    setSerializedHistory(serializeHistoryBatches(history));
+  }, [history, isHistoryLoaded, setSerializedHistory]);
 
   // Add current results to history (moves them from current to history)
   const archiveResults = useCallback(
@@ -206,7 +184,7 @@ export function useImageHistory() {
     (newSettings: Partial<HistorySettings>) => {
       setSettings((prev) => ({ ...prev, ...newSettings }));
     },
-    [],
+    [setSettings],
   );
 
   // Prune history based on current max size

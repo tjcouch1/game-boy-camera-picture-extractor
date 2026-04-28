@@ -1,45 +1,26 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
+import { useLocalStorage } from "./useLocalStorage.js";
 
 const STORAGE_KEY = "gbcam-palette-sections-expanded";
 
 export function usePaletteSectionState() {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return new Set(JSON.parse(stored));
-      }
-    } catch (e) {
-      console.error("Error parsing palette sections from storage:", e);
-    }
-    return new Set();
-  });
-
-  useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(Array.from(expandedSections)),
-    );
-  }, [expandedSections]);
+  const [expanded, setExpanded] = useLocalStorage<string[]>(STORAGE_KEY, []);
 
   const isExpanded = useCallback(
-    (sectionTitle: string): boolean => {
-      return expandedSections.has(sectionTitle);
-    },
-    [expandedSections],
+    (sectionTitle: string): boolean => expanded.includes(sectionTitle),
+    [expanded],
   );
 
-  const toggleExpanded = useCallback((sectionTitle: string) => {
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(sectionTitle)) {
-        next.delete(sectionTitle);
-      } else {
-        next.add(sectionTitle);
-      }
-      return next;
-    });
-  }, []);
+  const toggleExpanded = useCallback(
+    (sectionTitle: string) => {
+      setExpanded((prev) =>
+        prev.includes(sectionTitle)
+          ? prev.filter((s) => s !== sectionTitle)
+          : [...prev, sectionTitle],
+      );
+    },
+    [setExpanded],
+  );
 
   return { isExpanded, toggleExpanded };
 }
