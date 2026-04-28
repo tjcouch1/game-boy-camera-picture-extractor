@@ -34,6 +34,7 @@ import { correct } from "./correct.js";
 import { crop } from "./crop.js";
 import { sample } from "./sample.js";
 import { quantize } from "./quantize.js";
+import { createDebugCollector } from "./debug.js";
 
 export async function processPicture(
   input: GBImageData,
@@ -43,24 +44,26 @@ export async function processPicture(
   const debug = options?.debug ?? false;
   const onProgress = options?.onProgress;
 
+  const collector = debug ? createDebugCollector() : undefined;
+
   onProgress?.("warp", 0);
-  const warped = warp(input, { scale });
+  const warped = warp(input, { scale, debug: collector });
   onProgress?.("warp", 100);
 
   onProgress?.("correct", 0);
-  const corrected = correct(warped, { scale });
+  const corrected = correct(warped, { scale, debug: collector });
   onProgress?.("correct", 100);
 
   onProgress?.("crop", 0);
-  const cropped = crop(corrected, { scale });
+  const cropped = crop(corrected, { scale, debug: collector });
   onProgress?.("crop", 100);
 
   onProgress?.("sample", 0);
-  const sampled = sample(cropped, { scale });
+  const sampled = sample(cropped, { scale, debug: collector });
   onProgress?.("sample", 100);
 
   onProgress?.("quantize", 0);
-  const quantized = quantize(sampled);
+  const quantized = quantize(sampled, { debug: collector });
   onProgress?.("quantize", 100);
 
   const result: PipelineResult = { grayscale: quantized };
@@ -71,6 +74,9 @@ export async function processPicture(
       crop: cropped,
       sample: sampled,
     };
+    if (collector) {
+      result.debug = collector.data;
+    }
   }
   return result;
 }

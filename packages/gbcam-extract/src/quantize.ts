@@ -15,6 +15,15 @@ import {
   createGBImageData,
 } from "./common.js";
 import { getCV, withMats } from "./opencv.js";
+import {
+  type DebugCollector,
+  renderRGScatter,
+  upscale,
+} from "./debug.js";
+
+export interface QuantizeOptions {
+  debug?: DebugCollector;
+}
 
 // ─── RGB palette matching the Python COLOR_PALETTE_RGB ───
 // BK=(0,0,0), DG=(148,148,255), LG=(255,148,148), WH=(255,255,165)
@@ -263,7 +272,7 @@ function gValleyThreshold(
  * 2. Strip k-means refinement for lateral gradient
  * 3. G-valley LG/WH refinement for pixel bleeding correction
  */
-export function quantize(input: GBImageData): GBImageData {
+export function quantize(input: GBImageData, options?: QuantizeOptions): GBImageData {
   if (input.width !== CAM_W || input.height !== CAM_H) {
     throw new Error(
       `Expected ${CAM_W}x${CAM_H}, got ${input.width}x${input.height}`,
@@ -272,6 +281,7 @@ export function quantize(input: GBImageData): GBImageData {
 
   const N = CAM_W * CAM_H;
   const targetsRG = PALETTE_RG;
+  const dbg = options?.debug;
 
   // Extract RG values (Nx2 float32) and full RGB (Nx3)
   const flatRG = new Float32Array(N * 2);
@@ -288,6 +298,40 @@ export function quantize(input: GBImageData): GBImageData {
   const labelsFlat = new Int32Array(N);
   for (let i = 0; i < N; i++) {
     labelsFlat[i] = clusterToPalette[global.labels[i]];
+  }
+
+  // Capture global k-means metrics — palette-ordered cluster centers
+  const paletteCenters = new Array<[number, number]>(4);
+  for (let pi = 0; pi < 4; pi++) {
+    let cr = targetsRG[pi][0];
+    let cg = targetsRG[pi][1];
+    for (let ci = 0; ci < 4; ci++) {
+      if (clusterToPalette[ci] === pi) {
+        cr = global.centers[ci * 2];
+        cg = global.centers[ci * 2 + 1];
+        break;
+      }
+    }
+    paletteCenters[pi] = [cr, cg];
+  }
+  const globalCounts = countLabels(labelsFlat);
+
+  if (dbg) {
+    dbg.log(
+      `[quantize] global k-means cluster centers (palette-ordered):  ` +
+        ["BK", "DG", "LG", "WH"]
+          .map(
+            (n, i) =>
+              `${n}=(R${paletteCenters[i][0].toFixed(0)},G${paletteCenters[i][1].toFixed(0)})`,
+          )
+          .join("  "),
+    );
+    dbg.log(
+      `[quantize] after global kmeans: ` +
+        ["BK", "DG", "LG", "WH"]
+          .map((n, i) => `${n}=${globalCounts[i]}`)
+          .join("  "),
+    );
   }
 
   // Build global_centers_po (palette-ordered centers)
@@ -354,6 +398,7 @@ export function quantize(input: GBImageData): GBImageData {
   // Apply strip consensus: override global label when ALL covering strips agree
   const labels2d = new Int32Array(labelsFlat); // copy
   const finalLabels = new Int32Array(labelsFlat);
+  let stripChanged = 0;
 
   for (let x = 0; x < CAM_W; x++) {
     // Find covering strips for this column
@@ -394,9 +439,20 @@ export function quantize(input: GBImageData): GBImageData {
         }
         if (!anyAgree) {
           finalLabels[pi] = stripL;
+          stripChanged++;
         }
       }
     }
+  }
+
+  const stripCounts = countLabels(finalLabels);
+  if (dbg) {
+    dbg.log(
+      `[quantize] strip ensemble: ${nStrips} strips, changed ${stripChanged} px  ` +
+        `now: ${["BK", "DG", "LG", "WH"]
+          .map((n, i) => `${n}=${stripCounts[i]}`)
+          .join("  ")}`,
+    );
   }
 
   // ── 3. G-valley LG/WH refinement ──
@@ -408,6 +464,8 @@ export function quantize(input: GBImageData): GBImageData {
     if (clusterToPalette[ci] === 3) whClusterIdx = ci;
   }
 
+  let valleyThreshold: number | null = null;
+  let valleyChanged = 0;
   if (lgClusterIdx >= 0 && whClusterIdx >= 0) {
     const lgCG = global.centers[lgClusterIdx * 2 + 1]; // G component of LG center
     const whCG = global.centers[whClusterIdx * 2 + 1]; // G component of WH center
@@ -421,6 +479,7 @@ export function quantize(input: GBImageData): GBImageData {
     }
 
     const gThresh = gValleyThreshold(gHighR, lgCG, whCG);
+    valleyThreshold = gThresh;
 
     // Apply threshold to LG/WH pixels with high R
     for (let i = 0; i < N; i++) {
@@ -429,8 +488,18 @@ export function quantize(input: GBImageData): GBImageData {
         (finalLabels[i] === 2 || finalLabels[i] === 3)
       ) {
         const newLabel = flatRG[i * 2 + 1] >= gThresh ? 3 : 2;
-        finalLabels[i] = newLabel;
+        if (newLabel !== finalLabels[i]) {
+          valleyChanged++;
+          finalLabels[i] = newLabel;
+        }
       }
+    }
+    if (dbg) {
+      dbg.log(
+        `[quantize] G-valley refinement: threshold=${gThresh.toFixed(1)} ` +
+          `(LG center G=${lgCG.toFixed(1)}, WH center G=${whCG.toFixed(1)}), ` +
+          `changed ${valleyChanged} px`,
+      );
     }
   }
 
@@ -445,5 +514,97 @@ export function quantize(input: GBImageData): GBImageData {
     output.data[j + 3] = 255;
   }
 
+  if (dbg) {
+    const finalCounts = countLabels(finalLabels);
+    const total = N;
+    dbg.log(
+      `[quantize] final: ` +
+        ["BK", "DG", "LG", "WH"]
+          .map(
+            (n, i) =>
+              `${n}=${finalCounts[i]} (${((100 * finalCounts[i]) / total).toFixed(1)}%)`,
+          )
+          .join("  "),
+    );
+
+    dbg.setMetrics("quantize", {
+      clusterCenters: paletteCenters.map(([r, g]) => [
+        Number(r.toFixed(2)),
+        Number(g.toFixed(2)),
+      ]),
+      stripEnsemble: { strips: nStrips, changed: stripChanged },
+      valleyRefinement: {
+        threshold: valleyThreshold === null ? null : Number(valleyThreshold.toFixed(2)),
+        changed: valleyChanged,
+      },
+      counts: {
+        afterGlobalKmeans: { BK: globalCounts[0], DG: globalCounts[1], LG: globalCounts[2], WH: globalCounts[3] },
+        afterStripEnsemble: { BK: stripCounts[0], DG: stripCounts[1], LG: stripCounts[2], WH: stripCounts[3] },
+        final: { BK: finalCounts[0], DG: finalCounts[1], LG: finalCounts[2], WH: finalCounts[3] },
+      },
+    });
+
+    // Visual: 8x grayscale and 8x palette-rendered
+    dbg.addImage("quantize_a_gray_8x", upscale(output, 8));
+
+    const rgbOut = createGBImageData(CAM_W, CAM_H);
+    const PALETTE_RGB: [number, number, number][] = [
+      [0, 0, 0],
+      [148, 148, 255],
+      [255, 148, 148],
+      [255, 255, 165],
+    ];
+    for (let i = 0; i < N; i++) {
+      const c = PALETTE_RGB[finalLabels[i]];
+      const j = i * 4;
+      rgbOut.data[j] = c[0];
+      rgbOut.data[j + 1] = c[1];
+      rgbOut.data[j + 2] = c[2];
+      rgbOut.data[j + 3] = 255;
+    }
+    dbg.addImage("quantize_b_rgb_8x", upscale(rgbOut, 8));
+
+    // RG scatter: every input sample plotted by its final label, with cluster
+    // centers (white crosses) and palette targets (yellow rings) overlaid.
+    const rVals = new Array<number>(N);
+    const gVals = new Array<number>(N);
+    const pointColors = new Array<[number, number, number]>(N);
+    for (let i = 0; i < N; i++) {
+      rVals[i] = flatRG[i * 2];
+      gVals[i] = flatRG[i * 2 + 1];
+      pointColors[i] = PALETTE_RGB[finalLabels[i]];
+    }
+    const markers = [
+      ...paletteCenters.map((c) => ({
+        r: c[0],
+        g: c[1],
+        color: [255, 255, 255] as [number, number, number],
+        size: 5,
+        symbol: "cross" as const,
+      })),
+      ...targetsRG.map((t) => ({
+        r: t[0],
+        g: t[1],
+        color: [255, 255, 0] as [number, number, number],
+        size: 7,
+        symbol: "ring" as const,
+      })),
+    ];
+    dbg.addImage(
+      "quantize_c_rg_scatter",
+      renderRGScatter(rVals, gVals, pointColors, markers),
+    );
+  }
+
   return output;
+}
+
+/** Count occurrences of palette indices 0..3 in a label array. */
+function countLabels(labels: Int32Array | Uint8Array): [number, number, number, number] {
+  const c: [number, number, number, number] = [0, 0, 0, 0];
+  for (let i = 0; i < labels.length; i++) {
+    const v = labels[i];
+    if (v >= 0 && v < 4) c[v]++;
+  }
+  return c;
 }

@@ -3,6 +3,29 @@ PIPELINE RUN
   Input:      test-input\zelda-poster-2.jpg
   Output dir: test-output\zelda-poster-2
 
+PIPELINE DIAGNOSTICS
+  [warp] corner detection: area=1193644 aspect=1.134 (target 1.111) thresh=180 score=0.0307
+  [warp] detected source corners (TL TR BR BL): (32,21) (1185,31) (1167,1068) (28,1062)
+  [warp] pass 1 edge curvatures: top=-0.47 bot=-0.48 left=-2.34 right=4.03
+  [warp] pass 1 corner errors: TL=(-2.8,-0.2) TR=(4.0,-1.1) BR=(3.4,0.1) BL=(-1.8,-0.7)
+  [warp] pass 2 edge curvatures: top=0.07 bot=-0.26 left=-1.10 right=2.12
+  [warp] pass 2 corner errors: TL=(-1.4,0.2) TR=(1.9,-0.3) BR=(1.6,0.3) BL=(-0.8,-0.2)
+  [correct] R: white samples kept=7352 (median 244.0, range 181–255)
+  [correct] G: white samples kept=7433 (median 226.6, range 167–253)
+  [correct] white surface R: 210–260; G: 190–248
+  [correct] dark surface  R: 152–178; G: 152–171
+  [correct] interior DG calibration: R=4792px G=6157px
+  [correct] frame post-correction p85: R=255 G=255 B=212 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=172.7 G=157.6 B=203.1
+  [crop] inner-border mean=167.1 white-frame mean=195.9 (ratio 0.853, WARN)
+  [sample] R: 1–255  G: 0–255  B: 77–253
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R49,G38)  DG=(R145,G154)  LG=(R226,G148)  WH=(R249,G238)
+  [quantize] after global kmeans: BK=1572  DG=3529  LG=4201  WH=5034
+  [quantize] strip ensemble: 7 strips, changed 32 px  now: BK=1572  DG=3525  LG=4233  WH=5006
+  [quantize] G-valley refinement: threshold=204.0 (LG center G=147.8, WH center G=238.5), changed 10 px
+  [quantize] final: BK=1572 (11.0%)  DG=3525 (24.6%)  LG=4241 (29.6%)  WH=4998 (34.9%)
+
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================

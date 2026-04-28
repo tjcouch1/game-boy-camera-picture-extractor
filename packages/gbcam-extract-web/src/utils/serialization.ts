@@ -14,16 +14,16 @@ export interface SerializedGBImageData {
 
 /**
  * Serialized form of PipelineResult.
+ *
+ * NOTE: Only the final grayscale image is persisted. Intermediate step images
+ * and the `debug` payload (images, log, metrics) live in memory only — they
+ * are too large for localStorage when debug mode is on (color RGBA images at
+ * 1280×1152 + 8x upscales easily blow past the 5–10 MB quota). They are still
+ * available on the in-memory `PipelineResult` until the page is refreshed.
  */
 export interface SerializedPipelineResult {
   _type: "PipelineResult";
   grayscale: SerializedGBImageData;
-  intermediates?: {
-    warp: SerializedGBImageData;
-    correct: SerializedGBImageData;
-    crop: SerializedGBImageData;
-    sample: SerializedGBImageData;
-  };
 }
 
 /**
@@ -125,26 +125,16 @@ export async function deserializeGBImageData(
 }
 
 /**
- * Serialize a PipelineResult to PNG format.
+ * Serialize a PipelineResult to PNG format. Only the final grayscale image
+ * is included — intermediates and `debug` are dropped (see type doc comment).
  */
 export function serializePipelineResult(
   result: PipelineResult,
 ): SerializedPipelineResult {
-  const serialized: SerializedPipelineResult = {
+  return {
     _type: "PipelineResult",
     grayscale: serializeGBImageData(result.grayscale),
   };
-
-  if (result.intermediates) {
-    serialized.intermediates = {
-      warp: serializeGBImageData(result.intermediates.warp),
-      correct: serializeGBImageData(result.intermediates.correct),
-      crop: serializeGBImageData(result.intermediates.crop),
-      sample: serializeGBImageData(result.intermediates.sample),
-    };
-  }
-
-  return serialized;
 }
 
 /**
@@ -155,21 +145,7 @@ export async function deserializePipelineResult(
   serialized: SerializedPipelineResult,
 ): Promise<PipelineResult> {
   const grayscale = await deserializeGBImageData(serialized.grayscale);
-
-  const result: PipelineResult = {
-    grayscale,
-  };
-
-  if (serialized.intermediates) {
-    result.intermediates = {
-      warp: await deserializeGBImageData(serialized.intermediates.warp),
-      correct: await deserializeGBImageData(serialized.intermediates.correct),
-      crop: await deserializeGBImageData(serialized.intermediates.crop),
-      sample: await deserializeGBImageData(serialized.intermediates.sample),
-    };
-  }
-
-  return result;
+  return { grayscale };
 }
 
 /**
