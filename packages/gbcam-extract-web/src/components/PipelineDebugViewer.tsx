@@ -1,5 +1,20 @@
-import { useRef, useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { GBImageData, PipelineResult } from "gbcam-extract";
+import { ChevronDown } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/shadcn/components/accordion";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shadcn/components/collapsible";
+import { Badge } from "@/shadcn/components/badge";
+import { Button } from "@/shadcn/components/button";
+import { Card } from "@/shadcn/components/card";
 
 interface PipelineDebugViewerProps {
   intermediates?: PipelineResult["intermediates"];
@@ -21,7 +36,6 @@ function StepCanvas({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const scale = image.width > maxW ? maxW / image.width : 1;
     canvas.width = Math.round(image.width * scale);
     canvas.height = Math.round(image.height * scale);
@@ -38,26 +52,25 @@ function StepCanvas({
   }, [image, maxW]);
 
   return (
-    <div
-      className="flex flex-col items-center gap-1 shrink-0"
+    <Card
+      className="flex flex-col items-center gap-1 p-2 shrink-0"
       style={{ maxWidth: maxW }}
     >
-      <p className="text-xs text-gray-400 font-medium text-center break-all">
+      <p className="text-xs font-medium text-muted-foreground text-center break-all">
         {label}
       </p>
       <canvas
         ref={canvasRef}
-        className="border border-gray-700 rounded"
+        className="rounded border"
         style={{ imageRendering: "pixelated" }}
       />
-      <p className="text-[10px] text-gray-600">
+      <Badge variant="secondary" className="text-[10px]">
         {image.width} × {image.height}
-      </p>
-    </div>
+      </Badge>
+    </Card>
   );
 }
 
-/** Group debug image keys by the step they belong to (prefix before first underscore). */
 function groupDebugImages(
   images: Record<string, GBImageData>,
 ): Array<{ step: string; entries: Array<[string, GBImageData]> }> {
@@ -67,7 +80,6 @@ function groupDebugImages(
     if (!groups.has(step)) groups.set(step, []);
     groups.get(step)!.push([name, img]);
   }
-  // Stable order matching the pipeline
   const stepOrder = ["warp", "correct", "crop", "sample", "quantize"];
   return stepOrder
     .filter((s) => groups.has(s))
@@ -77,36 +89,10 @@ function groupDebugImages(
     }));
 }
 
-function CollapsibleSection({
-  title,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="mt-3">
-      <button
-        onClick={() => setOpen(!open)}
-        className="text-xs font-medium text-gray-300 hover:text-gray-100 flex items-center gap-1"
-      >
-        <span>{open ? "v" : ">"}</span>
-        {title}
-      </button>
-      {open && <div className="mt-2">{children}</div>}
-    </div>
-  );
-}
-
 export function PipelineDebugViewer({
   intermediates,
   debug,
 }: PipelineDebugViewerProps) {
-  const [expanded, setExpanded] = useState(false);
-
   const intermediateSteps = useMemo(() => {
     if (!intermediates) return [];
     return [
@@ -122,74 +108,89 @@ export function PipelineDebugViewer({
     [debug],
   );
 
-  // Nothing to show
   if (!intermediates && !debug) return null;
 
   const hasMetrics = !!debug && Object.keys(debug.metrics).length > 0;
   const hasLog = !!debug && debug.log.length > 0;
 
-  return (
-    <div className="bg-gray-800/50 rounded-lg p-3 mt-2">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="text-xs font-medium text-gray-400 hover:text-gray-300 flex items-center gap-1"
-      >
-        <span>{expanded ? "v" : ">"}</span>
-        Debug: Pipeline Diagnostics
-      </button>
+  const defaultOpen: string[] = [];
+  if (intermediateSteps.length > 0) defaultOpen.push("intermediate");
 
-      {expanded && (
-        <div className="mt-2">
+  return (
+    <Collapsible className="mt-2 rounded-lg bg-muted/40 p-3">
+      <CollapsibleTrigger
+        render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}
+      >
+        Debug: Pipeline Diagnostics
+        <ChevronDown
+          className="transition-transform data-[state=open]:rotate-180"
+          data-icon="inline-end"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <Accordion multiple defaultValue={defaultOpen} className="mt-2">
           {intermediateSteps.length > 0 && (
-            <CollapsibleSection title="Intermediate Steps" defaultOpen>
-              <div className="flex flex-wrap gap-3 items-start">
-                {intermediateSteps.map((step) => (
-                  <StepCanvas
-                    key={step.label}
-                    label={step.label}
-                    image={step.image}
-                  />
-                ))}
-              </div>
-            </CollapsibleSection>
+            <AccordionItem value="intermediate">
+              <AccordionTrigger>Intermediate Steps</AccordionTrigger>
+              <AccordionContent>
+                <div className="flex flex-wrap items-start gap-3">
+                  {intermediateSteps.map((step) => (
+                    <StepCanvas
+                      key={step.label}
+                      label={step.label}
+                      image={step.image}
+                    />
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
           )}
 
           {debugImageGroups.length > 0 && (
-            <CollapsibleSection title="Debug Images">
-              <div className="space-y-3">
-                {debugImageGroups.map(({ step, entries }) => (
-                  <div key={step}>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
-                      {step}
-                    </p>
-                    <div className="flex flex-wrap gap-3 items-start">
-                      {entries.map(([name, img]) => (
-                        <StepCanvas key={name} label={name} image={img} />
-                      ))}
+            <AccordionItem value="debug-images">
+              <AccordionTrigger>Debug Images</AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-3">
+                  {debugImageGroups.map(({ step, entries }) => (
+                    <div key={step}>
+                      <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+                        {step}
+                      </p>
+                      <div className="flex flex-wrap items-start gap-3">
+                        {entries.map(([name, img]) => (
+                          <StepCanvas key={name} label={name} image={img} />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
           )}
 
           {hasMetrics && (
-            <CollapsibleSection title="Metrics">
-              <pre className="text-[11px] text-gray-300 bg-gray-900/60 rounded p-2 overflow-x-auto whitespace-pre">
-                {JSON.stringify(debug!.metrics, null, 2)}
-              </pre>
-            </CollapsibleSection>
+            <AccordionItem value="metrics">
+              <AccordionTrigger>Metrics</AccordionTrigger>
+              <AccordionContent>
+                <pre className="overflow-x-auto whitespace-pre rounded bg-background/60 p-2 text-[11px]">
+                  {JSON.stringify(debug!.metrics, null, 2)}
+                </pre>
+              </AccordionContent>
+            </AccordionItem>
           )}
 
           {hasLog && (
-            <CollapsibleSection title={`Log (${debug!.log.length} lines)`}>
-              <pre className="text-[11px] text-gray-300 bg-gray-900/60 rounded p-2 overflow-x-auto whitespace-pre">
-                {debug!.log.join("\n")}
-              </pre>
-            </CollapsibleSection>
+            <AccordionItem value="log">
+              <AccordionTrigger>Log ({debug!.log.length} lines)</AccordionTrigger>
+              <AccordionContent>
+                <pre className="overflow-x-auto whitespace-pre rounded bg-background/60 p-2 text-[11px]">
+                  {debug!.log.join("\n")}
+                </pre>
+              </AccordionContent>
+            </AccordionItem>
           )}
-        </div>
-      )}
-    </div>
+        </Accordion>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

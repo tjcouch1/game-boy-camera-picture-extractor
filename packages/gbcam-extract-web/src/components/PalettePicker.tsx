@@ -11,6 +11,21 @@ import {
   type UserPaletteEntry,
 } from "../hooks/useUserPalettes.js";
 import { usePaletteSectionState } from "../hooks/usePaletteSectionState.js";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/shadcn/components/accordion";
+import { Button } from "@/shadcn/components/button";
+import { Card, CardContent } from "@/shadcn/components/card";
+import { cn } from "@/shadcn/utils/utils";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@/shadcn/components/field";
+import { Input } from "@/shadcn/components/input";
 import { useClipboardPaletteCheck } from "../hooks/useClipboardPalette.js";
 import {
   PALETTE_COLOR_LABELS,
@@ -22,6 +37,13 @@ import {
   writePaletteToClipboard,
   readPaletteFromClipboard,
 } from "../utils/paletteClipboard.js";
+import { toast } from "sonner";
+import {
+  ClipboardPaste,
+  Copy as CopyIcon,
+  Pencil,
+  Plus,
+} from "lucide-react";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
@@ -46,24 +68,25 @@ function PaletteSwatch({
   onClick: () => void;
   onEdit?: () => void;
 }) {
-  const bgClass = isSelected
-    ? "bg-blue-600 ring-2 ring-blue-400"
-    : doesMatchColors && isEditing
-      ? "bg-blue-500 hover:bg-blue-400"
-      : doesMatchColors
-        ? "bg-blue-800 hover:bg-blue-700"
-        : "bg-gray-700 hover:bg-gray-600";
-
   return (
-    <button
+    <Button
+      variant="outline"
+      size="sm"
       onClick={onClick}
-      className={`flex items-center gap-2 px-2 py-1.5 rounded transition-colors ${PALETTE_TEXT_CLASS} ${bgClass}`}
+      className={cn(
+        "justify-start gap-2 h-auto px-2 py-1.5",
+        isSelected &&
+          "bg-primary/25 hover:bg-primary/35 border-primary inset-ring-2 inset-ring-primary dark:bg-primary/25 dark:hover:bg-primary/35 dark:border-primary",
+        doesMatchColors &&
+          !isSelected &&
+          "bg-primary/10 hover:bg-primary/20 border-primary dark:bg-primary/15 dark:hover:bg-primary/25 dark:border-primary",
+      )}
     >
       <div className="flex shrink-0">
         {entry.colors.map((c, i) => (
           <div
             key={i}
-            className="w-4 h-4 first:rounded-l last:rounded-r"
+            className="size-4 first:rounded-s last:rounded-e"
             style={{ backgroundColor: c }}
           />
         ))}
@@ -75,53 +98,42 @@ function PaletteSwatch({
             e.stopPropagation();
             onEdit();
           }}
-          className="ml-auto text-blue-400 hover:text-blue-300 cursor-pointer"
+          className="ms-auto text-primary hover:text-primary/80 cursor-pointer"
           title="Edit palette"
         >
-          ✏️
+          <Pencil className="size-3" />
         </span>
       )}
-    </button>
+    </Button>
   );
 }
 
-function PaletteSection({
+function PaletteSectionItem({
   title,
   entries,
   selected,
-  selectedEditingPaletteId,
   onSelectWithName,
   onEdit,
   isBuiltIn,
-  isExpanded,
-  onToggleExpand,
 }: {
   title: string;
   entries: (PaletteEntry | UserPaletteEntry)[];
   selected: PaletteEntry;
-  selectedEditingPaletteId?: string;
   onSelectWithName: (entry: PaletteEntry) => void;
   onEdit?: (id: string, entry: UserPaletteEntry) => void;
   isBuiltIn?: boolean;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
 }) {
   if (entries.length === 0) return null;
 
   return (
-    <div>
-      <button
-        onClick={onToggleExpand}
-        className="text-sm font-medium text-gray-300 hover:text-white mb-1 flex items-center gap-1"
-      >
-        <span className="text-xs">{isExpanded ? "v" : ">"}</span>
+    <AccordionItem value={title}>
+      <AccordionTrigger>
         {title} ({entries.length})
-      </button>
-      {isExpanded && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 ml-3">
+      </AccordionTrigger>
+      <AccordionContent>
+        <div className="grid grid-cols-2 gap-1.5 ms-3 sm:grid-cols-3">
           {entries.map((entry, i) => {
             const isUserPalette = "id" in entry;
-            // For all palettes (user or built-in), check if name and colors match selected
             const isSelected =
               entry.name === selected.name &&
               entry.colors.every((c, j) => c === selected.colors[j]);
@@ -155,8 +167,8 @@ function PaletteSection({
             );
           })}
         </div>
-      )}
-    </div>
+      </AccordionContent>
+    </AccordionItem>
   );
 }
 
@@ -184,10 +196,6 @@ export function PalettePicker({
   const [editingPaletteErrors, setEditingPaletteErrors] = useState<
     Record<string, string>
   >({});
-  const [buttonFeedback, setButtonFeedback] = useState<
-    Record<string, string | undefined>
-  >({});
-
   // Get the currently editing palette (if any)
   const editingPalette =
     selectedEditingPaletteId &&
@@ -228,22 +236,10 @@ export function PalettePicker({
       name: palette.name,
       colors: palette.colors,
     });
-    const buttonId = `copy-${palette.id}`;
     if (success) {
-      setButtonFeedback((prev) => ({ ...prev, [buttonId]: "Copied!" }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        2000,
-      );
+      toast.success("Palette copied to clipboard");
     } else {
-      setButtonFeedback((prev) => ({
-        ...prev,
-        [buttonId]: "Failed (perms)",
-      }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        3000,
-      );
+      toast.error("Copy failed — check browser permissions");
     }
   };
 
@@ -251,70 +247,29 @@ export function PalettePicker({
     const palette = userPalettes.find((p) => p.id === paletteId);
     if (!palette) return;
     const paletteData = await readPaletteFromClipboard();
-    const buttonId = `paste-${paletteId}`;
     if (paletteData) {
-      updatePalette(paletteId, {
-        colors: paletteData.colors,
-      });
+      updatePalette(paletteId, { colors: paletteData.colors });
       if (isPaletteSelected(palette)) {
-        onSelectWithName({
-          name: palette.name,
-          colors: paletteData.colors,
-        });
+        onSelectWithName({ name: palette.name, colors: paletteData.colors });
       }
-      setButtonFeedback((prev) => ({ ...prev, [buttonId]: "Pasted!" }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        2000,
-      );
+      toast.success("Palette colors pasted");
     } else {
-      setButtonFeedback((prev) => ({
-        ...prev,
-        [buttonId]: "No palette",
-      }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        3000,
-      );
+      toast.info("Clipboard does not contain a palette");
     }
   };
 
   const handlePasteNewPalette = async () => {
     const paletteData = await readPaletteFromClipboard();
     if (paletteData) {
-      // createPaletteInEditMode deduplicates the name, so use the returned palette
       const newPalette = createPaletteInEditMode(
         paletteData.name,
         paletteData.colors,
       );
       setSelectedEditingPaletteId(newPalette.id);
-      // Select using the actual generated name (may differ from clipboard name if duplicate)
       onSelectWithName({ name: newPalette.name, colors: newPalette.colors });
-      setButtonFeedback((prev) => ({
-        ...prev,
-        "paste-new": "Pasted!",
-      }));
-      setTimeout(
-        () =>
-          setButtonFeedback((prev) => ({
-            ...prev,
-            "paste-new": undefined,
-          })),
-        2000,
-      );
+      toast.success("Palette pasted");
     } else {
-      setButtonFeedback((prev) => ({
-        ...prev,
-        "paste-new": "No palette",
-      }));
-      setTimeout(
-        () =>
-          setButtonFeedback((prev) => ({
-            ...prev,
-            "paste-new": undefined,
-          })),
-        3000,
-      );
+      toast.info("Clipboard does not contain a palette");
     }
   };
 
@@ -338,6 +293,9 @@ export function PalettePicker({
       delete updated[id];
       return updated;
     });
+    if (!isExpanded("User Palettes")) {
+      toggleExpanded("User Palettes");
+    }
   };
 
   const handleCancelEdit = (id: string) => {
@@ -403,38 +361,37 @@ export function PalettePicker({
   const savedUserPalettes = userPalettes.filter((p) => !p.isEditing);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4">
+    <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-200">Palette</h2>
+        <h2 className="text-sm font-semibold">Palette</h2>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex">
             {selected.colors.map((c: string, i: number) => (
               <div
                 key={i}
-                className="w-5 h-5 first:rounded-l last:rounded-r border border-gray-600"
+                className="size-5 first:rounded-s last:rounded-e border"
                 style={{ backgroundColor: c }}
               />
             ))}
           </div>
-          <button
-            onClick={handleCreateCustom}
-            className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
-          >
-            + Custom
-          </button>
+          <Button variant="secondary" size="sm" onClick={handleCreateCustom}>
+            <Plus data-icon="inline-start" />
+            Custom
+          </Button>
           {clipboardEnabled && (
-            <button
+            <Button
+              variant="secondary"
+              size="icon-sm"
               onClick={handlePasteNewPalette}
               disabled={!hasClipboardPalette}
-              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs transition-colors"
-              title={
+              aria-label={
                 hasClipboardPalette
                   ? "Paste palette from clipboard"
                   : "Clipboard does not contain a palette"
               }
             >
-              {buttonFeedback["paste-new"] || "📋"}
-            </button>
+              <ClipboardPaste />
+            </Button>
           )}
         </div>
       </div>
@@ -443,11 +400,12 @@ export function PalettePicker({
         {/* Editing Palettes Section */}
         {editingPalettes.length > 0 && (
           <div>
-            <div className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            <div className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1">
               <span className="text-xs">v</span>
-              ✏️ EDITING ({editingPalettes.length})
+              <Pencil className="size-3" />
+              EDITING ({editingPalettes.length})
             </div>
-            <div className="ml-3 space-y-2">
+            <div className="ms-3 space-y-2">
               {editingPalettes.map((palette) => {
                 const isSelected = isPaletteSelected(palette);
                 const doesMatchColors = palette.colors.every(
@@ -457,13 +415,14 @@ export function PalettePicker({
                 return (
                   <div
                     key={palette.id}
-                    className={`p-3 rounded border-2 ${
+                    className={cn(
+                      "p-3 rounded border-2 cursor-pointer transition-colors",
                       isSelected
-                        ? "border-blue-400 bg-blue-900 ring-2 ring-blue-400"
+                        ? "border-primary bg-primary/20 ring-2 ring-primary"
                         : doesMatchColors
-                          ? "border-blue-400 bg-blue-950 hover:bg-blue-900"
-                          : "border-gray-600 bg-gray-900 hover:bg-gray-800"
-                    } cursor-pointer transition-colors`}
+                          ? "border-primary/60 bg-primary/10 hover:bg-primary/20"
+                          : "border-border bg-card hover:bg-muted/30",
+                    )}
                     onClick={() => {
                       handleSelectEditingPalette(palette.id);
                       setSelectedEditingPaletteId(palette.id);
@@ -487,97 +446,115 @@ export function PalettePicker({
                                 e.target.value,
                               );
                             }}
-                            className="w-8 h-8 rounded cursor-pointer bg-transparent"
+                            className="size-8 cursor-pointer rounded bg-transparent p-0 border border-input"
                           />
                           <span className={PALETTE_LABEL_CLASS}>
                             {PALETTE_COLOR_LABELS[i]}
                           </span>
                         </label>
                       ))}
-                      <div className="flex gap-1 ml-auto">
+                      <div className="flex gap-1 ms-auto">
                         {clipboardEnabled && (
                           <>
-                            <button
+                            <Button
+                              variant="secondary"
+                              size="icon-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleCopyPaletteToClipboard(palette);
                               }}
-                              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
-                              title="Copy palette colors to clipboard"
+                              aria-label="Copy palette colors to clipboard"
                             >
-                              {buttonFeedback[`copy-${palette.id}`] || "📄"}
-                            </button>
-                            <button
+                              <CopyIcon />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="icon-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handlePastePaletteColors(palette.id);
                               }}
                               disabled={!hasClipboardPalette}
-                              className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs transition-colors"
-                              title={
+                              aria-label={
                                 hasClipboardPalette
                                   ? "Paste palette colors from clipboard"
                                   : "Clipboard does not contain a palette"
                               }
                             >
-                              {buttonFeedback[`paste-${palette.id}`] || "📋"}
-                            </button>
+                              <ClipboardPaste />
+                            </Button>
                           </>
                         )}
                       </div>
                     </div>
 
                     {/* Name input */}
-                    <input
-                      type="text"
-                      value={palette.name}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handlePaletteNameChange(palette.id, e.target.value);
-                      }}
-                      placeholder="Palette name"
-                      className={`${PALETTE_INPUT_CLASS} mb-2`}
-                    />
-
-                    {/* Error message */}
-                    {editingPaletteErrors[palette.id] && (
-                      <p className="text-red-400 text-[10px] mb-2">
-                        {editingPaletteErrors[palette.id]}
-                      </p>
-                    )}
+                    <Field
+                      className="mb-2"
+                      data-invalid={
+                        editingPaletteErrors[palette.id] ? true : undefined
+                      }
+                    >
+                      <FieldLabel
+                        htmlFor={`palette-name-${palette.id}`}
+                        className="sr-only"
+                      >
+                        Palette name
+                      </FieldLabel>
+                      <Input
+                        id={`palette-name-${palette.id}`}
+                        type="text"
+                        value={palette.name}
+                        placeholder="Palette name"
+                        aria-invalid={
+                          editingPaletteErrors[palette.id] ? true : undefined
+                        }
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handlePaletteNameChange(palette.id, e.target.value);
+                        }}
+                      />
+                      {editingPaletteErrors[palette.id] && (
+                        <FieldDescription className="text-destructive text-[10px]">
+                          {editingPaletteErrors[palette.id]}
+                        </FieldDescription>
+                      )}
+                    </Field>
 
                     {/* Action buttons */}
                     <div className="flex gap-1 justify-end">
                       {palette.savedName && (
-                        <button
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCancelEdit(palette.id);
                           }}
-                          className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-[10px] transition-colors"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
+                        variant="destructive"
+                        size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeletePalette(palette.id);
                         }}
-                        className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-[10px] text-white transition-colors"
                       >
                         Delete
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleSavePalette(palette.id);
                         }}
                         disabled={!!editingPaletteErrors[palette.id]}
-                        className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded text-[10px] text-white font-medium transition-colors"
                       >
                         Save
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 );
@@ -586,63 +563,71 @@ export function PalettePicker({
           </div>
         )}
 
-        {/* User Palettes Section */}
-        <PaletteSection
-          title="User Palettes"
-          entries={savedUserPalettes}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          onEdit={(_, palette) => {
-            const userPalette = palette as UserPaletteEntry;
-            handleStartEdit(userPalette.id);
-          }}
-          isExpanded={isExpanded("User Palettes")}
-          onToggleExpand={() => toggleExpanded("User Palettes")}
-        />
+        {(() => {
+          const sectionTitles = [
+            "User Palettes",
+            "Button Combos",
+            "BG Presets",
+            "Additional",
+            "Fun",
+          ];
+          const expandedValues = sectionTitles.filter((t) => isExpanded(t));
 
-        {/* Built-in Palettes Sections */}
-        <PaletteSection
-          title="Button Combos"
-          entries={BUTTON_COMBO_PALETTES}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("Button Combos")}
-          onToggleExpand={() => toggleExpanded("Button Combos")}
-        />
-        <PaletteSection
-          title="BG Presets"
-          entries={BG_PRESETS}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("BG Presets")}
-          onToggleExpand={() => toggleExpanded("BG Presets")}
-        />
-        <PaletteSection
-          title="Additional"
-          entries={ADDITIONAL_PALETTES}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("Additional")}
-          onToggleExpand={() => toggleExpanded("Additional")}
-        />
-        <PaletteSection
-          title="Fun"
-          entries={FUN_PALETTES_EXPORT}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("Fun")}
-          onToggleExpand={() => toggleExpanded("Fun")}
-        />
+          return (
+            <Accordion
+              multiple
+              value={expandedValues}
+              onValueChange={(next: string[]) => {
+                const current = new Set(expandedValues);
+                const target = new Set(next);
+                sectionTitles.forEach((title) => {
+                  if (current.has(title) !== target.has(title)) {
+                    toggleExpanded(title);
+                  }
+                });
+              }}
+            >
+              <PaletteSectionItem
+                title="User Palettes"
+                entries={savedUserPalettes}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                onEdit={(_, palette) => {
+                  handleStartEdit((palette as UserPaletteEntry).id);
+                }}
+              />
+              <PaletteSectionItem
+                title="Button Combos"
+                entries={BUTTON_COMBO_PALETTES}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+              <PaletteSectionItem
+                title="BG Presets"
+                entries={BG_PRESETS}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+              <PaletteSectionItem
+                title="Additional"
+                entries={ADDITIONAL_PALETTES}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+              <PaletteSectionItem
+                title="Fun"
+                entries={FUN_PALETTES_EXPORT}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+            </Accordion>
+          );
+        })()}
       </div>
-    </div>
+    </Card>
   );
 }

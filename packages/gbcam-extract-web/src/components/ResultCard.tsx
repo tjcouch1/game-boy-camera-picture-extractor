@@ -7,6 +7,16 @@ import {
   copyImageToClipboard,
 } from "../utils/shareImage.js";
 import { sanitizePaletteName } from "../utils/filenames.js";
+import { Button } from "@/shadcn/components/button";
+import { Badge } from "@/shadcn/components/badge";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+} from "@/shadcn/components/card";
+import { toast } from "sonner";
+import { X, Download, Share2, Copy as CopyIcon } from "lucide-react";
 
 interface ResultCardProps {
   result: PipelineResult;
@@ -68,9 +78,6 @@ export function ResultCard({
   onDelete,
 }: ResultCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [showCopyFeedback, setShowCopyFeedback] = useState<string | false>(
-    false,
-  );
   const [shareSupported, setShareSupported] = useState(false);
 
   useEffect(() => {
@@ -146,73 +153,62 @@ export function ResultCard({
     if (!outputCanvas) return;
     try {
       await copyImageToClipboard(outputCanvas);
-      setShowCopyFeedback("Copied!");
-      setTimeout(() => setShowCopyFeedback(false), 2000);
+      toast.success("Image copied to clipboard");
     } catch (err) {
       const errorMsg = (err as Error).message || "Failed to copy";
-      setShowCopyFeedback(`Error: ${errorMsg}`);
-      setTimeout(() => setShowCopyFeedback(false), 3000);
+      toast.error(`Copy failed: ${errorMsg}`);
       console.error("Failed to copy image:", err);
     }
   }, [result, palette, outputScale]);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
-      {/* Header row: filename + delete */}
-      <div className="flex items-start gap-2 mb-3">
-        <div className="flex-1 min-w-0">
-          <p
-            className="text-sm font-medium text-gray-200 truncate"
-            title={filename}
-          >
+    <Card className="p-3 sm:p-4">
+      <CardHeader className="p-0 mb-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate" title={filename}>
             {filename}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <Badge variant="secondary" className="mt-0.5">
             {processingTime.toFixed(0)}ms
-          </p>
+          </Badge>
         </div>
         {onDelete && (
-          <button
-            onClick={onDelete}
-            className="shrink-0 w-7 h-7 flex items-center justify-center bg-red-600 hover:bg-red-700 rounded text-white transition-colors text-xs"
-            title="Delete result"
-          >
-            ✕
-          </button>
+          <CardAction>
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={onDelete}
+              aria-label="Delete result"
+              className="size-7"
+            >
+              <X />
+            </Button>
+          </CardAction>
         )}
-      </div>
-
-      {/* Canvas + action buttons */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      </CardHeader>
+      <CardContent className="flex flex-col sm:flex-row gap-3 p-0">
         <canvas
           ref={canvasRef}
-          className="border border-gray-700 rounded self-start"
+          className="rounded border self-start"
           style={{ imageRendering: "pixelated", maxWidth: "100%" }}
         />
         <div className="flex flex-wrap gap-2 items-start content-start">
-          <button
-            onClick={handleDownload}
-            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
-          >
+          <Button onClick={handleDownload}>
+            <Download data-icon="inline-start" />
             Download PNG
-          </button>
+          </Button>
           {shareSupported && (
-            <button
-              onClick={handleShare}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
-            >
+            <Button variant="secondary" onClick={handleShare}>
+              <Share2 data-icon="inline-start" />
               Share
-            </button>
+            </Button>
           )}
-          <button
-            onClick={handleCopy}
-            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-xs font-medium transition-colors"
-            title="Copy image to clipboard"
-          >
-            {showCopyFeedback || "Copy"}
-          </button>
+          <Button variant="secondary" onClick={handleCopy} aria-label="Copy image">
+            <CopyIcon data-icon="inline-start" />
+            Copy
+          </Button>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
