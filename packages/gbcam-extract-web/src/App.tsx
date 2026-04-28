@@ -8,7 +8,7 @@ import { useProcessing } from "./hooks/useProcessing.js";
 import type { ProcessingProgress } from "./hooks/useProcessing.js";
 import { ResultCard } from "./components/ResultCard.js";
 import { PalettePicker } from "./components/PalettePicker.js";
-import { IntermediateViewer } from "./components/IntermediateViewer.js";
+import { PipelineDebugViewer } from "./components/PipelineDebugViewer.js";
 import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
 import { CollapsibleInstructions } from "./components/CollapsibleInstructions.js";
@@ -409,9 +409,10 @@ export default function App() {
                         previewScale={previewScale}
                         onDelete={() => handleDeleteResult(r.filename)}
                       />
-                      {r.result.intermediates && (
-                        <IntermediateViewer
+                      {(r.result.intermediates || r.result.debug) && (
+                        <PipelineDebugViewer
                           intermediates={r.result.intermediates}
+                          debug={r.result.debug}
                         />
                       )}
                     </div>

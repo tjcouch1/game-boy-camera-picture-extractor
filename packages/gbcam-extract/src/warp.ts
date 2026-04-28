@@ -14,17 +14,25 @@
 
 import { type GBImageData, SCREEN_W, SCREEN_H, INNER_TOP, INNER_BOT, INNER_LEFT, INNER_RIGHT } from "./common.js";
 import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
+import {
+  type DebugCollector,
+  cloneImage,
+  drawPolyline,
+  fillCircle,
+} from "./debug.js";
 
 // ─── Public interface ───
 
 export interface WarpOptions {
   scale?: number;
   threshold?: number;
+  debug?: DebugCollector;
 }
 
 export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   const scale = options?.scale ?? 8;
   const threshVal = options?.threshold ?? 180;
+  const dbg = options?.debug;
 
   const cv = getCV();
 
@@ -36,27 +44,71 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   src.delete();
 
   // a — Detect screen corners
-  const corners = findScreenCorners(bgr, threshVal);
+  const detection = findScreenCornersWithMetrics(bgr, threshVal);
+  const corners = detection.ordered;
+
+  if (dbg) {
+    dbg.log(
+      `[warp] corner detection: area=${detection.area.toFixed(0)} ` +
+        `aspect=${detection.aspect.toFixed(3)} ` +
+        `(target ${(SCREEN_W / SCREEN_H).toFixed(3)}) ` +
+        `thresh=${detection.thresh} score=${detection.score.toFixed(4)}`,
+    );
+    dbg.log(
+      `[warp] detected source corners (TL TR BR BL): ` +
+        corners.map((c) => `(${Math.round(c[0])},${Math.round(c[1])})`).join(" "),
+    );
+    if (detection.score > 0.15) {
+      dbg.log(`[warp] WARNING: quad quality is low — detection may be unreliable`);
+    }
+
+    // Render input photo with corners overlaid
+    const overlay = cloneImage(input);
+    const green: [number, number, number] = [0, 255, 0];
+    const cornerRadius = Math.max(6, Math.round(Math.min(input.width, input.height) / 200));
+    for (const [x, y] of corners) {
+      fillCircle(overlay, x, y, cornerRadius, green);
+    }
+    const polyThick = Math.max(2, Math.round(cornerRadius / 4));
+    drawPolyline(
+      overlay,
+      corners.map(([x, y]) => [x, y] as [number, number]),
+      green,
+      polyThick,
+      true,
+    );
+    dbg.addImage("warp_a_corners", overlay);
+
+    dbg.setMetrics("warp", {
+      threshold: detection.thresh,
+      contourArea: Math.round(detection.area),
+      aspect: Number(detection.aspect.toFixed(4)),
+      quadScore: Number(detection.score.toFixed(4)),
+      sourceCorners: corners.map(([x, y]) => [Math.round(x), Math.round(y)]),
+    });
+  }
 
   // b — Initial perspective warp
   let { warped: currentWarped, M: currentM } = initialWarp(bgr, corners, scale);
 
   // c — Refine (pass 1)
   {
-    const { refined, M: M1 } = refineWarp(bgr, currentM, currentWarped, scale, 1);
+    const result = refineWarpWithMetrics(bgr, currentM, currentWarped, scale);
+    if (dbg) recordRefinementMetrics(dbg, 1, result.metrics);
     currentM.delete();
     currentWarped.delete();
-    currentM = M1;
-    currentWarped = refined;
+    currentM = result.M;
+    currentWarped = result.refined;
   }
 
   // c — Refine (pass 2)
   {
-    const { refined, M: M2 } = refineWarp(bgr, currentM, currentWarped, scale, 2);
+    const result = refineWarpWithMetrics(bgr, currentM, currentWarped, scale);
+    if (dbg) recordRefinementMetrics(dbg, 2, result.metrics);
     currentM.delete();
     currentWarped.delete();
-    currentM = M2;
-    currentWarped = refined;
+    currentM = result.M;
+    currentWarped = result.refined;
   }
 
   bgr.delete();
@@ -70,6 +122,46 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   rgba.delete();
 
   return result;
+}
+
+// ─── Refinement metrics recorder ───
+
+interface RefineMetrics {
+  edgeCurvatures: { top: number; bottom: number; left: number; right: number };
+  cornerErrors: {
+    TL: [number, number];
+    TR: [number, number];
+    BR: [number, number];
+    BL: [number, number];
+  };
+  refined: boolean;
+}
+
+function recordRefinementMetrics(
+  dbg: DebugCollector,
+  passNum: number,
+  m: RefineMetrics,
+): void {
+  const ec = m.edgeCurvatures;
+  dbg.log(
+    `[warp] pass ${passNum} edge curvatures: ` +
+      `top=${ec.top.toFixed(2)} bot=${ec.bottom.toFixed(2)} ` +
+      `left=${ec.left.toFixed(2)} right=${ec.right.toFixed(2)}` +
+      (m.refined ? "" : "  (refinement failed; using prior warp)"),
+  );
+  const ce = m.cornerErrors;
+  dbg.log(
+    `[warp] pass ${passNum} corner errors: ` +
+      `TL=(${ce.TL[0].toFixed(1)},${ce.TL[1].toFixed(1)}) ` +
+      `TR=(${ce.TR[0].toFixed(1)},${ce.TR[1].toFixed(1)}) ` +
+      `BR=(${ce.BR[0].toFixed(1)},${ce.BR[1].toFixed(1)}) ` +
+      `BL=(${ce.BL[0].toFixed(1)},${ce.BL[1].toFixed(1)})`,
+  );
+  dbg.setMetric("warp", `pass${passNum}`, {
+    edgeCurvatures: ec,
+    cornerErrors: ce,
+    refined: m.refined,
+  });
 }
 
 // ─── 1D Gaussian filter (replaces scipy.ndimage.gaussian_filter1d) ───
@@ -155,7 +247,19 @@ function scoreQuad(ordered: Corners, imgW: number, imgH: number, targetAspect = 
   return aspectErr * 2.0 + parallelErr + clips * 0.1;
 }
 
+interface CornerDetection {
+  ordered: Corners;
+  score: number;
+  thresh: number;
+  area: number;
+  aspect: number;
+}
+
 function findScreenCorners(bgr: any, threshVal: number): Corners {
+  return findScreenCornersWithMetrics(bgr, threshVal).ordered;
+}
+
+function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetection {
   const cv = getCV();
 
   return withMats((track, _untrack) => {
@@ -240,7 +344,7 @@ function findScreenCorners(bgr: any, threshVal: number): Corners {
       throw new Error("No bright contour found -- try adjusting threshold");
     }
 
-    return best.ordered;
+    return best;
   });
 }
 
@@ -542,13 +646,16 @@ interface RefineResult {
   M: any;       // cv.Mat (3x3)
 }
 
-function refineWarp(
+interface RefineResultWithMetrics extends RefineResult {
+  metrics: RefineMetrics;
+}
+
+function refineWarpWithMetrics(
   img: any,
   currentM: any,
   warped: any,
   scale: number,
-  _passNum: number,
-): RefineResult {
+): RefineResultWithMetrics {
   const cv = getCV();
   const H = warped.rows;
   const W = warped.cols;
@@ -598,6 +705,14 @@ function refineWarp(
     right: borderPoints.right.length > 0
       ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length
       : 0,
+  };
+
+  // Pre-adjustment corner errors (relative to expected inner-border position)
+  const cornerErrors = {
+    TL: [corners.TL[0] - expLeft, corners.TL[1] - expTop] as [number, number],
+    TR: [corners.TR[0] - expRight, corners.TR[1] - expTop] as [number, number],
+    BR: [corners.BR[0] - expRight, corners.BR[1] - expBottom] as [number, number],
+    BL: [corners.BL[0] - expLeft, corners.BL[1] - expBottom] as [number, number],
   };
 
   // Adjust corners for edge curvature
@@ -699,11 +814,47 @@ function refineWarp(
     const dsize = new cv.Size(W, H);
     cv.warpPerspective(img, refined, Mnew, dsize, cv.INTER_LANCZOS4);
 
-    return { refined, M: Mnew };
+    return {
+      refined,
+      M: Mnew,
+      metrics: {
+        edgeCurvatures: {
+          top: Number(edgeCurvatures.top.toFixed(3)),
+          bottom: Number(edgeCurvatures.bottom.toFixed(3)),
+          left: Number(edgeCurvatures.left.toFixed(3)),
+          right: Number(edgeCurvatures.right.toFixed(3)),
+        },
+        cornerErrors: {
+          TL: [Number(cornerErrors.TL[0].toFixed(2)), Number(cornerErrors.TL[1].toFixed(2))],
+          TR: [Number(cornerErrors.TR[0].toFixed(2)), Number(cornerErrors.TR[1].toFixed(2))],
+          BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
+          BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
+        },
+        refined: true,
+      },
+    };
   } catch {
     // Refinement failed — use current warp
     const Mcopy = currentM.clone();
     const warpedCopy = warped.clone();
-    return { refined: warpedCopy, M: Mcopy };
+    return {
+      refined: warpedCopy,
+      M: Mcopy,
+      metrics: {
+        edgeCurvatures: {
+          top: Number(edgeCurvatures.top.toFixed(3)),
+          bottom: Number(edgeCurvatures.bottom.toFixed(3)),
+          left: Number(edgeCurvatures.left.toFixed(3)),
+          right: Number(edgeCurvatures.right.toFixed(3)),
+        },
+        cornerErrors: {
+          TL: [Number(cornerErrors.TL[0].toFixed(2)), Number(cornerErrors.TL[1].toFixed(2))],
+          TR: [Number(cornerErrors.TR[0].toFixed(2)), Number(cornerErrors.TR[1].toFixed(2))],
+          BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
+          BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
+        },
+        refined: false,
+      },
+    };
   }
 }

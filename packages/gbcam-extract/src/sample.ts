@@ -1,10 +1,12 @@
 import { type GBImageData, CAM_W, CAM_H, createGBImageData } from "./common.js";
+import { type DebugCollector, upscale } from "./debug.js";
 
 export interface SampleOptions {
   scale?: number;
   method?: "mean" | "median"; // kept for API compat; internally always uses mean (matching Python)
   marginH?: number; // ignored; replaced by subpixel col offsets
   marginV?: number;
+  debug?: DebugCollector;
 }
 
 /**
@@ -29,6 +31,7 @@ export function sample(
 ): GBImageData {
   const scale = options?.scale ?? 8;
   const vMargin = options?.marginV ?? Math.max(1, Math.floor(scale / 5));
+  const dbg = options?.debug;
 
   const expectedW = CAM_W * scale;
   const expectedH = CAM_H * scale;
@@ -107,6 +110,51 @@ export function sample(
       output.data[outIdx + 2] = Math.round(bCount > 0 ? bSum / bCount : 0);
       output.data[outIdx + 3] = 255;
     }
+  }
+
+  if (dbg) {
+    // Compute per-channel min/max
+    let rMin = 255, rMax = 0, gMin = 255, gMax = 0, bMin = 255, bMax = 0;
+    for (let i = 0; i < CAM_W * CAM_H; i++) {
+      const o = i * 4;
+      const r = output.data[o];
+      const g = output.data[o + 1];
+      const b = output.data[o + 2];
+      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
+      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
+      if (b < bMin) bMin = b; if (b > bMax) bMax = b;
+    }
+    dbg.log(
+      `[sample] R: ${rMin}–${rMax}  G: ${gMin}–${gMax}  B: ${bMin}–${bMax}`,
+    );
+    const innerStartLog = 1;
+    const innerEndLog = scale - 1;
+    const innerWLog = innerEndLog - innerStartLog;
+    const bLoLog = innerStartLog;
+    const bHiLog = innerStartLog + Math.floor(innerWLog / 3);
+    const gLoLog = bHiLog;
+    const gHiLog = innerStartLog + 2 * Math.floor(innerWLog / 3);
+    const rLoLog = gHiLog;
+    const rHiLog = innerEndLog;
+    dbg.log(
+      `[sample] subpixel cols (scale=${scale}): ` +
+        `B=[${bLoLog},${bHiLog}) G=[${gLoLog},${gHiLog}) R=[${rLoLog},${rHiLog}) vMargin=${vMargin}`,
+    );
+    dbg.setMetrics("sample", {
+      ranges: {
+        R: [rMin, rMax],
+        G: [gMin, gMax],
+        B: [bMin, bMax],
+      },
+      subpixelCols: {
+        B: [bLoLog, bHiLog],
+        G: [gLoLog, gHiLog],
+        R: [rLoLog, rHiLog],
+      },
+      vMargin,
+    });
+    // 8x upscale for visual inspection
+    dbg.addImage("sample_a_8x", upscale(output, 8));
   }
 
   return output;
