@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/shadcn/components/select";
 import { Input } from "@/shadcn/components/input";
+import { Toaster } from "@/shadcn/components/sonner";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -203,6 +204,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <Toaster richColors position="bottom-center" />
       <div className="container mx-auto px-4 py-8 max-w-4xl flex-1">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">

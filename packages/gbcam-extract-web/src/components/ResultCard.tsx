@@ -10,6 +10,7 @@ import { sanitizePaletteName } from "../utils/filenames.js";
 import { Button } from "@/shadcn/components/button";
 import { Badge } from "@/shadcn/components/badge";
 import { Card, CardContent, CardHeader } from "@/shadcn/components/card";
+import { toast } from "sonner";
 
 interface ResultCardProps {
   result: PipelineResult;
@@ -71,9 +72,6 @@ export function ResultCard({
   onDelete,
 }: ResultCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [showCopyFeedback, setShowCopyFeedback] = useState<string | false>(
-    false,
-  );
   const [shareSupported, setShareSupported] = useState(false);
 
   useEffect(() => {
@@ -149,12 +147,10 @@ export function ResultCard({
     if (!outputCanvas) return;
     try {
       await copyImageToClipboard(outputCanvas);
-      setShowCopyFeedback("Copied!");
-      setTimeout(() => setShowCopyFeedback(false), 2000);
+      toast.success("Image copied to clipboard");
     } catch (err) {
       const errorMsg = (err as Error).message || "Failed to copy";
-      setShowCopyFeedback(`Error: ${errorMsg}`);
-      setTimeout(() => setShowCopyFeedback(false), 3000);
+      toast.error(`Copy failed: ${errorMsg}`);
       console.error("Failed to copy image:", err);
     }
   }, [result, palette, outputScale]);
@@ -196,7 +192,7 @@ export function ResultCard({
             </Button>
           )}
           <Button variant="secondary" onClick={handleCopy} aria-label="Copy image">
-            {showCopyFeedback || "Copy"}
+            Copy
           </Button>
         </div>
       </CardContent>

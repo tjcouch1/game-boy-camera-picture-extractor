@@ -37,6 +37,7 @@ import {
   writePaletteToClipboard,
   readPaletteFromClipboard,
 } from "../utils/paletteClipboard.js";
+import { toast } from "sonner";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
@@ -186,10 +187,6 @@ export function PalettePicker({
   const [editingPaletteErrors, setEditingPaletteErrors] = useState<
     Record<string, string>
   >({});
-  const [buttonFeedback, setButtonFeedback] = useState<
-    Record<string, string | undefined>
-  >({});
-
   // Get the currently editing palette (if any)
   const editingPalette =
     selectedEditingPaletteId &&
@@ -230,22 +227,10 @@ export function PalettePicker({
       name: palette.name,
       colors: palette.colors,
     });
-    const buttonId = `copy-${palette.id}`;
     if (success) {
-      setButtonFeedback((prev) => ({ ...prev, [buttonId]: "Copied!" }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        2000,
-      );
+      toast.success("Palette copied to clipboard");
     } else {
-      setButtonFeedback((prev) => ({
-        ...prev,
-        [buttonId]: "Failed (perms)",
-      }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        3000,
-      );
+      toast.error("Copy failed — check browser permissions");
     }
   };
 
@@ -253,70 +238,29 @@ export function PalettePicker({
     const palette = userPalettes.find((p) => p.id === paletteId);
     if (!palette) return;
     const paletteData = await readPaletteFromClipboard();
-    const buttonId = `paste-${paletteId}`;
     if (paletteData) {
-      updatePalette(paletteId, {
-        colors: paletteData.colors,
-      });
+      updatePalette(paletteId, { colors: paletteData.colors });
       if (isPaletteSelected(palette)) {
-        onSelectWithName({
-          name: palette.name,
-          colors: paletteData.colors,
-        });
+        onSelectWithName({ name: palette.name, colors: paletteData.colors });
       }
-      setButtonFeedback((prev) => ({ ...prev, [buttonId]: "Pasted!" }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        2000,
-      );
+      toast.success("Palette colors pasted");
     } else {
-      setButtonFeedback((prev) => ({
-        ...prev,
-        [buttonId]: "No palette",
-      }));
-      setTimeout(
-        () => setButtonFeedback((prev) => ({ ...prev, [buttonId]: undefined })),
-        3000,
-      );
+      toast.info("Clipboard does not contain a palette");
     }
   };
 
   const handlePasteNewPalette = async () => {
     const paletteData = await readPaletteFromClipboard();
     if (paletteData) {
-      // createPaletteInEditMode deduplicates the name, so use the returned palette
       const newPalette = createPaletteInEditMode(
         paletteData.name,
         paletteData.colors,
       );
       setSelectedEditingPaletteId(newPalette.id);
-      // Select using the actual generated name (may differ from clipboard name if duplicate)
       onSelectWithName({ name: newPalette.name, colors: newPalette.colors });
-      setButtonFeedback((prev) => ({
-        ...prev,
-        "paste-new": "Pasted!",
-      }));
-      setTimeout(
-        () =>
-          setButtonFeedback((prev) => ({
-            ...prev,
-            "paste-new": undefined,
-          })),
-        2000,
-      );
+      toast.success("Palette pasted");
     } else {
-      setButtonFeedback((prev) => ({
-        ...prev,
-        "paste-new": "No palette",
-      }));
-      setTimeout(
-        () =>
-          setButtonFeedback((prev) => ({
-            ...prev,
-            "paste-new": undefined,
-          })),
-        3000,
-      );
+      toast.info("Clipboard does not contain a palette");
     }
   };
 
@@ -433,7 +377,7 @@ export function PalettePicker({
                   : "Clipboard does not contain a palette"
               }
             >
-              {buttonFeedback["paste-new"] || <span aria-hidden>📋</span>}
+              <span aria-hidden>📋</span>
             </Button>
           )}
         </div>
@@ -508,9 +452,7 @@ export function PalettePicker({
                               }}
                               aria-label="Copy palette colors to clipboard"
                             >
-                              {buttonFeedback[`copy-${palette.id}`] || (
-                                <span aria-hidden>📄</span>
-                              )}
+                              <span aria-hidden>📄</span>
                             </Button>
                             <Button
                               variant="secondary"
@@ -526,9 +468,7 @@ export function PalettePicker({
                                   : "Clipboard does not contain a palette"
                               }
                             >
-                              {buttonFeedback[`paste-${palette.id}`] || (
-                                <span aria-hidden>📋</span>
-                              )}
+                              <span aria-hidden>📋</span>
                             </Button>
                           </>
                         )}
