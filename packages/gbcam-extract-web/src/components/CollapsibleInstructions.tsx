@@ -1,11 +1,15 @@
+import { ChevronDown } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shadcn/components/collapsible";
+import { Button } from "@/shadcn/components/button";
 import { useLocalStorage } from "../hooks/useLocalStorage.js";
 import { MarkdownRenderer } from "./MarkdownRenderer.js";
 
 const INSTRUCTIONS_STORAGE_KEY = "gbcam-instructions-open";
 
-/**
- * Collapsible instructions panel that persists open/closed state to localStorage.
- */
 export function CollapsibleInstructions({ markdown }: { markdown: string }) {
   const [isOpen, setIsOpen] = useLocalStorage<boolean>(
     INSTRUCTIONS_STORAGE_KEY,
@@ -13,25 +17,30 @@ export function CollapsibleInstructions({ markdown }: { markdown: string }) {
   );
 
   return (
-    <div className="mb-6 border border-gray-600 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 bg-gray-800 hover:bg-gray-700 text-left font-semibold text-gray-100 flex items-center justify-between transition-colors"
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      className="mb-6 rounded-lg border bg-card text-card-foreground"
+    >
+      <CollapsibleTrigger
+        render={
+          <Button
+            variant="ghost"
+            className="w-full justify-between rounded-b-none px-4 py-3 font-semibold"
+          />
+        }
       >
-        <span>Instructions</span>
-        <span
-          className="text-lg transform transition-transform"
-          style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-        >
-          ▼
-        </span>
-      </button>
-
-      {isOpen && (
-        <div className="p-4 bg-gray-900 text-gray-300 max-h-96 overflow-y-auto">
+        Instructions
+        <ChevronDown
+          className="transition-transform data-[state=open]:rotate-180"
+          data-icon="inline-end"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="max-h-96 overflow-y-auto p-4">
           <MarkdownRenderer markdown={markdown} />
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

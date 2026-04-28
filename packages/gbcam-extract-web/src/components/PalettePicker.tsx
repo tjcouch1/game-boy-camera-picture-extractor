@@ -11,6 +11,12 @@ import {
   type UserPaletteEntry,
 } from "../hooks/useUserPalettes.js";
 import { usePaletteSectionState } from "../hooks/usePaletteSectionState.js";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/shadcn/components/accordion";
 import { useClipboardPaletteCheck } from "../hooks/useClipboardPalette.js";
 import {
   PALETTE_COLOR_LABELS,
@@ -85,43 +91,32 @@ function PaletteSwatch({
   );
 }
 
-function PaletteSection({
+function PaletteSectionItem({
   title,
   entries,
   selected,
-  selectedEditingPaletteId,
   onSelectWithName,
   onEdit,
   isBuiltIn,
-  isExpanded,
-  onToggleExpand,
 }: {
   title: string;
   entries: (PaletteEntry | UserPaletteEntry)[];
   selected: PaletteEntry;
-  selectedEditingPaletteId?: string;
   onSelectWithName: (entry: PaletteEntry) => void;
   onEdit?: (id: string, entry: UserPaletteEntry) => void;
   isBuiltIn?: boolean;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
 }) {
   if (entries.length === 0) return null;
 
   return (
-    <div>
-      <button
-        onClick={onToggleExpand}
-        className="text-sm font-medium text-gray-300 hover:text-white mb-1 flex items-center gap-1"
-      >
-        <span className="text-xs">{isExpanded ? "v" : ">"}</span>
+    <AccordionItem value={title}>
+      <AccordionTrigger>
         {title} ({entries.length})
-      </button>
-      {isExpanded && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 ml-3">
+      </AccordionTrigger>
+      <AccordionContent>
+        <div className="grid grid-cols-2 gap-1.5 ms-3 sm:grid-cols-3">
           {entries.map((entry, i) => {
             const isUserPalette = "id" in entry;
-            // For all palettes (user or built-in), check if name and colors match selected
             const isSelected =
               entry.name === selected.name &&
               entry.colors.every((c, j) => c === selected.colors[j]);
@@ -155,8 +150,8 @@ function PaletteSection({
             );
           })}
         </div>
-      )}
-    </div>
+      </AccordionContent>
+    </AccordionItem>
   );
 }
 
@@ -586,62 +581,70 @@ export function PalettePicker({
           </div>
         )}
 
-        {/* User Palettes Section */}
-        <PaletteSection
-          title="User Palettes"
-          entries={savedUserPalettes}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          onEdit={(_, palette) => {
-            const userPalette = palette as UserPaletteEntry;
-            handleStartEdit(userPalette.id);
-          }}
-          isExpanded={isExpanded("User Palettes")}
-          onToggleExpand={() => toggleExpanded("User Palettes")}
-        />
+        {(() => {
+          const sectionTitles = [
+            "User Palettes",
+            "Button Combos",
+            "BG Presets",
+            "Additional",
+            "Fun",
+          ];
+          const expandedValues = sectionTitles.filter((t) => isExpanded(t));
 
-        {/* Built-in Palettes Sections */}
-        <PaletteSection
-          title="Button Combos"
-          entries={BUTTON_COMBO_PALETTES}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("Button Combos")}
-          onToggleExpand={() => toggleExpanded("Button Combos")}
-        />
-        <PaletteSection
-          title="BG Presets"
-          entries={BG_PRESETS}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("BG Presets")}
-          onToggleExpand={() => toggleExpanded("BG Presets")}
-        />
-        <PaletteSection
-          title="Additional"
-          entries={ADDITIONAL_PALETTES}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("Additional")}
-          onToggleExpand={() => toggleExpanded("Additional")}
-        />
-        <PaletteSection
-          title="Fun"
-          entries={FUN_PALETTES_EXPORT}
-          selected={selected}
-          selectedEditingPaletteId={selectedEditingPaletteId}
-          onSelectWithName={onSelectWithName}
-          isBuiltIn={true}
-          isExpanded={isExpanded("Fun")}
-          onToggleExpand={() => toggleExpanded("Fun")}
-        />
+          return (
+            <Accordion
+              multiple
+              value={expandedValues}
+              onValueChange={(next: string[]) => {
+                const current = new Set(expandedValues);
+                const target = new Set(next);
+                sectionTitles.forEach((title) => {
+                  if (current.has(title) !== target.has(title)) {
+                    toggleExpanded(title);
+                  }
+                });
+              }}
+            >
+              <PaletteSectionItem
+                title="User Palettes"
+                entries={savedUserPalettes}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                onEdit={(_, palette) => {
+                  handleStartEdit((palette as UserPaletteEntry).id);
+                }}
+              />
+              <PaletteSectionItem
+                title="Button Combos"
+                entries={BUTTON_COMBO_PALETTES}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+              <PaletteSectionItem
+                title="BG Presets"
+                entries={BG_PRESETS}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+              <PaletteSectionItem
+                title="Additional"
+                entries={ADDITIONAL_PALETTES}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+              <PaletteSectionItem
+                title="Fun"
+                entries={FUN_PALETTES_EXPORT}
+                selected={selected}
+                onSelectWithName={onSelectWithName}
+                isBuiltIn
+              />
+            </Accordion>
+          );
+        })()}
       </div>
     </div>
   );

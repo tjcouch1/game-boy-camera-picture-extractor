@@ -17,6 +17,13 @@ import { useAppSettings } from "./hooks/useAppSettings.js";
 import { useTheme } from "next-themes";
 import { useFaviconSwap } from "./hooks/useFaviconSwap.js";
 import { ModeToggle } from "./components/ModeToggle.js";
+import { ChevronDown, Library } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shadcn/components/collapsible";
+import { Button } from "@/shadcn/components/button";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -364,23 +371,33 @@ export default function App() {
 
             {/* Image History Section */}
             {history.length > 0 && (
-              <div className="mt-8">
-                <button
-                  onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-                  className="text-sm font-medium text-gray-300 hover:text-white mb-3 flex items-center gap-1"
+              <Collapsible
+                open={isHistoryExpanded}
+                onOpenChange={setIsHistoryExpanded}
+                className="mt-8"
+              >
+                <CollapsibleTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                    />
+                  }
                 >
-                  <span className="text-xs">
-                    {isHistoryExpanded ? "v" : ">"}
-                  </span>
-                  📚 Image History (
+                  <Library data-icon="inline-start" />
+                  Image History (
                   {history.reduce(
                     (sum, batch) => sum + batch.results.length,
                     0,
                   )}{" "}
                   images)
-                </button>
-
-                {isHistoryExpanded && (
+                  <ChevronDown
+                    className="transition-transform data-[state=open]:rotate-180"
+                    data-icon="inline-end"
+                  />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
                   <div className="space-y-4">
                     <div className="flex gap-2 mb-3">
                       <input
@@ -436,8 +453,8 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
           </>
         )}
