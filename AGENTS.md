@@ -319,3 +319,77 @@ The primary goal is to improve the pipeline's accuracy at transforming phone pho
 8. Save the Game Boy Camera picture file as a png.
 
 9. Palette swap the Game Boy Camera picture to the grayscale palette and save as a png.
+
+## Frontend Conventions (gbcam-extract-web)
+
+The web package uses shadcn/ui (preset `b2UrMghYe` — nova style, fuchsia
+accent, neutral base, base primitives, RTL enabled). Installed components
+live under `src/shadcn/{components,hooks,utils}` to keep them isolated from
+app code.
+
+### Working with shadcn
+
+- **Use existing shadcn components rather than reinventing.** Need a
+  collapsible panel? Use `<Collapsible>` — don't build a custom
+  button-and-arrow toggle. Need a toast? Use `sonner`. Need a confirmation?
+  Use `<Dialog>` / `<AlertDialog>`.
+- **List available components:** `pnpm shadcn search @shadcn` (add
+  `-q "<query>"` to filter). Component docs: `pnpm shadcn docs <name>`.
+- **Add a new component:** `pnpm shadcn add <name>` from
+  `packages/gbcam-extract-web/`. Each new add gets its own commit.
+- **Don't edit installed shadcn files.** They live under `src/shadcn/` and
+  should match what the CLI installed. If you absolutely must edit one:
+  prefix the changed lines with `// CUSTOM: <reason>`, stage the change,
+  and surface the edit for review before continuing.
+
+### Styling rules
+
+- **Semantic color tokens only.** `bg-background`, `bg-card`,
+  `text-foreground`, `text-muted-foreground`, `bg-primary`, `bg-destructive`,
+  etc. No raw Tailwind colors like `bg-blue-600` or `text-gray-400`. Theme
+  variables drive light/dark.
+- **Logical Tailwind classes (RTL-safe).** Use `ms-*`/`me-*`, `ps-*`/`pe-*`,
+  `start-*`/`end-*`, `text-start`/`text-end`. Avoid `ml-*`/`mr-*`/`pl-*`/
+  `pr-*`/`text-left`/`text-right`.
+- **Use `gap-*` with flex/grid**, not `space-x-*`/`space-y-*`.
+- **`cn()` from `@/shadcn/utils/utils`** for conditional classes.
+- **Always use lucide-react icons. Never use emojis.** Every UI icon —
+  chevrons, status indicators, button affordances — must be a `lucide-react`
+  component. Inside `<Button>` use `data-icon="inline-start"` /
+  `data-icon="inline-end"`. No icon size classes inside components. Icon-only
+  buttons get `aria-label`.
+- **Prefer semantic tokens over `dark:` overrides.** Theme tokens drive
+  light/dark. The Tailwind typography plugin's `prose dark:prose-invert` is
+  an accepted exception (used in `MarkdownRenderer.tsx`).
+
+### Component composition (base primitives)
+
+- Use `render={<Component />}` to compose triggers (not `asChild` — that's
+  the radix variant; we're on base).
+- `Select` requires an `items` array prop on the root. Placeholder = a
+  `{ value: null, label: "..." }` entry.
+- `Accordion` uses `multiple` boolean and array `defaultValue` (no `type`).
+- Forms: wrap controls in `<FieldGroup>`/`<Field>`/`<FieldLabel>`/`<Input>`.
+  Validation: `data-invalid` on `Field`, `aria-invalid` on the control.
+- `Card`: full composition (`CardHeader`/`CardTitle`/`CardContent`/
+  `CardFooter`) rather than dumping everything in `CardContent`.
+
+### Theming
+
+- Theme via `next-themes`: `<ThemeProvider attribute="class"
+  defaultTheme="system">`.
+- Mode toggle in the App header (`<ModeToggle>` — light/dark/system).
+- Theme-aware app icon: read `useTheme().resolvedTheme` and switch
+  `icon.svg` ↔ `icon-dark.svg` (matching `icon.png`/`icon-dark.png`).
+- Favicon: media-query `<link>` pair in `index.html` plus a JS swap effect
+  for the in-app override case.
+
+### State persistence
+
+- All localStorage access goes through `useLocalStorage<T>(key, initial)`
+  from `src/hooks/useLocalStorage.ts`. Don't write to `localStorage`
+  directly from components.
+- Existing keys (`gbcam-app-settings`, `gbcam-instructions-open`,
+  `gbcam-image-history`, `gbcam-history-settings`, `gbcam-user-palettes`,
+  `gbcam-palette-sections-expanded`) are preserved. `next-themes` manages
+  its own `theme` key.
