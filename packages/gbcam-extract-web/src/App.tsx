@@ -23,6 +23,7 @@ import {
   X,
   AlertTriangle,
   ImageIcon,
+  Download as DownloadIcon,
 } from "lucide-react";
 import {
   Collapsible,
@@ -239,6 +240,7 @@ export default function App() {
                 onClick={handleInstallApp}
                 title="Install this app on your device"
               >
+                <DownloadIcon data-icon="inline-start" />
                 Install App
               </Button>
             )}

@@ -11,6 +11,7 @@ import { Button } from "@/shadcn/components/button";
 import { Badge } from "@/shadcn/components/badge";
 import { Card, CardContent, CardHeader } from "@/shadcn/components/card";
 import { toast } from "sonner";
+import { X, Download, Share2, Copy as CopyIcon } from "lucide-react";
 
 interface ResultCardProps {
   result: PipelineResult;
@@ -174,7 +175,7 @@ export function ResultCard({
             aria-label="Delete result"
             className="size-7"
           >
-            <span aria-hidden>×</span>
+            <X />
           </Button>
         )}
       </CardHeader>
@@ -185,13 +186,18 @@ export function ResultCard({
           style={{ imageRendering: "pixelated", maxWidth: "100%" }}
         />
         <div className="flex flex-wrap gap-2 items-start content-start">
-          <Button onClick={handleDownload}>Download PNG</Button>
+          <Button onClick={handleDownload}>
+            <Download data-icon="inline-start" />
+            Download PNG
+          </Button>
           {shareSupported && (
             <Button variant="secondary" onClick={handleShare}>
+              <Share2 data-icon="inline-start" />
               Share
             </Button>
           )}
           <Button variant="secondary" onClick={handleCopy} aria-label="Copy image">
+            <CopyIcon data-icon="inline-start" />
             Copy
           </Button>
         </div>

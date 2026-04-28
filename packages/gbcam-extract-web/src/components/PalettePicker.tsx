@@ -38,6 +38,12 @@ import {
   readPaletteFromClipboard,
 } from "../utils/paletteClipboard.js";
 import { toast } from "sonner";
+import {
+  ClipboardPaste,
+  Copy as CopyIcon,
+  Pencil,
+  Plus,
+} from "lucide-react";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
@@ -92,7 +98,7 @@ function PaletteSwatch({
           className="ms-auto text-primary hover:text-primary/80 cursor-pointer"
           title="Edit palette"
         >
-          <span aria-hidden>✏️</span>
+          <Pencil className="size-3" />
         </span>
       )}
     </Button>
@@ -363,7 +369,8 @@ export function PalettePicker({
             ))}
           </div>
           <Button variant="secondary" size="sm" onClick={handleCreateCustom}>
-            + Custom
+            <Plus data-icon="inline-start" />
+            Custom
           </Button>
           {clipboardEnabled && (
             <Button
@@ -377,7 +384,7 @@ export function PalettePicker({
                   : "Clipboard does not contain a palette"
               }
             >
-              <span aria-hidden>📋</span>
+              <ClipboardPaste />
             </Button>
           )}
         </div>
@@ -389,7 +396,8 @@ export function PalettePicker({
           <div>
             <div className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1">
               <span className="text-xs">v</span>
-              ✏️ EDITING ({editingPalettes.length})
+              <Pencil className="size-3" />
+              EDITING ({editingPalettes.length})
             </div>
             <div className="ms-3 space-y-2">
               {editingPalettes.map((palette) => {
@@ -452,7 +460,7 @@ export function PalettePicker({
                               }}
                               aria-label="Copy palette colors to clipboard"
                             >
-                              <span aria-hidden>📄</span>
+                              <CopyIcon />
                             </Button>
                             <Button
                               variant="secondary"
@@ -468,7 +476,7 @@ export function PalettePicker({
                                   : "Clipboard does not contain a palette"
                               }
                             >
-                              <span aria-hidden>📋</span>
+                              <ClipboardPaste />
                             </Button>
                           </>
                         )}
