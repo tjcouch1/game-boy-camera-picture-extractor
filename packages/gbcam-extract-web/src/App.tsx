@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from "react";
 import type { PipelineResult } from "gbcam-extract";
 import { useOpenCV } from "./hooks/useOpenCV.js";
 import { useImageHistory } from "./hooks/useImageHistory.js";
-import { LoadingBar } from "./components/LoadingBar.js";
 import { ImageInput } from "./components/ImageInput.js";
 import { useProcessing } from "./hooks/useProcessing.js";
 import type { ProcessingProgress } from "./hooks/useProcessing.js";
@@ -13,8 +12,58 @@ import { sanitizePaletteName } from "./utils/filenames.js";
 import type { PaletteEntry } from "./data/palettes.js";
 import { CollapsibleInstructions } from "./components/CollapsibleInstructions.js";
 import { USER_INSTRUCTIONS_MARKDOWN } from "./generated/UserInstructions.js";
-
-const APP_SETTINGS_KEY = "gbcam-app-settings";
+import { useAppSettings } from "./hooks/useAppSettings.js";
+import { useTheme } from "next-themes";
+import { useFaviconSwap } from "./hooks/useFaviconSwap.js";
+import { ModeToggle } from "./components/ModeToggle.js";
+import {
+  ChevronDown,
+  Library,
+  Smartphone,
+  X,
+  AlertTriangle,
+  ImageIcon,
+  Download as DownloadIcon,
+} from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shadcn/components/collapsible";
+import { Button } from "@/shadcn/components/button";
+import { Card, CardContent } from "@/shadcn/components/card";
+import { Separator } from "@/shadcn/components/separator";
+import { Checkbox } from "@/shadcn/components/checkbox";
+import { Field, FieldGroup, FieldLabel } from "@/shadcn/components/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shadcn/components/select";
+import { Input } from "@/shadcn/components/input";
+import { Toaster } from "@/shadcn/components/sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/shadcn/components/alert";
+import { Progress } from "@/shadcn/components/progress";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/shadcn/components/empty";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/shadcn/components/dialog";
+import { useServiceWorker } from "./hooks/useServiceWorker.js";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -40,22 +89,15 @@ function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
 
   return (
     <div className="mt-4 space-y-2">
-      <div>
-        <div className="flex justify-between text-xs text-gray-400 mb-1">
-          <span>
-            Image {progress.currentImageProgress.index + 1} of{" "}
-            {progress.totalImages}: {progress.currentImageProgress.filename}
-          </span>
-          <span>{progress.overallProgress}%</span>
-        </div>
-        <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-          <div
-            className="bg-blue-500 h-full transition-all"
-            style={{ width: `${progress.overallProgress}%` }}
-          />
-        </div>
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>
+          Image {progress.currentImageProgress.index + 1} of{" "}
+          {progress.totalImages}: {progress.currentImageProgress.filename}
+        </span>
+        <span>{progress.overallProgress}%</span>
       </div>
-      <div className="text-xs text-gray-400">
+      <Progress value={progress.overallProgress} />
+      <div className="text-xs text-muted-foreground">
         Step: {progress.currentImageProgress.currentStep || "Starting..."}
       </div>
     </div>
@@ -82,90 +124,35 @@ export default function App() {
     updateSettings: updateHistorySettings,
     settings: historySettings,
   } = useImageHistory();
-  const [paletteEntry, setPaletteEntry] = useState<PaletteEntry>({
+  const { settings, updateSetting } = useAppSettings();
+  const debug = settings.debug;
+  const clipboardEnabled = settings.clipboardEnabled;
+  const outputScale = settings.outputScale;
+  const previewScale = settings.previewScale;
+  const paletteEntry = settings.paletteSelection ?? {
     name: "Down",
     colors: ["#FFFFA5", "#FF9494", "#9494FF", "#000000"],
-  });
-  const [debug, setDebugInternal] = useState(false);
-  const [clipboardEnabled, setClipboardEnabledInternal] = useState(false);
-  const [outputScale, setOutputScaleInternal] = useState(1);
-  const [previewScale, setPreviewScaleInternal] = useState(2);
+  };
+
+  const setDebug = (value: boolean) => updateSetting("debug", value);
+  const setClipboardEnabled = (value: boolean) =>
+    updateSetting("clipboardEnabled", value);
+  const setOutputScale = (value: number) => updateSetting("outputScale", value);
+  const setPreviewScale = (value: number) =>
+    updateSetting("previewScale", value);
+
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [showIOSInstallTip, setShowIOSInstallTip] = useState(false);
 
-  const setDebug = useCallback((value: boolean) => {
-    setDebugInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, debug: value }),
-    );
-  }, []);
-
-  const setClipboardEnabled = useCallback((value: boolean) => {
-    setClipboardEnabledInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, clipboardEnabled: value }),
-    );
-  }, []);
-
-  const setOutputScale = useCallback((value: number) => {
-    setOutputScaleInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, outputScale: value }),
-    );
-  }, []);
-
-  const setPreviewScale = useCallback((value: number) => {
-    setPreviewScaleInternal(value);
-    // Save to localStorage immediately
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, previewScale: value }),
-    );
-  }, []);
-
-  // Load settings from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(APP_SETTINGS_KEY);
-      if (stored) {
-        const {
-          debug: storedDebug,
-          clipboardEnabled: storedClipboard,
-          outputScale: storedOutputScale,
-          previewScale: storedPreviewScale,
-          paletteSelection: storedPaletteSelection,
-        } = JSON.parse(stored);
-        if (typeof storedDebug === "boolean") setDebugInternal(storedDebug);
-        if (typeof storedClipboard === "boolean")
-          setClipboardEnabledInternal(storedClipboard);
-        if (typeof storedOutputScale === "number")
-          setOutputScaleInternal(storedOutputScale);
-        if (typeof storedPreviewScale === "number")
-          setPreviewScaleInternal(storedPreviewScale);
-        if (storedPaletteSelection) {
-          setPaletteEntry(storedPaletteSelection);
-        }
-      }
-    } catch (e) {
-      console.error("Error loading app settings from storage:", e);
-    }
-  }, []);
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  useFaviconSwap();
+  const { updateAvailable, reload } = useServiceWorker();
+  const iconSrc =
+    mounted && resolvedTheme === "dark" ? "./icon-dark.svg" : "./icon.svg";
 
   // Handle PWA install prompt
   useEffect(() => {
@@ -200,16 +187,8 @@ export default function App() {
     };
   }, []);
 
-  const handlePaletteSelected = useCallback((entry: PaletteEntry) => {
-    setPaletteEntry(entry);
-    // Save selection to localStorage
-    const stored = localStorage.getItem(APP_SETTINGS_KEY);
-    const currentSettings = stored ? JSON.parse(stored) : {};
-    localStorage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({ ...currentSettings, paletteSelection: entry }),
-    );
-  }, []);
+  const handlePaletteSelected = (entry: PaletteEntry) =>
+    updateSetting("paletteSelection", entry);
 
   const handleInstallApp = async () => {
     if (!installPrompt) return;
@@ -244,85 +223,111 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <Toaster richColors position="bottom-center" />
       <div className="container mx-auto px-4 py-8 max-w-4xl flex-1">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <img src="./icon.svg" alt="App Icon" className="w-8 h-8" />
+            <img src={iconSrc} alt="App Icon" className="size-8" />
             <h1 className="text-2xl font-bold">
               Game Boy Camera Picture Extractor
             </h1>
           </div>
-          {isInstallable && (
-            <button
-              onClick={handleInstallApp}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
-              title="Install this app on your device"
-            >
-              Install App
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <ModeToggle />
+            {isInstallable && (
+              <Button
+                onClick={handleInstallApp}
+                title="Install this app on your device"
+              >
+                <DownloadIcon data-icon="inline-start" />
+                Install App
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* iOS install tip — Safari doesn't fire beforeinstallprompt */}
         {showIOSInstallTip && (
-          <div className="mb-4 flex items-start gap-3 p-3 bg-blue-900/60 border border-blue-700 rounded-lg text-sm text-blue-200">
-            <span className="text-lg leading-none mt-0.5">📲</span>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium mb-0.5">Install as App</p>
-              <p className="text-xs text-blue-300">
-                Tap the <strong>Share</strong> button (
-                <span className="font-mono">⎙</span>) in Safari, then choose{" "}
-                <strong>"Add to Home Screen"</strong>.
-              </p>
-            </div>
-            <button
+          <Alert className="mb-4">
+            <Smartphone />
+            <AlertTitle>Install as App</AlertTitle>
+            <AlertDescription>
+              Tap the <strong>Share</strong> button (
+              <span className="font-mono">⎙</span>) in Safari, then choose{" "}
+              <strong>"Add to Home Screen"</strong>.
+            </AlertDescription>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setShowIOSInstallTip(false)}
-              className="shrink-0 text-blue-400 hover:text-blue-200 text-lg leading-none"
-              title="Dismiss"
+              aria-label="Dismiss"
+              className="ms-auto"
             >
-              ✕
-            </button>
-          </div>
+              <X />
+            </Button>
+          </Alert>
+        )}
+
+        {updateAvailable && (
+          <Alert className="mb-4">
+            <AlertTitle>App updated</AlertTitle>
+            <AlertDescription>
+              Refresh to get the latest version.
+            </AlertDescription>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={reload}
+              className="ms-auto"
+            >
+              Refresh
+            </Button>
+          </Alert>
         )}
 
         {/* Collapsible Instructions */}
         <CollapsibleInstructions markdown={USER_INSTRUCTIONS_MARKDOWN} />
 
         {status === "loading" && (
-          <div className="mb-6">
-            <LoadingBar progress={cvProgress} label="Loading OpenCV.js..." />
+          <div className="mb-6 flex flex-col gap-1">
+            <p className="text-sm text-muted-foreground">
+              Loading OpenCV.js...
+            </p>
+            <Progress value={cvProgress} />
           </div>
         )}
 
         {status === "error" && (
-          <div className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded">
-            <p className="text-red-300">Failed to load OpenCV: {error}</p>
-          </div>
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle />
+            <AlertTitle>Failed to load OpenCV</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {status === "ready" && (
           <>
-            <div className="mb-6 flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                <input
-                  type="checkbox"
+            <FieldGroup className="mb-6 flex-row flex-wrap items-center gap-4">
+              <Field orientation="horizontal" className="w-auto gap-2">
+                <Checkbox
+                  id="debug-mode"
                   checked={debug}
-                  onChange={(e) => setDebug(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(v) => setDebug(v === true)}
                 />
-                Debug mode
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                <input
-                  type="checkbox"
+                <FieldLabel htmlFor="debug-mode">Debug mode</FieldLabel>
+              </Field>
+              <Field orientation="horizontal" className="w-auto gap-2">
+                <Checkbox
+                  id="clipboard-enabled"
                   checked={clipboardEnabled}
-                  onChange={(e) => setClipboardEnabled(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(v) => setClipboardEnabled(v === true)}
                 />
-                Enable Copy/Paste Palettes
-              </label>
-            </div>
+                <FieldLabel htmlFor="clipboard-enabled">
+                  Enable Copy/Paste Palettes
+                </FieldLabel>
+              </Field>
+            </FieldGroup>
 
             <ImageInput
               onImagesSelected={handleImagesSelected}
@@ -330,6 +335,19 @@ export default function App() {
             />
 
             {processing && <ProgressDisplay progress={progress} />}
+
+            {!processing && results.length === 0 && history.length === 0 && (
+              <Empty className="my-6">
+                <EmptyHeader>
+                  <ImageIcon className="size-10 text-muted-foreground" />
+                  <EmptyTitle>No images yet</EmptyTitle>
+                  <EmptyDescription>
+                    Drop a phone photo of a Game Boy Camera image to get
+                    started.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )}
 
             <div className="mt-6 mb-4">
               <PalettePicker
@@ -343,7 +361,7 @@ export default function App() {
               <>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   {results.length > 1 && (
-                    <button
+                    <Button
                       onClick={() => {
                         results.forEach((r) => {
                           downloadResult(
@@ -355,45 +373,64 @@ export default function App() {
                           );
                         });
                       }}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
                     >
                       Download All ({results.length})
-                    </button>
+                    </Button>
                   )}
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
-                    <span>Output Scale:</span>
-                    <select
-                      value={outputScale}
-                      onChange={(e) =>
-                        setOutputScale(parseInt(e.target.value, 10))
-                      }
-                      className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
+                  <Field orientation="horizontal" className="w-auto gap-2">
+                    <FieldLabel htmlFor="output-scale">
+                      Output Scale:
+                    </FieldLabel>
+                    <Select
+                      value={String(outputScale)}
+                      onValueChange={(v) => {
+                        if (typeof v === "string")
+                          setOutputScale(parseInt(v, 10));
+                      }}
                     >
-                      <option value={1}>1x (128x112)</option>
-                      <option value={2}>2x (256x224)</option>
-                      <option value={3}>3x (384x336)</option>
-                      <option value={4}>4x (512x448)</option>
-                      <option value={8}>8x (1024x896)</option>
-                      <option value={16}>16x (2048x1792)</option>
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
-                    <span>Preview Scale:</span>
-                    <select
-                      value={previewScale}
-                      onChange={(e) =>
-                        setPreviewScale(parseInt(e.target.value, 10))
-                      }
-                      className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none"
+                      <SelectTrigger id="output-scale" className="w-fit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="1">1x (128x112)</SelectItem>
+                          <SelectItem value="2">2x (256x224)</SelectItem>
+                          <SelectItem value="3">3x (384x336)</SelectItem>
+                          <SelectItem value="4">4x (512x448)</SelectItem>
+                          <SelectItem value="8">8x (1024x896)</SelectItem>
+                          <SelectItem value="16">16x (2048x1792)</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field orientation="horizontal" className="w-auto gap-2">
+                    <FieldLabel htmlFor="preview-scale">
+                      Preview Scale:
+                    </FieldLabel>
+                    <Select
+                      value={String(previewScale)}
+                      onValueChange={(v) => {
+                        if (typeof v === "string")
+                          setPreviewScale(parseInt(v, 10));
+                      }}
                     >
-                      <option value={1}>1x</option>
-                      <option value={2}>2x</option>
-                      <option value={3}>3x</option>
-                      <option value={4}>4x</option>
-                      <option value={8}>8x</option>
-                      <option value={16}>16x</option>
-                    </select>
-                  </label>
+                      <SelectTrigger id="preview-scale" className="w-fit">
+                        <span className="flex flex-1 text-start">
+                          {previewScale}x
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="1">1x (128x112)</SelectItem>
+                          <SelectItem value="2">2x (256x224)</SelectItem>
+                          <SelectItem value="3">3x (384x336)</SelectItem>
+                          <SelectItem value="4">4x (512x448)</SelectItem>
+                          <SelectItem value="8">8x (1024x896)</SelectItem>
+                          <SelectItem value="16">16x (2048x1792)</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
                 </div>
 
                 <div className="grid gap-4">
@@ -423,91 +460,139 @@ export default function App() {
 
             {/* Image History Section */}
             {history.length > 0 && (
-              <div className="mt-8">
-                <button
-                  onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-                  className="text-sm font-medium text-gray-300 hover:text-white mb-3 flex items-center gap-1"
+              <Collapsible
+                open={isHistoryExpanded}
+                onOpenChange={setIsHistoryExpanded}
+                className="mt-8"
+              >
+                <CollapsibleTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                    />
+                  }
                 >
-                  <span className="text-xs">
-                    {isHistoryExpanded ? "v" : ">"}
-                  </span>
-                  📚 Image History (
+                  <Library data-icon="inline-start" />
+                  Image History (
                   {history.reduce(
                     (sum, batch) => sum + batch.results.length,
                     0,
                   )}{" "}
                   images)
-                </button>
-
-                {isHistoryExpanded && (
+                  <ChevronDown
+                    className="transition-transform data-[state=open]:rotate-180"
+                    data-icon="inline-end"
+                  />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
                   <div className="space-y-4">
                     <div className="flex gap-2 mb-3">
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={historySettings.maxSize}
-                        onChange={(e) =>
-                          updateHistorySettings({
-                            maxSize: Math.max(
-                              1,
-                              parseInt(e.target.value, 10) || 1,
-                            ),
-                          })
-                        }
-                        className="px-2 py-1 bg-gray-700 rounded text-xs text-white border border-gray-600 focus:border-blue-500 outline-none w-16"
-                      />
-                      <label className="text-xs text-gray-400 flex items-center">
-                        max images to keep in history
-                      </label>
-                      <button
-                        onClick={deleteAllHistory}
-                        className="ml-auto px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-xs font-medium transition-colors"
-                      >
-                        Delete All History
-                      </button>
+                      <Field orientation="horizontal" className="w-auto gap-2">
+                        <Input
+                          id="history-max-size"
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={historySettings.maxSize}
+                          onChange={(e) =>
+                            updateHistorySettings({
+                              maxSize: Math.max(
+                                1,
+                                parseInt(e.target.value, 10) || 1,
+                              ),
+                            })
+                          }
+                          className="w-16"
+                        />
+                        <FieldLabel htmlFor="history-max-size">
+                          max images to keep in history
+                        </FieldLabel>
+                      </Field>
+                      <Dialog>
+                        <DialogTrigger
+                          render={
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="ms-auto"
+                            />
+                          }
+                        >
+                          Delete All History
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Delete all history?</DialogTitle>
+                            <DialogDescription>
+                              This will permanently remove all archived image
+                              batches. This action cannot be undone.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogClose
+                              render={<Button variant="secondary" />}
+                            >
+                              Cancel
+                            </DialogClose>
+                            <DialogClose
+                              render={
+                                <Button
+                                  variant="destructive"
+                                  onClick={deleteAllHistory}
+                                />
+                              }
+                            >
+                              Delete All
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </div>
 
                     {history.map((batch) => (
-                      <div
-                        key={batch.id}
-                        className="bg-gray-800/50 rounded-lg p-4"
-                      >
-                        <div className="text-xs text-gray-500 mb-3">
-                          {new Date(batch.timestamp).toLocaleString()} (
-                          {batch.results.length} images)
-                        </div>
-                        <div className="grid gap-3">
-                          {batch.results.map((result, idx) => (
-                            <ResultCard
-                              key={`${batch.id}-${idx}`}
-                              result={result.result}
-                              filename={result.filename}
-                              processingTime={result.processingTime}
-                              palette={paletteEntry.colors}
-                              paletteName={paletteEntry.name}
-                              outputScale={outputScale}
-                              previewScale={previewScale}
-                              onDelete={() => deleteFromHistory(batch.id, idx)}
-                            />
-                          ))}
-                        </div>
-                      </div>
+                      <Card key={batch.id} className="bg-muted/40 p-4">
+                        <CardContent className="p-0">
+                          <div className="text-xs text-muted-foreground mb-3">
+                            {new Date(batch.timestamp).toLocaleString()} (
+                            {batch.results.length} images)
+                          </div>
+                          <div className="grid gap-3">
+                            {batch.results.map((result, idx) => (
+                              <ResultCard
+                                key={`${batch.id}-${idx}`}
+                                result={result.result}
+                                filename={result.filename}
+                                processingTime={result.processingTime}
+                                palette={paletteEntry.colors}
+                                paletteName={paletteEntry.name}
+                                outputScale={outputScale}
+                                previewScale={previewScale}
+                                onDelete={() =>
+                                  deleteFromHistory(batch.id, idx)
+                                }
+                              />
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
-                )}
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
           </>
         )}
       </div>
-      <footer className="mt-8 border-t border-gray-700 bg-gray-900/50">
+      <Separator className="mt-8" />
+      <footer className="bg-background/50">
         <div className="container mx-auto px-4 py-4 max-w-4xl flex justify-center gap-4">
           <a
             href="./licenses.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Open Source Licenses and Credits
           </a>

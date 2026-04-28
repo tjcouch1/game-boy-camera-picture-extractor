@@ -5,7 +5,7 @@ import Markdown from "markdown-to-jsx";
  */
 export function MarkdownRenderer({ markdown }: { markdown: string }) {
   return (
-    <div className="prose prose-invert">
+    <div className="prose dark:prose-invert">
       <Markdown
         options={{
           overrides: {
