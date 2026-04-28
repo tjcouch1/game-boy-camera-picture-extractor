@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from "react";
 import type { PipelineResult } from "gbcam-extract";
 import { useOpenCV } from "./hooks/useOpenCV.js";
 import { useImageHistory } from "./hooks/useImageHistory.js";
-import { LoadingBar } from "./components/LoadingBar.js";
 import { ImageInput } from "./components/ImageInput.js";
 import { useProcessing } from "./hooks/useProcessing.js";
 import type { ProcessingProgress } from "./hooks/useProcessing.js";
@@ -17,7 +16,14 @@ import { useAppSettings } from "./hooks/useAppSettings.js";
 import { useTheme } from "next-themes";
 import { useFaviconSwap } from "./hooks/useFaviconSwap.js";
 import { ModeToggle } from "./components/ModeToggle.js";
-import { ChevronDown, Library } from "lucide-react";
+import {
+  ChevronDown,
+  Library,
+  Smartphone,
+  X,
+  AlertTriangle,
+  ImageIcon,
+} from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -38,6 +44,25 @@ import {
 } from "@/shadcn/components/select";
 import { Input } from "@/shadcn/components/input";
 import { Toaster } from "@/shadcn/components/sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/shadcn/components/alert";
+import { Progress } from "@/shadcn/components/progress";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/shadcn/components/empty";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/shadcn/components/dialog";
+import { useServiceWorker } from "./hooks/useServiceWorker.js";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -63,21 +88,14 @@ function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
 
   return (
     <div className="mt-4 space-y-2">
-      <div>
-        <div className="flex justify-between text-xs text-muted-foreground mb-1">
-          <span>
-            Image {progress.currentImageProgress.index + 1} of{" "}
-            {progress.totalImages}: {progress.currentImageProgress.filename}
-          </span>
-          <span>{progress.overallProgress}%</span>
-        </div>
-        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-          <div
-            className="bg-primary h-full transition-all"
-            style={{ width: `${progress.overallProgress}%` }}
-          />
-        </div>
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>
+          Image {progress.currentImageProgress.index + 1} of{" "}
+          {progress.totalImages}: {progress.currentImageProgress.filename}
+        </span>
+        <span>{progress.overallProgress}%</span>
       </div>
+      <Progress value={progress.overallProgress} />
       <div className="text-xs text-muted-foreground">
         Step: {progress.currentImageProgress.currentStep || "Starting..."}
       </div>
@@ -131,6 +149,7 @@ export default function App() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   useFaviconSwap();
+  const { updateAvailable, reload } = useServiceWorker();
   const iconSrc =
     mounted && resolvedTheme === "dark" ? "./icon-dark.svg" : "./icon.svg";
 
@@ -228,41 +247,61 @@ export default function App() {
 
         {/* iOS install tip — Safari doesn't fire beforeinstallprompt */}
         {showIOSInstallTip && (
-          <div className="mb-4 flex items-start gap-3 p-3 bg-blue-900/60 border border-blue-700 rounded-lg text-sm text-blue-200">
-            <span className="text-lg leading-none mt-0.5">📲</span>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium mb-0.5">Install as App</p>
-              <p className="text-xs text-blue-300">
-                Tap the <strong>Share</strong> button (
-                <span className="font-mono">⎙</span>) in Safari, then choose{" "}
-                <strong>"Add to Home Screen"</strong>.
-              </p>
-            </div>
+          <Alert className="mb-4">
+            <Smartphone />
+            <AlertTitle>Install as App</AlertTitle>
+            <AlertDescription>
+              Tap the <strong>Share</strong> button (
+              <span className="font-mono">⎙</span>) in Safari, then choose{" "}
+              <strong>"Add to Home Screen"</strong>.
+            </AlertDescription>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setShowIOSInstallTip(false)}
               aria-label="Dismiss"
-              className="shrink-0"
+              className="ms-auto"
             >
-              <span aria-hidden>×</span>
+              <X />
             </Button>
-          </div>
+          </Alert>
+        )}
+
+        {updateAvailable && (
+          <Alert className="mb-4">
+            <AlertTitle>App updated</AlertTitle>
+            <AlertDescription>
+              Refresh to get the latest version.
+            </AlertDescription>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={reload}
+              className="ms-auto"
+            >
+              Refresh
+            </Button>
+          </Alert>
         )}
 
         {/* Collapsible Instructions */}
         <CollapsibleInstructions markdown={USER_INSTRUCTIONS_MARKDOWN} />
 
         {status === "loading" && (
-          <div className="mb-6">
-            <LoadingBar progress={cvProgress} label="Loading OpenCV.js..." />
+          <div className="mb-6 flex flex-col gap-1">
+            <p className="text-sm text-muted-foreground">
+              Loading OpenCV.js...
+            </p>
+            <Progress value={cvProgress} />
           </div>
         )}
 
         {status === "error" && (
-          <div className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded">
-            <p className="text-red-300">Failed to load OpenCV: {error}</p>
-          </div>
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle />
+            <AlertTitle>Failed to load OpenCV</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {status === "ready" && (
@@ -294,6 +333,19 @@ export default function App() {
             />
 
             {processing && <ProgressDisplay progress={progress} />}
+
+            {!processing && results.length === 0 && history.length === 0 && (
+              <Empty className="my-6">
+                <EmptyHeader>
+                  <ImageIcon className="size-10 text-muted-foreground" />
+                  <EmptyTitle>No images yet</EmptyTitle>
+                  <EmptyDescription>
+                    Drop a phone photo of a Game Boy Camera image to get
+                    started.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )}
 
             <div className="mt-6 mb-4">
               <PalettePicker
@@ -454,14 +506,45 @@ export default function App() {
                           max images to keep in history
                         </FieldLabel>
                       </Field>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={deleteAllHistory}
-                        className="ms-auto"
-                      >
-                        Delete All History
-                      </Button>
+                      <Dialog>
+                        <DialogTrigger
+                          render={
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="ms-auto"
+                            />
+                          }
+                        >
+                          Delete All History
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Delete all history?</DialogTitle>
+                            <DialogDescription>
+                              This will permanently remove all archived image
+                              batches. This action cannot be undone.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogClose
+                              render={<Button variant="secondary" />}
+                            >
+                              Cancel
+                            </DialogClose>
+                            <DialogClose
+                              render={
+                                <Button
+                                  variant="destructive"
+                                  onClick={deleteAllHistory}
+                                />
+                              }
+                            >
+                              Delete All
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </div>
 
                     {history.map((batch) => (
