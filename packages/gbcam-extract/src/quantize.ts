@@ -7,19 +7,9 @@
  * Pipeline: sample (128x112 colour) -> quantize -> 128x112 grayscale (0/82/165/255)
  */
 
-import {
-  type GBImageData,
-  GB_COLORS,
-  CAM_W,
-  CAM_H,
-  createGBImageData,
-} from "./common.js";
+import { type GBImageData, GB_COLORS, CAM_W, CAM_H, createGBImageData } from "./common.js";
 import { getCV, withMats } from "./opencv.js";
-import {
-  type DebugCollector,
-  renderRGScatter,
-  upscale,
-} from "./debug.js";
+import { type DebugCollector, renderRGScatter, upscale } from "./debug.js";
 
 export interface QuantizeOptions {
   debug?: DebugCollector;
@@ -96,10 +86,7 @@ function permutations4(): number[][] {
  * Find the best permutation mapping clusters -> palette indices
  * that minimizes total RG Euclidean distance.
  */
-function bestClusterToPalette(
-  centersRG: Float32Array,
-  targetsRG: [number, number][],
-): Int32Array {
+function bestClusterToPalette(centersRG: Float32Array, targetsRG: [number, number][]): Int32Array {
   const perms = permutations4();
   let bestPerm: number[] = perms[0];
   let bestCost = Infinity;
@@ -180,11 +167,7 @@ function runKmeans(
       labelsMat.data32S[i] = bestK;
     }
 
-    const criteria = new cv.TermCriteria(
-      cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER,
-      300,
-      0.1,
-    );
+    const criteria = new cv.TermCriteria(cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 300, 0.1);
 
     cv.kmeans(
       samplesMat,
@@ -207,11 +190,7 @@ function runKmeans(
  * G-valley threshold: find the G-axis valley between LG and WH clusters
  * among high-R pixels. Matches Python _g_valley_threshold.
  */
-function gValleyThreshold(
-  gVals: number[],
-  lgCenterG: number,
-  whCenterG: number,
-): number {
+function gValleyThreshold(gVals: number[], lgCenterG: number, whCenterG: number): number {
   const lo = Math.floor(lgCenterG) + 1;
   const hi = Math.floor(whCenterG);
   if (hi <= lo + 4) {
@@ -237,7 +216,7 @@ function gValleyThreshold(
   const smooth = gaussianFilter1d(hist, 3.0);
 
   // Search from upper 2/3 of range
-  let searchLo = Math.floor((smooth.length * 2) / 3);
+  const searchLo = Math.floor((smooth.length * 2) / 3);
   let valleyIdx = searchLo;
   let minVal = smooth[searchLo];
   for (let i = searchLo + 1; i < smooth.length; i++) {
@@ -274,9 +253,7 @@ function gValleyThreshold(
  */
 export function quantize(input: GBImageData, options?: QuantizeOptions): GBImageData {
   if (input.width !== CAM_W || input.height !== CAM_H) {
-    throw new Error(
-      `Expected ${CAM_W}x${CAM_H}, got ${input.width}x${input.height}`,
-    );
+    throw new Error(`Expected ${CAM_W}x${CAM_H}, got ${input.width}x${input.height}`);
   }
 
   const N = CAM_W * CAM_H;
@@ -328,9 +305,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     );
     dbg.log(
       `[quantize] after global kmeans: ` +
-        ["BK", "DG", "LG", "WH"]
-          .map((n, i) => `${n}=${globalCounts[i]}`)
-          .join("  "),
+        ["BK", "DG", "LG", "WH"].map((n, i) => `${n}=${globalCounts[i]}`).join("  "),
     );
   }
 
@@ -449,9 +424,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
   if (dbg) {
     dbg.log(
       `[quantize] strip ensemble: ${nStrips} strips, changed ${stripChanged} px  ` +
-        `now: ${["BK", "DG", "LG", "WH"]
-          .map((n, i) => `${n}=${stripCounts[i]}`)
-          .join("  ")}`,
+        `now: ${["BK", "DG", "LG", "WH"].map((n, i) => `${n}=${stripCounts[i]}`).join("  ")}`,
     );
   }
 
@@ -483,10 +456,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
 
     // Apply threshold to LG/WH pixels with high R
     for (let i = 0; i < N; i++) {
-      if (
-        flatRG[i * 2] > 190 &&
-        (finalLabels[i] === 2 || finalLabels[i] === 3)
-      ) {
+      if (flatRG[i * 2] > 190 && (finalLabels[i] === 2 || finalLabels[i] === 3)) {
         const newLabel = flatRG[i * 2 + 1] >= gThresh ? 3 : 2;
         if (newLabel !== finalLabels[i]) {
           valleyChanged++;
@@ -520,26 +490,30 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     dbg.log(
       `[quantize] final: ` +
         ["BK", "DG", "LG", "WH"]
-          .map(
-            (n, i) =>
-              `${n}=${finalCounts[i]} (${((100 * finalCounts[i]) / total).toFixed(1)}%)`,
-          )
+          .map((n, i) => `${n}=${finalCounts[i]} (${((100 * finalCounts[i]) / total).toFixed(1)}%)`)
           .join("  "),
     );
 
     dbg.setMetrics("quantize", {
-      clusterCenters: paletteCenters.map(([r, g]) => [
-        Number(r.toFixed(2)),
-        Number(g.toFixed(2)),
-      ]),
+      clusterCenters: paletteCenters.map(([r, g]) => [Number(r.toFixed(2)), Number(g.toFixed(2))]),
       stripEnsemble: { strips: nStrips, changed: stripChanged },
       valleyRefinement: {
         threshold: valleyThreshold === null ? null : Number(valleyThreshold.toFixed(2)),
         changed: valleyChanged,
       },
       counts: {
-        afterGlobalKmeans: { BK: globalCounts[0], DG: globalCounts[1], LG: globalCounts[2], WH: globalCounts[3] },
-        afterStripEnsemble: { BK: stripCounts[0], DG: stripCounts[1], LG: stripCounts[2], WH: stripCounts[3] },
+        afterGlobalKmeans: {
+          BK: globalCounts[0],
+          DG: globalCounts[1],
+          LG: globalCounts[2],
+          WH: globalCounts[3],
+        },
+        afterStripEnsemble: {
+          BK: stripCounts[0],
+          DG: stripCounts[1],
+          LG: stripCounts[2],
+          WH: stripCounts[3],
+        },
         final: { BK: finalCounts[0], DG: finalCounts[1], LG: finalCounts[2], WH: finalCounts[3] },
       },
     });
@@ -590,10 +564,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
         symbol: "ring" as const,
       })),
     ];
-    dbg.addImage(
-      "quantize_c_rg_scatter",
-      renderRGScatter(rVals, gVals, pointColors, markers),
-    );
+    dbg.addImage("quantize_c_rg_scatter", renderRGScatter(rVals, gVals, pointColors, markers));
   }
 
   return output;

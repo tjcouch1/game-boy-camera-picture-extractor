@@ -30,11 +30,7 @@ export interface SerializedPipelineResult {
  * Convert Uint8ClampedArray to a canvas-based PNG data URL.
  * This performs lossless PNG compression on the grayscale image.
  */
-function grayscaleToCanvasPNG(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-): string {
+function grayscaleToCanvasPNG(data: Uint8ClampedArray, width: number, height: number): string {
   // Create canvas at 1x scale
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -91,9 +87,7 @@ function pngDataUrlToGrayscale(
  * Serialize a GBImageData to PNG format.
  * @returns Serialized object with PNG data URL
  */
-export function serializeGBImageData(
-  img: GBImageData,
-): SerializedGBImageData {
+export function serializeGBImageData(img: GBImageData): SerializedGBImageData {
   const pngData = grayscaleToCanvasPNG(img.data, img.width, img.height);
 
   return {
@@ -111,11 +105,7 @@ export function serializeGBImageData(
 export async function deserializeGBImageData(
   serialized: SerializedGBImageData,
 ): Promise<GBImageData> {
-  const data = await pngDataUrlToGrayscale(
-    serialized.pngData,
-    serialized.width,
-    serialized.height,
-  );
+  const data = await pngDataUrlToGrayscale(serialized.pngData, serialized.width, serialized.height);
 
   return {
     width: serialized.width,
@@ -128,9 +118,7 @@ export async function deserializeGBImageData(
  * Serialize a PipelineResult to PNG format. Only the final grayscale image
  * is included — intermediates and `debug` are dropped (see type doc comment).
  */
-export function serializePipelineResult(
-  result: PipelineResult,
-): SerializedPipelineResult {
+export function serializePipelineResult(result: PipelineResult): SerializedPipelineResult {
   return {
     _type: "PipelineResult",
     grayscale: serializeGBImageData(result.grayscale),
@@ -151,9 +139,7 @@ export async function deserializePipelineResult(
 /**
  * Type guard to check if an object is a SerializedPipelineResult.
  */
-export function isSerializedPipelineResult(
-  obj: any,
-): obj is SerializedPipelineResult {
+export function isSerializedPipelineResult(obj: any): obj is SerializedPipelineResult {
   return (
     obj &&
     typeof obj === "object" &&
@@ -166,9 +152,7 @@ export function isSerializedPipelineResult(
 /**
  * Type guard to check if an object is a SerializedGBImageData.
  */
-export function isSerializedGBImageData(
-  obj: any,
-): obj is SerializedGBImageData {
+export function isSerializedGBImageData(obj: any): obj is SerializedGBImageData {
   return (
     obj &&
     typeof obj === "object" &&

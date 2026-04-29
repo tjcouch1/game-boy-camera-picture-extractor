@@ -25,10 +25,7 @@ export interface SampleOptions {
  * Output: 128×112 colour RGBA PNG (R/G/B channels carry real colour data).
  * The quantize step clusters in RG colour space and requires this.
  */
-export function sample(
-  input: GBImageData,
-  options?: SampleOptions,
-): GBImageData {
+export function sample(input: GBImageData, options?: SampleOptions): GBImageData {
   const scale = options?.scale ?? 8;
   const vMargin = options?.marginV ?? Math.max(1, Math.floor(scale / 5));
   const dbg = options?.debug;
@@ -114,19 +111,25 @@ export function sample(
 
   if (dbg) {
     // Compute per-channel min/max
-    let rMin = 255, rMax = 0, gMin = 255, gMax = 0, bMin = 255, bMax = 0;
+    let rMin = 255,
+      rMax = 0,
+      gMin = 255,
+      gMax = 0,
+      bMin = 255,
+      bMax = 0;
     for (let i = 0; i < CAM_W * CAM_H; i++) {
       const o = i * 4;
       const r = output.data[o];
       const g = output.data[o + 1];
       const b = output.data[o + 2];
-      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
-      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
-      if (b < bMin) bMin = b; if (b > bMax) bMax = b;
+      if (r < rMin) rMin = r;
+      if (r > rMax) rMax = r;
+      if (g < gMin) gMin = g;
+      if (g > gMax) gMax = g;
+      if (b < bMin) bMin = b;
+      if (b > bMax) bMax = b;
     }
-    dbg.log(
-      `[sample] R: ${rMin}–${rMax}  G: ${gMin}–${gMax}  B: ${bMin}–${bMax}`,
-    );
+    dbg.log(`[sample] R: ${rMin}–${rMax}  G: ${gMin}–${gMax}  B: ${bMin}–${bMax}`);
     const innerStartLog = 1;
     const innerEndLog = scale - 1;
     const innerWLog = innerEndLog - innerStartLog;

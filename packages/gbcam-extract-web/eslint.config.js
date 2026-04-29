@@ -4,7 +4,7 @@ import globals from "globals";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import jsxA11y from "eslint-plugin-jsx-a11y";
-import root from "../../eslint.config.ts";
+import root from "../../eslint.config.js";
 
 const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
 
@@ -21,11 +21,7 @@ export default [
       parserOptions: {
         projectService: true,
         tsconfigRootDir,
-        allowDefaultProject: [
-          "eslint.config.ts",
-          "vite.config.ts",
-          "scripts/**/*.ts",
-        ],
+        allowDefaultProject: ["eslint.config.js", "vite.config.ts", "scripts/**/*.ts"],
       },
     },
     settings: { react: { version: "detect" } },

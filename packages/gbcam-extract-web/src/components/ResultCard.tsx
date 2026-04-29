@@ -1,20 +1,11 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import type { PipelineResult } from "gbcam-extract";
 import { applyPalette } from "gbcam-extract";
-import {
-  canShare,
-  shareImage,
-  copyImageToClipboard,
-} from "../utils/shareImage.js";
+import { canShare, shareImage, copyImageToClipboard } from "../utils/shareImage.js";
 import { sanitizePaletteName } from "../utils/filenames.js";
 import { Button } from "@/shadcn/components/button";
 import { Badge } from "@/shadcn/components/badge";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-} from "@/shadcn/components/card";
+import { Card, CardAction, CardContent, CardHeader } from "@/shadcn/components/card";
 import { toast } from "sonner";
 import { X, Download, Share2, Copy as CopyIcon } from "lucide-react";
 
@@ -52,11 +43,7 @@ function buildOutputCanvas(
     tmp
       .getContext("2d")!
       .putImageData(
-        new ImageData(
-          new Uint8ClampedArray(colored.data),
-          colored.width,
-          colored.height,
-        ),
+        new ImageData(new Uint8ClampedArray(colored.data), colored.width, colored.height),
         0,
         0,
       );
@@ -108,11 +95,7 @@ export function ResultCard({
       tmp
         .getContext("2d")!
         .putImageData(
-          new ImageData(
-            new Uint8ClampedArray(colored.data),
-            colored.width,
-            colored.height,
-          ),
+          new ImageData(new Uint8ClampedArray(colored.data), colored.width, colored.height),
           0,
           0,
         );
@@ -128,9 +111,7 @@ export function ResultCard({
     const basename = filename.replace(/\.[^.]+$/, "");
     const sanitized = sanitizePaletteName(paletteName);
     const link = document.createElement("a");
-    link.download = sanitized
-      ? `${basename}_${sanitized}_gb.png`
-      : `${basename}_gb.png`;
+    link.download = sanitized ? `${basename}_${sanitized}_gb.png` : `${basename}_gb.png`;
     link.href = outputCanvas.toDataURL("image/png");
     link.click();
   }, [result, palette, outputScale, filename, paletteName]);
@@ -139,10 +120,7 @@ export function ResultCard({
     const outputCanvas = buildOutputCanvas(result, palette, outputScale);
     if (!outputCanvas) return;
     try {
-      await shareImage(
-        outputCanvas,
-        filename.replace(/\.[^.]+$/, "") + "_gb.png",
-      );
+      await shareImage(outputCanvas, filename.replace(/\.[^.]+$/, "") + "_gb.png");
     } catch (err) {
       console.error("Failed to share image:", err);
     }
@@ -163,9 +141,9 @@ export function ResultCard({
 
   return (
     <Card className="p-3 sm:p-4">
-      <CardHeader className="p-0 mb-3">
+      <CardHeader className="mb-3 p-0">
         <div className="min-w-0">
-          <p className="text-sm font-medium truncate" title={filename}>
+          <p className="truncate text-sm font-medium" title={filename}>
             {filename}
           </p>
           <Badge variant="secondary" className="mt-0.5">
@@ -186,13 +164,13 @@ export function ResultCard({
           </CardAction>
         )}
       </CardHeader>
-      <CardContent className="flex flex-col sm:flex-row gap-3 p-0">
+      <CardContent className="flex flex-col gap-3 p-0 sm:flex-row">
         <canvas
           ref={canvasRef}
-          className="rounded border self-start"
+          className="self-start rounded border"
           style={{ imageRendering: "pixelated", maxWidth: "100%" }}
         />
-        <div className="flex flex-wrap gap-2 items-start content-start">
+        <div className="flex flex-wrap content-start items-start gap-2">
           <Button onClick={handleDownload}>
             <Download data-icon="inline-start" />
             Download PNG

@@ -47,12 +47,7 @@ import { Input } from "@/shadcn/components/input";
 import { Toaster } from "@/shadcn/components/sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/shadcn/components/alert";
 import { Progress } from "@/shadcn/components/progress";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/shadcn/components/empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/shadcn/components/empty";
 import {
   Dialog,
   DialogClose,
@@ -89,15 +84,15 @@ function ProgressDisplay({ progress }: { progress: ProcessingProgress }) {
 
   return (
     <div className="mt-4 space-y-2">
-      <div className="flex justify-between text-xs text-muted-foreground">
+      <div className="text-muted-foreground flex justify-between text-xs">
         <span>
-          Image {progress.currentImageProgress.index + 1} of{" "}
-          {progress.totalImages}: {progress.currentImageProgress.filename}
+          Image {progress.currentImageProgress.index + 1} of {progress.totalImages}:{" "}
+          {progress.currentImageProgress.filename}
         </span>
         <span>{progress.overallProgress}%</span>
       </div>
       <Progress value={progress.overallProgress} />
-      <div className="text-xs text-muted-foreground">
+      <div className="text-muted-foreground text-xs">
         Step: {progress.currentImageProgress.currentStep || "Starting..."}
       </div>
     </div>
@@ -135,14 +130,11 @@ export default function App() {
   };
 
   const setDebug = (value: boolean) => updateSetting("debug", value);
-  const setClipboardEnabled = (value: boolean) =>
-    updateSetting("clipboardEnabled", value);
+  const setClipboardEnabled = (value: boolean) => updateSetting("clipboardEnabled", value);
   const setOutputScale = (value: number) => updateSetting("outputScale", value);
-  const setPreviewScale = (value: number) =>
-    updateSetting("previewScale", value);
+  const setPreviewScale = (value: number) => updateSetting("previewScale", value);
 
-  const [installPrompt, setInstallPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [showIOSInstallTip, setShowIOSInstallTip] = useState(false);
 
@@ -151,8 +143,7 @@ export default function App() {
   useEffect(() => setMounted(true), []);
   useFaviconSwap();
   const { updateAvailable, reload } = useServiceWorker();
-  const iconSrc =
-    mounted && resolvedTheme === "dark" ? "./icon-dark.svg" : "./icon.svg";
+  const iconSrc = mounted && resolvedTheme === "dark" ? "./icon-dark.svg" : "./icon.svg";
 
   // Handle PWA install prompt
   useEffect(() => {
@@ -179,16 +170,12 @@ export default function App() {
     window.addEventListener("appinstalled", handleAppInstalled);
 
     return () => {
-      window.removeEventListener(
-        "beforeinstallprompt",
-        handleBeforeInstallPrompt,
-      );
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
 
-  const handlePaletteSelected = (entry: PaletteEntry) =>
-    updateSetting("paletteSelection", entry);
+  const handlePaletteSelected = (entry: PaletteEntry) => updateSetting("paletteSelection", entry);
 
   const handleInstallApp = async () => {
     if (!installPrompt) return;
@@ -223,23 +210,18 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="bg-background text-foreground flex min-h-screen flex-col">
       <Toaster richColors position="bottom-center" />
-      <div className="container mx-auto px-4 py-8 max-w-4xl flex-1">
-        <div className="flex justify-between items-center mb-6">
+      <div className="container mx-auto max-w-4xl flex-1 px-4 py-8">
+        <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src={iconSrc} alt="App Icon" className="size-8" />
-            <h1 className="text-2xl font-bold">
-              Game Boy Camera Picture Extractor
-            </h1>
+            <h1 className="text-2xl font-bold">Game Boy Camera Picture Extractor</h1>
           </div>
           <div className="flex items-center gap-2">
             <ModeToggle />
             {isInstallable && (
-              <Button
-                onClick={handleInstallApp}
-                title="Install this app on your device"
-              >
+              <Button onClick={handleInstallApp} title="Install this app on your device">
                 <DownloadIcon data-icon="inline-start" />
                 Install App
               </Button>
@@ -253,9 +235,8 @@ export default function App() {
             <Smartphone />
             <AlertTitle>Install as App</AlertTitle>
             <AlertDescription>
-              Tap the <strong>Share</strong> button (
-              <span className="font-mono">⎙</span>) in Safari, then choose{" "}
-              <strong>"Add to Home Screen"</strong>.
+              Tap the <strong>Share</strong> button (<span className="font-mono">⎙</span>) in
+              Safari, then choose <strong>"Add to Home Screen"</strong>.
             </AlertDescription>
             <Button
               variant="ghost"
@@ -272,15 +253,8 @@ export default function App() {
         {updateAvailable && (
           <Alert className="mb-4">
             <AlertTitle>App updated</AlertTitle>
-            <AlertDescription>
-              Refresh to get the latest version.
-            </AlertDescription>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={reload}
-              className="ms-auto"
-            >
+            <AlertDescription>Refresh to get the latest version.</AlertDescription>
+            <Button variant="secondary" size="sm" onClick={reload} className="ms-auto">
               Refresh
             </Button>
           </Alert>
@@ -291,9 +265,7 @@ export default function App() {
 
         {status === "loading" && (
           <div className="mb-6 flex flex-col gap-1">
-            <p className="text-sm text-muted-foreground">
-              Loading OpenCV.js...
-            </p>
+            <p className="text-muted-foreground text-sm">Loading OpenCV.js...</p>
             <Progress value={cvProgress} />
           </div>
         )}
@@ -323,33 +295,27 @@ export default function App() {
                   checked={clipboardEnabled}
                   onCheckedChange={(v) => setClipboardEnabled(v === true)}
                 />
-                <FieldLabel htmlFor="clipboard-enabled">
-                  Enable Copy/Paste Palettes
-                </FieldLabel>
+                <FieldLabel htmlFor="clipboard-enabled">Enable Copy/Paste Palettes</FieldLabel>
               </Field>
             </FieldGroup>
 
-            <ImageInput
-              onImagesSelected={handleImagesSelected}
-              disabled={processing}
-            />
+            <ImageInput onImagesSelected={handleImagesSelected} disabled={processing} />
 
             {processing && <ProgressDisplay progress={progress} />}
 
             {!processing && results.length === 0 && history.length === 0 && (
               <Empty className="my-6">
                 <EmptyHeader>
-                  <ImageIcon className="size-10 text-muted-foreground" />
+                  <ImageIcon className="text-muted-foreground size-10" />
                   <EmptyTitle>No images yet</EmptyTitle>
                   <EmptyDescription>
-                    Drop a phone photo of a Game Boy Camera image to get
-                    started.
+                    Drop a phone photo of a Game Boy Camera image to get started.
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>
             )}
 
-            <div className="mt-6 mb-4">
+            <div className="mb-4 mt-6">
               <PalettePicker
                 selected={paletteEntry}
                 onSelectWithName={handlePaletteSelected}
@@ -378,14 +344,11 @@ export default function App() {
                     </Button>
                   )}
                   <Field orientation="horizontal" className="w-auto gap-2">
-                    <FieldLabel htmlFor="output-scale">
-                      Output Scale:
-                    </FieldLabel>
+                    <FieldLabel htmlFor="output-scale">Output Scale:</FieldLabel>
                     <Select
                       value={String(outputScale)}
                       onValueChange={(v) => {
-                        if (typeof v === "string")
-                          setOutputScale(parseInt(v, 10));
+                        if (typeof v === "string") setOutputScale(parseInt(v, 10));
                       }}
                     >
                       <SelectTrigger id="output-scale" className="w-fit">
@@ -404,20 +367,15 @@ export default function App() {
                     </Select>
                   </Field>
                   <Field orientation="horizontal" className="w-auto gap-2">
-                    <FieldLabel htmlFor="preview-scale">
-                      Preview Scale:
-                    </FieldLabel>
+                    <FieldLabel htmlFor="preview-scale">Preview Scale:</FieldLabel>
                     <Select
                       value={String(previewScale)}
                       onValueChange={(v) => {
-                        if (typeof v === "string")
-                          setPreviewScale(parseInt(v, 10));
+                        if (typeof v === "string") setPreviewScale(parseInt(v, 10));
                       }}
                     >
                       <SelectTrigger id="preview-scale" className="w-fit">
-                        <span className="flex flex-1 text-start">
-                          {previewScale}x
-                        </span>
+                        <span className="flex flex-1 text-start">{previewScale}x</span>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -466,17 +424,10 @@ export default function App() {
                 className="mt-8"
               >
                 <CollapsibleTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground"
-                    />
-                  }
+                  render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}
                 >
                   <Library data-icon="inline-start" />
-                  Image History (
-                  {history.reduce(
+                  Image History ({history.reduce(
                     (sum, batch) => sum + batch.results.length,
                     0,
                   )}{" "}
@@ -488,7 +439,7 @@ export default function App() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="space-y-4">
-                    <div className="flex gap-2 mb-3">
+                    <div className="mb-3 flex gap-2">
                       <Field orientation="horizontal" className="w-auto gap-2">
                         <Input
                           id="history-max-size"
@@ -498,10 +449,7 @@ export default function App() {
                           value={historySettings.maxSize}
                           onChange={(e) =>
                             updateHistorySettings({
-                              maxSize: Math.max(
-                                1,
-                                parseInt(e.target.value, 10) || 1,
-                              ),
+                              maxSize: Math.max(1, parseInt(e.target.value, 10) || 1),
                             })
                           }
                           className="w-16"
@@ -512,13 +460,7 @@ export default function App() {
                       </Field>
                       <Dialog>
                         <DialogTrigger
-                          render={
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="ms-auto"
-                            />
-                          }
+                          render={<Button variant="destructive" size="sm" className="ms-auto" />}
                         >
                           Delete All History
                         </DialogTrigger>
@@ -526,23 +468,16 @@ export default function App() {
                           <DialogHeader>
                             <DialogTitle>Delete all history?</DialogTitle>
                             <DialogDescription>
-                              This will permanently remove all archived image
-                              batches. This action cannot be undone.
+                              This will permanently remove all archived image batches. This action
+                              cannot be undone.
                             </DialogDescription>
                           </DialogHeader>
                           <DialogFooter>
-                            <DialogClose
-                              render={<Button variant="secondary" />}
-                            >
+                            <DialogClose render={<Button variant="secondary" />}>
                               Cancel
                             </DialogClose>
                             <DialogClose
-                              render={
-                                <Button
-                                  variant="destructive"
-                                  onClick={deleteAllHistory}
-                                />
-                              }
+                              render={<Button variant="destructive" onClick={deleteAllHistory} />}
                             >
                               Delete All
                             </DialogClose>
@@ -554,9 +489,9 @@ export default function App() {
                     {history.map((batch) => (
                       <Card key={batch.id} className="bg-muted/40 p-4">
                         <CardContent className="p-0">
-                          <div className="text-xs text-muted-foreground mb-3">
-                            {new Date(batch.timestamp).toLocaleString()} (
-                            {batch.results.length} images)
+                          <div className="text-muted-foreground mb-3 text-xs">
+                            {new Date(batch.timestamp).toLocaleString()} ({batch.results.length}{" "}
+                            images)
                           </div>
                           <div className="grid gap-3">
                             {batch.results.map((result, idx) => (
@@ -569,9 +504,7 @@ export default function App() {
                                 paletteName={paletteEntry.name}
                                 outputScale={outputScale}
                                 previewScale={previewScale}
-                                onDelete={() =>
-                                  deleteFromHistory(batch.id, idx)
-                                }
+                                onDelete={() => deleteFromHistory(batch.id, idx)}
                               />
                             ))}
                           </div>
@@ -587,12 +520,12 @@ export default function App() {
       </div>
       <Separator className="mt-8" />
       <footer className="bg-background/50">
-        <div className="container mx-auto px-4 py-4 max-w-4xl flex justify-center gap-4">
+        <div className="container mx-auto flex max-w-4xl justify-center gap-4 px-4 py-4">
           <a
             href="./licenses.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-foreground text-xs transition-colors"
           >
             Open Source Licenses and Credits
           </a>

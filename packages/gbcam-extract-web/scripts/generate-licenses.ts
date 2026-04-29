@@ -17,14 +17,7 @@ const __dirname = path.dirname(__filename);
 
 const packageDir = path.join(__dirname, "..");
 // The location where all dependencies are installed (recursively) in a pnpm workspace
-const workspacePackageDir = path.join(
-  __dirname,
-  "..",
-  "..",
-  "..",
-  "node_modules",
-  ".pnpm",
-);
+const workspacePackageDir = path.join(__dirname, "..", "..", "..", "node_modules", ".pnpm");
 const publicDir = path.join(packageDir, "public");
 const configPath = path.join(packageDir, "license-checker.config.json");
 const outputFile = path.join(publicDir, "licenses.html");
@@ -122,9 +115,7 @@ async function loadAdditionalLicenses(): Promise<AugmentedLicense[]> {
     const data = JSON.parse(content);
 
     if (!data.additionalLicenses || !Array.isArray(data.additionalLicenses)) {
-      throw new Error(
-        "additionalLicenses field must be an array in additional-licenses.json",
-      );
+      throw new Error("additionalLicenses field must be an array in additional-licenses.json");
     }
 
     // Validate each license has required fields
@@ -156,9 +147,7 @@ async function loadAdditionalLicenses(): Promise<AugmentedLicense[]> {
 }
 
 // Augment license data with extracted copyright and filter to relevant fields
-function augmentLicenseData(
-  licenses: LicenseData,
-): Record<string, AugmentedLicense> {
+function augmentLicenseData(licenses: LicenseData): Record<string, AugmentedLicense> {
   const augmented: Record<string, AugmentedLicense> = {};
 
   for (const [key, license] of Object.entries(licenses)) {
@@ -182,9 +171,7 @@ function augmentLicenseData(
 }
 
 // Transform augmented license data into HTML format
-function generateHtmlLicensesPage(
-  augmentedLicenses: Record<string, AugmentedLicense>,
-): string {
+function generateHtmlLicensesPage(augmentedLicenses: Record<string, AugmentedLicense>): string {
   // Convert to array and sort by package name
   const licenseEntries = Object.entries(augmentedLicenses).sort(
     ([aKey, aLicense], [bKey, bLicense]) => {
@@ -269,9 +256,7 @@ function generateHtmlLicensesPage(
       }
 
       const infoHtml =
-        infoLines.length > 0
-          ? `<div class="package-info">${infoLines.join("<br>")}</div>`
-          : "";
+        infoLines.length > 0 ? `<div class="package-info">${infoLines.join("<br>")}</div>` : "";
 
       return `
     <div class="license-entry">
@@ -634,11 +619,7 @@ async function main() {
     Object.assign(mergedAugmentedData, augmentedData);
 
     // Write augmented data to licenses.json
-    await fs.writeFile(
-      augmentedDataFile,
-      JSON.stringify(mergedAugmentedData, null, 2),
-      "utf-8",
-    );
+    await fs.writeFile(augmentedDataFile, JSON.stringify(mergedAugmentedData, null, 2), "utf-8");
 
     // Generate HTML from merged license data
     const htmlContent = generateHtmlLicensesPage(mergedAugmentedData);

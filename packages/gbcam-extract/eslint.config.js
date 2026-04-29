@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import globals from "globals";
-import root from "../../eslint.config.ts";
+import root from "../../eslint.config.js";
 
 const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
 
@@ -15,11 +15,13 @@ export default [
         projectService: true,
         tsconfigRootDir,
         allowDefaultProject: [
-          "eslint.config.ts",
+          "eslint.config.js",
           "vitest.config.ts",
           "vitest.setup.ts",
           "test-opencv-init-node.ts",
           "scripts/**/*.ts",
+          "dist-scripts/**/*.js",
+          "dist-test/**/*.js",
         ],
       },
     },

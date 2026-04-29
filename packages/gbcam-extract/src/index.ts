@@ -22,11 +22,7 @@ export { crop } from "./crop.js";
 export { sample } from "./sample.js";
 export { quantize } from "./quantize.js";
 export type { PaletteEntry } from "./data/palettes-generated.js";
-export {
-  MAIN_PALETTES,
-  ADDITIONAL_PALETTES,
-  FUN_PALETTES,
-} from "./data/palettes-generated.js";
+export { MAIN_PALETTES, ADDITIONAL_PALETTES, FUN_PALETTES } from "./data/palettes-generated.js";
 
 import type { GBImageData, PipelineResult, PipelineOptions } from "./common.js";
 import { warp } from "./warp.js";

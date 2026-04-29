@@ -7,10 +7,7 @@ export function canShare(): boolean {
   return true;
 }
 
-export async function shareImage(
-  canvas: HTMLCanvasElement,
-  filename: string,
-): Promise<void> {
+export async function shareImage(canvas: HTMLCanvasElement, filename: string): Promise<void> {
   if (!("share" in navigator)) {
     throw new Error("Web Share API not supported");
   }
@@ -47,9 +44,7 @@ export async function shareImage(
   }
 }
 
-export async function copyImageToClipboard(
-  canvas: HTMLCanvasElement,
-): Promise<void> {
+export async function copyImageToClipboard(canvas: HTMLCanvasElement): Promise<void> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(async (blob) => {
       if (!blob) {
@@ -81,11 +76,7 @@ export async function copyImageToClipboard(
               ),
             );
           } else if (errorName === "SecurityError") {
-            reject(
-              new Error(
-                "Security error: clipboard access not allowed in this context",
-              ),
-            );
+            reject(new Error("Security error: clipboard access not allowed in this context"));
           } else {
             reject(err);
           }

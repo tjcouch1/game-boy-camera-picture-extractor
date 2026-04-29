@@ -11,6 +11,8 @@ export default tseslint.config(
   includeIgnoreFile(gitignorePath),
   {
     ignores: [
+      "**/*.d.ts",
+      "**/dist/**",
       "packages/gbcam-extract-web/src/shadcn/**",
       "packages/gbcam-extract-web/src/generated/**",
       "pnpm-lock.yaml",
@@ -24,9 +26,15 @@ export default tseslint.config(
   {
     rules: {
       "@typescript-eslint/no-unused-vars": "error",
-      "eqeqeq": "error",
+      eqeqeq: "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
-      "prefer-const": "error",
+      "prefer-const": "error", // OpenCV.js types are loose (mostly any-typed). These rules produce noise
+      // without catching real bugs. Disable repo-wide.
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
     },
-  }
+  },
 );

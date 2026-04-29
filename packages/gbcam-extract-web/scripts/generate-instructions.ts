@@ -7,10 +7,7 @@ const __dirname = path.dirname(__filename);
 
 const projectRoot = path.join(__dirname, "../../../");
 const readmePath = path.join(projectRoot, "README.md");
-const outputPath = path.join(
-  __dirname,
-  "../src/generated/UserInstructions.tsx",
-);
+const outputPath = path.join(__dirname, "../src/generated/UserInstructions.tsx");
 const assetsDir = path.join(__dirname, "../public/instructions-assets");
 
 /**
@@ -23,9 +20,7 @@ function extractUserInstructions(): string {
   const startMarker = "# User Instructions";
   const startIndex = content.indexOf(startMarker);
   if (startIndex === -1) {
-    throw new Error(
-      "Could not find '# User Instructions' section in README.md",
-    );
+    throw new Error("Could not find '# User Instructions' section in README.md");
   }
 
   // Find the next level-1 heading (to know where the section ends)
@@ -47,8 +42,7 @@ function extractUserInstructions(): string {
  * Process markdown: rewrite GitHub links and copy assets
  */
 function processMarkdown(markdown: string): string {
-  const githubBase =
-    "https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/";
+  const githubBase = "https://github.com/tjcouch1/game-boy-camera-screenshot-extractor/blob/main/";
   const newBase = "./instructions-assets/";
 
   // Ensure assets directory exists

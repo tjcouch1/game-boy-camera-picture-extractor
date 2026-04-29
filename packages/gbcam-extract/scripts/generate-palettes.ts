@@ -28,24 +28,15 @@ function parseCSV(content: string): Record<string, string>[] {
 }
 
 function generatePaletteModule() {
-  const contentDir = path.join(
-    __dirname,
-    "../../../supporting-materials/color-tables",
-  );
+  const contentDir = path.join(__dirname, "../../../supporting-materials/color-tables");
 
   // Read CSVs
-  const mainCsv = fs.readFileSync(
-    path.join(contentDir, "game-boy-camera-palettes.csv"),
-    "utf-8",
-  );
+  const mainCsv = fs.readFileSync(path.join(contentDir, "game-boy-camera-palettes.csv"), "utf-8");
   const additionalCsv = fs.readFileSync(
     path.join(contentDir, "game-boy-color-additional-palettes.csv"),
     "utf-8",
   );
-  const funCsv = fs.readFileSync(
-    path.join(contentDir, "game-boy-color-fun-palettes.csv"),
-    "utf-8",
-  );
+  const funCsv = fs.readFileSync(path.join(contentDir, "game-boy-color-fun-palettes.csv"), "utf-8");
 
   // Parse CSVs
   const mainEntries = parseCSV(mainCsv);
@@ -65,27 +56,25 @@ function generatePaletteModule() {
   }));
 
   // Generate additional palettes
-  const additionalPalettes: RawPaletteEntry[] = additionalEntries.map(
-    (row) => ({
-      name: `${row["Layer"]} ${row["Table Entry"]}`,
-      colors: [
-        row["Color 0x00"],
-        row["Color 0x01"],
-        row["Color 0x02"],
-        row["Color 0x03"],
-      ] as [string, string, string, string],
-    }),
-  );
+  const additionalPalettes: RawPaletteEntry[] = additionalEntries.map((row) => ({
+    name: `${row.Layer} ${row["Table Entry"]}`,
+    colors: [row["Color 0x00"], row["Color 0x01"], row["Color 0x02"], row["Color 0x03"]] as [
+      string,
+      string,
+      string,
+      string,
+    ],
+  }));
 
   // Generate fun palettes
   const funPalettes: RawPaletteEntry[] = funEntries.map((row) => ({
-    name: row["Name"],
-    colors: [
-      row["Color 0x00"],
-      row["Color 0x01"],
-      row["Color 0x02"],
-      row["Color 0x03"],
-    ] as [string, string, string, string],
+    name: row.Name,
+    colors: [row["Color 0x00"], row["Color 0x01"], row["Color 0x02"], row["Color 0x03"]] as [
+      string,
+      string,
+      string,
+      string,
+    ],
   }));
 
   // Generate TypeScript file

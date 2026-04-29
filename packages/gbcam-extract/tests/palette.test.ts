@@ -11,7 +11,10 @@ describe("applyPalette", () => {
       const val = GB_COLORS[band]; // 0, 82, 165, 255
       for (let x = 0; x < CAM_W; x++) {
         const idx = (y * CAM_W + x) * 4;
-        input.data[idx] = val; input.data[idx+1] = val; input.data[idx+2] = val; input.data[idx+3] = 255;
+        input.data[idx] = val;
+        input.data[idx + 1] = val;
+        input.data[idx + 2] = val;
+        input.data[idx + 3] = 255;
       }
     }
 
@@ -22,11 +25,15 @@ describe("applyPalette", () => {
     expect(result.height).toBe(CAM_H);
 
     // Band 0 (gray=0, darkest) -> palette[3] = #FFFF00
-    expect(result.data[0]).toBe(255); expect(result.data[1]).toBe(255); expect(result.data[2]).toBe(0);
+    expect(result.data[0]).toBe(255);
+    expect(result.data[1]).toBe(255);
+    expect(result.data[2]).toBe(0);
 
     // Band 3 (gray=255, lightest) -> palette[0] = #FF0000
     const y3 = bandH * 3;
-    const idx3 = (y3 * CAM_W) * 4;
-    expect(result.data[idx3]).toBe(255); expect(result.data[idx3+1]).toBe(0); expect(result.data[idx3+2]).toBe(0);
+    const idx3 = y3 * CAM_W * 4;
+    expect(result.data[idx3]).toBe(255);
+    expect(result.data[idx3 + 1]).toBe(0);
+    expect(result.data[idx3 + 2]).toBe(0);
   });
 });

@@ -4,6 +4,13 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": [
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "vitest*.ts",
+    "test-opencv-init-node.ts",
+    "eslint.config.js",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
 }

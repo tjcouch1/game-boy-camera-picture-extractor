@@ -192,22 +192,14 @@ export function drawLine(
 /** Connect a sequence of points; closes the loop when `closed` is true. */
 export function drawPolyline(
   img: GBImageData,
-  points: Array<[number, number]>,
+  points: [number, number][],
   rgb: [number, number, number],
   thickness = 1,
   closed = false,
 ): void {
   if (points.length < 2) return;
   for (let i = 0; i < points.length - 1; i++) {
-    drawLine(
-      img,
-      points[i][0],
-      points[i][1],
-      points[i + 1][0],
-      points[i + 1][1],
-      rgb,
-      thickness,
-    );
+    drawLine(img, points[i][0], points[i][1], points[i + 1][0], points[i + 1][1], rgb, thickness);
   }
   if (closed) {
     const a = points[points.length - 1];
@@ -270,14 +262,8 @@ export function hstack(a: GBImageData, b: GBImageData): GBImageData {
   const W = a.width + b.width;
   const out = createGBImageData(W, a.height);
   for (let y = 0; y < a.height; y++) {
-    out.data.set(
-      a.data.subarray(y * a.width * 4, (y + 1) * a.width * 4),
-      y * W * 4,
-    );
-    out.data.set(
-      b.data.subarray(y * b.width * 4, (y + 1) * b.width * 4),
-      (y * W + a.width) * 4,
-    );
+    out.data.set(a.data.subarray(y * a.width * 4, (y + 1) * a.width * 4), y * W * 4);
+    out.data.set(b.data.subarray(y * b.width * 4, (y + 1) * b.width * 4), (y * W + a.width) * 4);
   }
   return out;
 }
@@ -323,10 +309,7 @@ export function cropImage(
   const out = createGBImageData(w, h);
   for (let row = 0; row < h; row++) {
     const srcStart = ((y + row) * img.width + x) * 4;
-    out.data.set(
-      img.data.subarray(srcStart, srcStart + w * 4),
-      row * w * 4,
-    );
+    out.data.set(img.data.subarray(srcStart, srcStart + w * 4), row * w * 4);
   }
   return out;
 }
@@ -351,7 +334,7 @@ export interface RGScatterMarker {
 export function renderRGScatter(
   rValues: ArrayLike<number>,
   gValues: ArrayLike<number>,
-  pointColors: Array<[number, number, number]>,
+  pointColors: [number, number, number][],
   markers: RGScatterMarker[] = [],
 ): GBImageData {
   const SIZE = 256;

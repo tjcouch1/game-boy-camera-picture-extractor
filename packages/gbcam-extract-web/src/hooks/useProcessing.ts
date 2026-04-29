@@ -148,8 +148,7 @@ export function useProcessing() {
     const stepsForCompletedImages = completedImages * STEPS_COUNT;
     const stepsForCurrentImage = currentStepIndex;
     const totalSteps = totalImages * STEPS_COUNT;
-    const progress =
-      (stepsForCompletedImages + stepsForCurrentImage) / totalSteps;
+    const progress = (stepsForCompletedImages + stepsForCurrentImage) / totalSteps;
     return Math.max(0, Math.min(100, Math.round(progress * 100)));
   };
 
@@ -176,12 +175,7 @@ export function useProcessing() {
             index: fileIndex,
             total: files.length,
           },
-          overallProgress: calculateOverallProgress(
-            fileIndex,
-            fileIndex,
-            "",
-            files.length,
-          ),
+          overallProgress: calculateOverallProgress(fileIndex, fileIndex, "", files.length),
         }));
 
         const gbImage = await fileToGBImageData(file);
@@ -199,12 +193,7 @@ export function useProcessing() {
                       currentStep: step,
                     }
                   : null,
-                overallProgress: calculateOverallProgress(
-                  fileIndex,
-                  fileIndex,
-                  step,
-                  files.length,
-                ),
+                overallProgress: calculateOverallProgress(fileIndex, fileIndex, step, files.length),
               }));
             });
           },

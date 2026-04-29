@@ -6,10 +6,7 @@ import {
   FUN_PALETTES_EXPORT,
 } from "../data/palettes.js";
 import type { PaletteEntry } from "../data/palettes.js";
-import {
-  useUserPalettes,
-  type UserPaletteEntry,
-} from "../hooks/useUserPalettes.js";
+import { useUserPalettes, type UserPaletteEntry } from "../hooks/useUserPalettes.js";
 import { usePaletteSectionState } from "../hooks/usePaletteSectionState.js";
 import {
   Accordion,
@@ -20,11 +17,7 @@ import {
 import { Button } from "@/shadcn/components/button";
 import { Card, CardContent } from "@/shadcn/components/card";
 import { cn } from "@/shadcn/utils/utils";
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from "@/shadcn/components/field";
+import { Field, FieldDescription, FieldLabel } from "@/shadcn/components/field";
 import { Input } from "@/shadcn/components/input";
 import { useClipboardPaletteCheck } from "../hooks/useClipboardPalette.js";
 import {
@@ -33,17 +26,9 @@ import {
   PALETTE_LABEL_CLASS,
   PALETTE_INPUT_CLASS,
 } from "../utils/paletteUI.js";
-import {
-  writePaletteToClipboard,
-  readPaletteFromClipboard,
-} from "../utils/paletteClipboard.js";
+import { writePaletteToClipboard, readPaletteFromClipboard } from "../utils/paletteClipboard.js";
 import { toast } from "sonner";
-import {
-  ClipboardPaste,
-  Copy as CopyIcon,
-  Pencil,
-  Plus,
-} from "lucide-react";
+import { ClipboardPaste, Copy as CopyIcon, Pencil, Plus } from "lucide-react";
 
 interface PalettePickerProps {
   selected: PaletteEntry;
@@ -74,7 +59,7 @@ function PaletteSwatch({
       size="sm"
       onClick={onClick}
       className={cn(
-        "justify-start gap-2 h-auto px-2 py-1.5",
+        "h-auto justify-start gap-2 px-2 py-1.5",
         isSelected &&
           "bg-primary/25 hover:bg-primary/35 border-primary inset-ring-2 inset-ring-primary dark:bg-primary/25 dark:hover:bg-primary/35 dark:border-primary",
         doesMatchColors &&
@@ -98,7 +83,7 @@ function PaletteSwatch({
             e.stopPropagation();
             onEdit();
           }}
-          className="ms-auto text-primary hover:text-primary/80 cursor-pointer"
+          className="text-primary hover:text-primary/80 ms-auto cursor-pointer"
           title="Edit palette"
         >
           <Pencil className="size-3" />
@@ -131,17 +116,14 @@ function PaletteSectionItem({
         {title} ({entries.length})
       </AccordionTrigger>
       <AccordionContent>
-        <div className="grid grid-cols-2 gap-1.5 ms-3 sm:grid-cols-3">
+        <div className="ms-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {entries.map((entry, i) => {
             const isUserPalette = "id" in entry;
             const isSelected =
               entry.name === selected.name &&
               entry.colors.every((c, j) => c === selected.colors[j]);
-            const doesMatchColors = entry.colors.every(
-              (c, j) => c === selected.colors[j],
-            );
-            const isEditing =
-              isUserPalette && "isEditing" in entry && entry.isEditing;
+            const doesMatchColors = entry.colors.every((c, j) => c === selected.colors[j]);
+            const isEditing = isUserPalette && "isEditing" in entry && entry.isEditing;
 
             return (
               <PaletteSwatch
@@ -153,9 +135,7 @@ function PaletteSectionItem({
                 isEditing={isEditing}
                 onClick={() => {
                   onSelectWithName(
-                    "id" in entry
-                      ? { name: entry.name, colors: entry.colors }
-                      : entry,
+                    "id" in entry ? { name: entry.name, colors: entry.colors } : entry,
                   );
                 }}
                 onEdit={
@@ -190,22 +170,16 @@ export function PalettePicker({
   const { isExpanded, toggleExpanded } = usePaletteSectionState();
   const { hasClipboardPalette } = useClipboardPaletteCheck(clipboardEnabled);
 
-  const [selectedEditingPaletteId, setSelectedEditingPaletteId] = useState<
-    string | undefined
-  >();
-  const [editingPaletteErrors, setEditingPaletteErrors] = useState<
-    Record<string, string>
-  >({});
+  const [selectedEditingPaletteId, setSelectedEditingPaletteId] = useState<string | undefined>();
+  const [editingPaletteErrors, setEditingPaletteErrors] = useState<Record<string, string>>({});
   // Get the currently editing palette (if any)
   const editingPalette =
-    selectedEditingPaletteId &&
-    userPalettes.find((p) => p.id === selectedEditingPaletteId);
+    selectedEditingPaletteId && userPalettes.find((p) => p.id === selectedEditingPaletteId);
 
   // Helper: check if a palette is the selected one (by name + colors match)
   const isPaletteSelected = (palette: UserPaletteEntry): boolean => {
     return (
-      palette.name === selected.name &&
-      palette.colors.every((c, j) => c === selected.colors[j])
+      palette.name === selected.name && palette.colors.every((c, j) => c === selected.colors[j])
     );
   };
 
@@ -261,10 +235,7 @@ export function PalettePicker({
   const handlePasteNewPalette = async () => {
     const paletteData = await readPaletteFromClipboard();
     if (paletteData) {
-      const newPalette = createPaletteInEditMode(
-        paletteData.name,
-        paletteData.colors,
-      );
+      const newPalette = createPaletteInEditMode(paletteData.name, paletteData.colors);
       setSelectedEditingPaletteId(newPalette.id);
       onSelectWithName({ name: newPalette.name, colors: newPalette.colors });
       toast.success("Palette pasted");
@@ -332,11 +303,7 @@ export function PalettePicker({
     }
   };
 
-  const handlePaletteColorChange = (
-    id: string,
-    colorIndex: number,
-    newColor: string,
-  ) => {
+  const handlePaletteColorChange = (id: string, colorIndex: number, newColor: string) => {
     const palette = userPalettes.find((p) => p.id === id);
     if (palette) {
       const newColors = [...palette.colors] as [string, string, string, string];
@@ -362,14 +329,14 @@ export function PalettePicker({
 
   return (
     <Card className="p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Palette</h2>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex">
             {selected.colors.map((c: string, i: number) => (
               <div
                 key={i}
-                className="size-5 first:rounded-s last:rounded-e border"
+                className="size-5 border first:rounded-s last:rounded-e"
                 style={{ backgroundColor: c }}
               />
             ))}
@@ -400,7 +367,7 @@ export function PalettePicker({
         {/* Editing Palettes Section */}
         {editingPalettes.length > 0 && (
           <div>
-            <div className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1">
+            <div className="text-muted-foreground mb-1 flex items-center gap-1 text-sm font-medium">
               <span className="text-xs">v</span>
               <Pencil className="size-3" />
               EDITING ({editingPalettes.length})
@@ -409,16 +376,15 @@ export function PalettePicker({
               {editingPalettes.map((palette) => {
                 const isSelected = isPaletteSelected(palette);
                 const doesMatchColors = palette.colors.every(
-                  (c, i) =>
-                    c.toUpperCase() === selected.colors[i].toUpperCase(),
+                  (c, i) => c.toUpperCase() === selected.colors[i].toUpperCase(),
                 );
                 return (
                   <div
                     key={palette.id}
                     className={cn(
-                      "p-3 rounded border-2 cursor-pointer transition-colors",
+                      "cursor-pointer rounded border-2 p-3 transition-colors",
                       isSelected
-                        ? "border-primary bg-primary/20 ring-2 ring-primary"
+                        ? "border-primary bg-primary/20 ring-primary ring-2"
                         : doesMatchColors
                           ? "border-primary/60 bg-primary/10 hover:bg-primary/20"
                           : "border-border bg-card hover:bg-muted/30",
@@ -429,31 +395,22 @@ export function PalettePicker({
                     }}
                   >
                     {/* Color pickers */}
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
                       {palette.colors.map((c, i) => (
-                        <label
-                          key={i}
-                          className="flex flex-col items-center gap-1"
-                        >
+                        <label key={i} className="flex flex-col items-center gap-1">
                           <input
                             type="color"
                             value={c}
                             onChange={(e) => {
                               e.stopPropagation();
-                              handlePaletteColorChange(
-                                palette.id,
-                                i,
-                                e.target.value,
-                              );
+                              handlePaletteColorChange(palette.id, i, e.target.value);
                             }}
-                            className="size-8 cursor-pointer rounded bg-transparent p-0 border border-input"
+                            className="border-input size-8 cursor-pointer rounded border bg-transparent p-0"
                           />
-                          <span className={PALETTE_LABEL_CLASS}>
-                            {PALETTE_COLOR_LABELS[i]}
-                          </span>
+                          <span className={PALETTE_LABEL_CLASS}>{PALETTE_COLOR_LABELS[i]}</span>
                         </label>
                       ))}
-                      <div className="flex gap-1 ms-auto">
+                      <div className="ms-auto flex gap-1">
                         {clipboardEnabled && (
                           <>
                             <Button
@@ -491,14 +448,9 @@ export function PalettePicker({
                     {/* Name input */}
                     <Field
                       className="mb-2"
-                      data-invalid={
-                        editingPaletteErrors[palette.id] ? true : undefined
-                      }
+                      data-invalid={editingPaletteErrors[palette.id] ? true : undefined}
                     >
-                      <FieldLabel
-                        htmlFor={`palette-name-${palette.id}`}
-                        className="sr-only"
-                      >
+                      <FieldLabel htmlFor={`palette-name-${palette.id}`} className="sr-only">
                         Palette name
                       </FieldLabel>
                       <Input
@@ -506,9 +458,7 @@ export function PalettePicker({
                         type="text"
                         value={palette.name}
                         placeholder="Palette name"
-                        aria-invalid={
-                          editingPaletteErrors[palette.id] ? true : undefined
-                        }
+                        aria-invalid={editingPaletteErrors[palette.id] ? true : undefined}
                         onChange={(e) => {
                           e.stopPropagation();
                           handlePaletteNameChange(palette.id, e.target.value);
@@ -522,7 +472,7 @@ export function PalettePicker({
                     </Field>
 
                     {/* Action buttons */}
-                    <div className="flex gap-1 justify-end">
+                    <div className="flex justify-end gap-1">
                       {palette.savedName && (
                         <Button
                           variant="secondary"

@@ -43,9 +43,7 @@ type SerializedHistory = Array<{
   }>;
 }>;
 
-async function deserializeHistoryBatches(
-  raw: SerializedHistory,
-): Promise<ImageHistoryBatch[]> {
+async function deserializeHistoryBatches(raw: SerializedHistory): Promise<ImageHistoryBatch[]> {
   return Promise.all(
     raw.map(async (batch) => ({
       ...batch,
@@ -61,9 +59,7 @@ async function deserializeHistoryBatches(
   );
 }
 
-function serializeHistoryBatches(
-  history: ImageHistoryBatch[],
-): SerializedHistory {
+function serializeHistoryBatches(history: ImageHistoryBatch[]): SerializedHistory {
   return history.map((batch) => ({
     ...batch,
     results: batch.results.map((item) => ({
@@ -75,12 +71,13 @@ function serializeHistoryBatches(
 
 export function useImageHistory() {
   // Raw serialized form persisted via the localStorage hook.
-  const [serializedHistory, setSerializedHistory] =
-    useLocalStorage<SerializedHistory>(HISTORY_STORAGE_KEY, []);
-  const [settings, setSettings] = useLocalStorage<HistorySettings>(
-    HISTORY_SETTINGS_KEY,
-    { maxSize: DEFAULT_MAX_SIZE },
+  const [serializedHistory, setSerializedHistory] = useLocalStorage<SerializedHistory>(
+    HISTORY_STORAGE_KEY,
+    [],
   );
+  const [settings, setSettings] = useLocalStorage<HistorySettings>(HISTORY_SETTINGS_KEY, {
+    maxSize: DEFAULT_MAX_SIZE,
+  });
 
   // Deserialized in-memory form (async deserialize on mount).
   const [history, setHistory] = useState<ImageHistoryBatch[]>([]);
@@ -130,10 +127,7 @@ export function useImageHistory() {
         let updated = [newBatch, ...prev];
 
         // Calculate total number of images
-        let totalImages = updated.reduce(
-          (sum, batch) => sum + batch.results.length,
-          0,
-        );
+        let totalImages = updated.reduce((sum, batch) => sum + batch.results.length, 0);
 
         // Remove oldest batches if total exceeds max size
         while (totalImages > settings.maxSize && updated.length > 0) {
@@ -149,25 +143,22 @@ export function useImageHistory() {
   );
 
   // Delete a specific result from history
-  const deleteFromHistory = useCallback(
-    (batchId: string, resultIndex: number) => {
-      setHistory(
-        (prev) =>
-          prev
-            .map((batch) => {
-              if (batch.id === batchId) {
-                return {
-                  ...batch,
-                  results: batch.results.filter((_, i) => i !== resultIndex),
-                };
-              }
-              return batch;
-            })
-            .filter((batch) => batch.results.length > 0), // Remove empty batches
-      );
-    },
-    [],
-  );
+  const deleteFromHistory = useCallback((batchId: string, resultIndex: number) => {
+    setHistory(
+      (prev) =>
+        prev
+          .map((batch) => {
+            if (batch.id === batchId) {
+              return {
+                ...batch,
+                results: batch.results.filter((_, i) => i !== resultIndex),
+              };
+            }
+            return batch;
+          })
+          .filter((batch) => batch.results.length > 0), // Remove empty batches
+    );
+  }, []);
 
   // Delete all results from a specific batch
   const deleteBatch = useCallback((batchId: string) => {
@@ -191,10 +182,7 @@ export function useImageHistory() {
   const pruneHistory = useCallback(() => {
     setHistory((prev) => {
       let updated = [...prev];
-      let totalImages = updated.reduce(
-        (sum, batch) => sum + batch.results.length,
-        0,
-      );
+      let totalImages = updated.reduce((sum, batch) => sum + batch.results.length, 0);
 
       while (totalImages > settings.maxSize && updated.length > 0) {
         const lastBatch = updated[updated.length - 1];

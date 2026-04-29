@@ -11,9 +11,7 @@ export interface SerializedPalette {
  * Serialize a palette to a JSON string for clipboard storage.
  * Format: JSON string with name and colors array
  */
-export function serializePaletteToClipboard(
-  palette: SerializedPalette,
-): string {
+export function serializePaletteToClipboard(palette: SerializedPalette): string {
   return JSON.stringify({
     type: "gbcam-palette",
     version: "1",
@@ -25,9 +23,7 @@ export function serializePaletteToClipboard(
  * Deserialize a palette from clipboard contents.
  * Validates format and returns the palette, or null if invalid.
  */
-export function deserializePaletteFromClipboard(
-  text: string,
-): SerializedPalette | null {
+export function deserializePaletteFromClipboard(text: string): SerializedPalette | null {
   try {
     const parsed = JSON.parse(text);
 
@@ -40,9 +36,7 @@ export function deserializePaletteFromClipboard(
         typeof data.name === "string" &&
         Array.isArray(data.colors) &&
         data.colors.length === 4 &&
-        data.colors.every(
-          (c: unknown) => typeof c === "string" && /^#[0-9A-F]{6}$/i.test(c),
-        )
+        data.colors.every((c: unknown) => typeof c === "string" && /^#[0-9A-F]{6}$/i.test(c))
       ) {
         return data as SerializedPalette;
       }
@@ -107,9 +101,7 @@ export async function readPaletteFromClipboard(): Promise<SerializedPalette | nu
  * Write a palette to the clipboard.
  * Returns true if successful, false otherwise.
  */
-export async function writePaletteToClipboard(
-  palette: SerializedPalette,
-): Promise<boolean> {
+export async function writePaletteToClipboard(palette: SerializedPalette): Promise<boolean> {
   try {
     // Check if clipboard API is available
     if (!navigator.clipboard || !navigator.clipboard.writeText) {

@@ -49,7 +49,9 @@ describe("full pipeline integration", () => {
       }
 
       const accuracy = (matching / totalPixels) * 100;
-      console.log(`  ${tc.name}: ${matching}/${totalPixels} (${accuracy.toFixed(2)}%), ${different} different`);
+      console.log(
+        `  ${tc.name}: ${matching}/${totalPixels} (${accuracy.toFixed(2)}%), ${different} different`,
+      );
 
       // Pass threshold: 100% match
       expect(different).toBe(0);

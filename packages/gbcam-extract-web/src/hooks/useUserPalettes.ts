@@ -31,10 +31,7 @@ try {
 }
 
 export function useUserPalettes() {
-  const [palettes, setPalettes] = useLocalStorage<UserPaletteEntry[]>(
-    STORAGE_KEY,
-    [],
-  );
+  const [palettes, setPalettes] = useLocalStorage<UserPaletteEntry[]>(STORAGE_KEY, []);
 
   // Create a new palette in edit mode with auto-generated unique name
   const createPaletteInEditMode = useCallback(
@@ -46,10 +43,7 @@ export function useUserPalettes() {
 
       if (customPatternMatch) {
         // Extract base name and use the next number after the current one
-        baseName = fromName.substring(
-          0,
-          fromName.length - customPatternMatch[0].length,
-        );
+        baseName = fromName.substring(0, fromName.length - customPatternMatch[0].length);
         const currentNumber = parseInt(customPatternMatch[1], 10);
         nextNumber = currentNumber + 1;
       } else {
@@ -66,8 +60,7 @@ export function useUserPalettes() {
             return 0;
           })
           .filter((n) => n > 0);
-        nextNumber =
-          existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+        nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
       }
 
       const newPalette: UserPaletteEntry = {
@@ -86,9 +79,7 @@ export function useUserPalettes() {
   // Update a palette's properties
   const updatePalette = useCallback(
     (id: string, changes: Partial<UserPaletteEntry>) => {
-      setPalettes((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, ...changes } : p)),
-      );
+      setPalettes((prev) => prev.map((p) => (p.id === id ? { ...p, ...changes } : p)));
     },
     [setPalettes],
   );

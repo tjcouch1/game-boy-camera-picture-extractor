@@ -107,7 +107,11 @@ function collectInputFiles(positionalArgs: string[], dir?: string): string[] {
   return [...new Set(files)];
 }
 
-function collectForStart(positionalArgs: string[], dir: string | undefined, startStep: string): string[] {
+function collectForStart(
+  positionalArgs: string[],
+  dir: string | undefined,
+  startStep: string,
+): string[] {
   if (startStep === "warp") {
     return collectInputFiles(positionalArgs, dir);
   }
@@ -140,10 +144,8 @@ function collectForStart(positionalArgs: string[], dir: string | undefined, star
 
 async function loadImage(filePath: string): Promise<GBImageData> {
   const img = sharp(filePath).removeAlpha().ensureAlpha();
-  const { width, height } = await sharp(filePath).metadata() as { width: number; height: number };
-  const { data, info } = await img
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const { width, height } = (await sharp(filePath).metadata()) as { width: number; height: number };
+  const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
 
   // Convert to RGBA Uint8ClampedArray
   const rgba = new Uint8ClampedArray(info.width * info.height * 4);
@@ -285,7 +287,7 @@ async function main() {
 
   const activeSteps = STEP_ORDER.slice(startIdx, endIdx + 1);
   console.log(
-    `Pipeline: ${activeSteps.join(" -> ")}  |  scale=${args.scale}  |  ${inputFiles.length} input file(s)`
+    `Pipeline: ${activeSteps.join(" -> ")}  |  scale=${args.scale}  |  ${inputFiles.length} input file(s)`,
   );
 
   // Initialize OpenCV

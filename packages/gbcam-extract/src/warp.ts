@@ -12,14 +12,17 @@
  *        single pass — no black bars possible.
  */
 
-import { type GBImageData, SCREEN_W, SCREEN_H, INNER_TOP, INNER_BOT, INNER_LEFT, INNER_RIGHT } from "./common.js";
-import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
 import {
-  type DebugCollector,
-  cloneImage,
-  drawPolyline,
-  fillCircle,
-} from "./debug.js";
+  type GBImageData,
+  SCREEN_W,
+  SCREEN_H,
+  INNER_TOP,
+  INNER_BOT,
+  INNER_LEFT,
+  INNER_RIGHT,
+} from "./common.js";
+import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
+import { type DebugCollector, cloneImage, drawPolyline, fillCircle } from "./debug.js";
 
 // ─── Public interface ───
 
@@ -137,11 +140,7 @@ interface RefineMetrics {
   refined: boolean;
 }
 
-function recordRefinementMetrics(
-  dbg: DebugCollector,
-  passNum: number,
-  m: RefineMetrics,
-): void {
+function recordRefinementMetrics(dbg: DebugCollector, passNum: number, m: RefineMetrics): void {
   const ec = m.edgeCurvatures;
   dbg.log(
     `[warp] pass ${passNum} edge curvatures: ` +
@@ -216,7 +215,7 @@ function orderCorners(pts: Point[]): Corners {
   // np.diff(pts, axis=1) computes pts[:,1] - pts[:,0] = y - x for each point
   const yMinusX = pts.map(([x, y]) => y - x);
   const trIdx2 = yMinusX.indexOf(Math.min(...yMinusX)); // smallest y-x => TR
-  const blIdx = yMinusX.indexOf(Math.max(...yMinusX));   // largest y-x => BL
+  const blIdx = yMinusX.indexOf(Math.max(...yMinusX)); // largest y-x => BL
 
   return [pts[tlIdx], pts[trIdx2], pts[brIdx], pts[blIdx]];
 }
@@ -232,8 +231,7 @@ function scoreQuad(ordered: Corners, imgW: number, imgH: number, targetAspect = 
   if (hAvg < 10) return 1e9;
   const aspectErr = Math.abs(wAvg / hAvg / targetAspect - 1.0);
   const parallelErr =
-    Math.abs(top - bot) / Math.max(wAvg, 1) +
-    Math.abs(left - right) / Math.max(hAvg, 1);
+    Math.abs(top - bot) / Math.max(wAvg, 1) + Math.abs(left - right) / Math.max(hAvg, 1);
   const margin = 5;
   let clips = 0;
   if (TL[0] < margin) clips++;
@@ -270,7 +268,13 @@ function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetect
 
     const kernel = track(cv.Mat.ones(7, 7, cv.CV_8U));
 
-    let best: { score: number; ordered: Corners; thresh: number; area: number; aspect: number } | null = null;
+    let best: {
+      score: number;
+      ordered: Corners;
+      thresh: number;
+      area: number;
+      aspect: number;
+    } | null = null;
 
     for (let thresh = threshVal; thresh > 114; thresh -= 5) {
       const binary = track(new cv.Mat());
@@ -306,7 +310,7 @@ function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetect
       const peri = cv.arcLength(hull, true);
 
       let quad: Point[] | null = null;
-      for (const eps of [0.02, 0.03, 0.05, 0.01, 0.10]) {
+      for (const eps of [0.02, 0.03, 0.05, 0.01, 0.1]) {
         const approx = track(new cv.Mat());
         cv.approxPolyDP(hull, approx, eps * peri, true);
         if (approx.rows === 4) {
@@ -352,7 +356,7 @@ function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetect
 
 interface WarpResult {
   warped: any; // cv.Mat (BGR)
-  M: any;      // cv.Mat (3x3 perspective matrix)
+  M: any; // cv.Mat (3x3 perspective matrix)
 }
 
 function initialWarp(bgr: any, corners: Corners, scale: number): WarpResult {
@@ -361,17 +365,16 @@ function initialWarp(bgr: any, corners: Corners, scale: number): WarpResult {
   const H = SCREEN_H * scale;
 
   const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    corners[0][0], corners[0][1],
-    corners[1][0], corners[1][1],
-    corners[2][0], corners[2][1],
-    corners[3][0], corners[3][1],
+    corners[0][0],
+    corners[0][1],
+    corners[1][0],
+    corners[1][1],
+    corners[2][0],
+    corners[2][1],
+    corners[3][0],
+    corners[3][1],
   ]);
-  const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    0, 0,
-    W - 1, 0,
-    W - 1, H - 1,
-    0, H - 1,
-  ]);
+  const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W - 1, 0, W - 1, H - 1, 0, H - 1]);
 
   const M = cv.getPerspectiveTransform(srcPts, dstPts);
   srcPts.delete();
@@ -410,7 +413,7 @@ function firstDarkFromFrame(profile: number[], smoothSigma = 1.5): number {
     const d2 = d[k + 1];
     const denom = d0 - 2.0 * d1 + d2;
     if (Math.abs(denom) > 1e-10) {
-      delta = Math.max(-1.0, Math.min(1.0, 0.5 * (d0 - d2) / denom));
+      delta = Math.max(-1.0, Math.min(1.0, (0.5 * (d0 - d2)) / denom));
     }
   }
   return k + 1 + delta;
@@ -454,7 +457,7 @@ function rowMeans(mat: any, r1: number, r2: number, c1: number, c2: number): num
 
 // ─── Find border corners ───
 
-type CornerPts = { TL: Point; TR: Point; BR: Point; BL: Point };
+interface CornerPts { TL: Point; TR: Point; BR: Point; BL: Point }
 
 function findBorderCorners(channel: any, scale: number): CornerPts {
   const H = channel.rows;
@@ -485,7 +488,7 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const profile = rowMeans(channel, r1, r2, c0, c1);
     const reversed = [...profile].reverse();
     const idx = firstDarkFromFrame(reversed);
-    return (r2 - 1) - idx - (scale - 1);
+    return r2 - 1 - idx - (scale - 1);
   }
 
   function leftX(r0: number, r1_: number): number {
@@ -503,7 +506,7 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const profile = colMeans(channel, r0, r1_, c1, c2);
     const reversed = [...profile].reverse();
     const idx = firstDarkFromFrame(reversed);
-    return (c2 - 1) - idx - (scale - 1);
+    return c2 - 1 - idx - (scale - 1);
   }
 
   const tlY = topY(cLft[0], cLft[1]);
@@ -549,7 +552,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     if (n <= 1) return [start];
     const result: number[] = [];
     for (let i = 0; i < n; i++) {
-      result.push(start + (end - start) * i / (n - 1));
+      result.push(start + ((end - start) * i) / (n - 1));
     }
     return result;
   };
@@ -583,7 +586,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
       }
       const reversed = [...profile].reverse();
       const idx = firstDarkFromFrame(reversed);
-      const yPos = (r2 - 1) - idx - (scale - 1);
+      const yPos = r2 - 1 - idx - (scale - 1);
       points.bottom.push([col, yPos]);
     }
   }
@@ -617,7 +620,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
       }
       const reversed = [...profile].reverse();
       const idx = firstDarkFromFrame(reversed);
-      const xPos = (c2 - 1) - idx - (scale - 1);
+      const xPos = c2 - 1 - idx - (scale - 1);
       points.right.push([xPos, row]);
     }
   }
@@ -643,7 +646,7 @@ function verifyDashPositions(_warped: any, _scale: number): void {
 
 interface RefineResult {
   refined: any; // cv.Mat (BGR)
-  M: any;       // cv.Mat (3x3)
+  M: any; // cv.Mat (3x3)
 }
 
 interface RefineResultWithMetrics extends RefineResult {
@@ -693,18 +696,23 @@ function refineWarpWithMetrics(
 
   // Analyze edge curvature
   const edgeCurvatures = {
-    top: borderPoints.top.length > 0
-      ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) / borderPoints.top.length
-      : 0,
-    bottom: borderPoints.bottom.length > 0
-      ? borderPoints.bottom.reduce((s, [, y]) => s + (y - expBottom), 0) / borderPoints.bottom.length
-      : 0,
-    left: borderPoints.left.length > 0
-      ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) / borderPoints.left.length
-      : 0,
-    right: borderPoints.right.length > 0
-      ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length
-      : 0,
+    top:
+      borderPoints.top.length > 0
+        ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) / borderPoints.top.length
+        : 0,
+    bottom:
+      borderPoints.bottom.length > 0
+        ? borderPoints.bottom.reduce((s, [, y]) => s + (y - expBottom), 0) /
+          borderPoints.bottom.length
+        : 0,
+    left:
+      borderPoints.left.length > 0
+        ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) / borderPoints.left.length
+        : 0,
+    right:
+      borderPoints.right.length > 0
+        ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length
+        : 0,
   };
 
   // Pre-adjustment corner errors (relative to expected inner-border position)
@@ -744,16 +752,24 @@ function refineWarpWithMetrics(
   // Compute correction homography and back-project
   try {
     const srcBrd = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      adjusted.TL[0], adjusted.TL[1],
-      adjusted.TR[0], adjusted.TR[1],
-      adjusted.BR[0], adjusted.BR[1],
-      adjusted.BL[0], adjusted.BL[1],
+      adjusted.TL[0],
+      adjusted.TL[1],
+      adjusted.TR[0],
+      adjusted.TR[1],
+      adjusted.BR[0],
+      adjusted.BR[1],
+      adjusted.BL[0],
+      adjusted.BL[1],
     ]);
     const dstBrd = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      expLeft, expTop,
-      expRight, expTop,
-      expRight, expBottom,
-      expLeft, expBottom,
+      expLeft,
+      expTop,
+      expRight,
+      expTop,
+      expRight,
+      expBottom,
+      expLeft,
+      expBottom,
     ]);
 
     const Hcorr = cv.getPerspectiveTransform(srcBrd, dstBrd);
@@ -766,12 +782,7 @@ function refineWarpWithMetrics(
     Hcorr.delete();
 
     // Canvas corners in warped space
-    const canvas = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0,
-      W - 1, 0,
-      W - 1, H - 1,
-      0, H - 1,
-    ]);
+    const canvas = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W - 1, 0, W - 1, H - 1, 0, H - 1]);
 
     // Transform canvas through H_corr^-1
     const cornersInWarped = new cv.Mat();
@@ -792,19 +803,18 @@ function refineWarpWithMetrics(
     // Build new perspective transform from source corners to output canvas
     const srcCornerData = cornersInSrc.data32F;
     const srcCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      srcCornerData[0], srcCornerData[1],
-      srcCornerData[2], srcCornerData[3],
-      srcCornerData[4], srcCornerData[5],
-      srcCornerData[6], srcCornerData[7],
+      srcCornerData[0],
+      srcCornerData[1],
+      srcCornerData[2],
+      srcCornerData[3],
+      srcCornerData[4],
+      srcCornerData[5],
+      srcCornerData[6],
+      srcCornerData[7],
     ]);
     cornersInSrc.delete();
 
-    const dstCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0,
-      W - 1, 0,
-      W - 1, H - 1,
-      0, H - 1,
-    ]);
+    const dstCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W - 1, 0, W - 1, H - 1, 0, H - 1]);
 
     const Mnew = cv.getPerspectiveTransform(srcCorners, dstCorners);
     srcCorners.delete();

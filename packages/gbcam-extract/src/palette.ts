@@ -29,10 +29,16 @@ export function applyPalette(
     let minDist = Infinity;
     for (const gv of GB_COLORS) {
       const d = Math.abs(gray - gv);
-      if (d < minDist) { minDist = d; nearest = gv; }
+      if (d < minDist) {
+        minDist = d;
+        nearest = gv;
+      }
     }
     const [r, g, b] = colorMap.get(nearest)!;
-    data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255;
+    data[i] = r;
+    data[i + 1] = g;
+    data[i + 2] = b;
+    data[i + 3] = 255;
   }
   return { data, width: grayscale.width, height: grayscale.height };
 }

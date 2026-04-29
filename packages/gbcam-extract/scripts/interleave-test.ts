@@ -12,14 +12,7 @@
  */
 
 import { execSync } from "node:child_process";
-import {
-  mkdirSync,
-  existsSync,
-  mkdtempSync,
-  rmSync,
-  copyFileSync,
-  readdirSync,
-} from "node:fs";
+import { mkdirSync, existsSync, mkdtempSync, rmSync, copyFileSync, readdirSync } from "node:fs";
 import { join, resolve, basename, extname } from "node:path";
 import { tmpdir } from "node:os";
 import sharp from "sharp";
@@ -91,9 +84,7 @@ function parseArgs(): {
   }
 
   if (!image) {
-    console.error(
-      "Usage: pnpm interleave -- --image <name> [--py step1,step2] [--ts step3,step4]",
-    );
+    console.error("Usage: pnpm interleave -- --image <name> [--py step1,step2] [--ts step3,step4]");
     console.error("Steps: warp, correct, crop, sample, quantize");
     process.exit(1);
   }
@@ -132,11 +123,7 @@ async function saveImage(img: GBImageData, outPath: string): Promise<void> {
 
 // ─── Step runners ───
 
-function runPythonStep(
-  step: StepName,
-  inputFile: string,
-  tmpDir: string,
-): string {
+function runPythonStep(step: StepName, inputFile: string, tmpDir: string): string {
   const scaleArg = step !== "quantize" ? "--scale 8" : "";
   const cmd = `"${VENV_PYTHON}" "${PY_SCRIPTS[step]}" "${inputFile}" ${scaleArg} --output-dir "${tmpDir}"`;
 
@@ -147,16 +134,12 @@ function runPythonStep(
   try {
     execSync(cmd, { stdio: "pipe" });
   } catch (e: any) {
-    console.error(
-      `  Python ${step} failed:\n${e.stderr?.toString() ?? e.message}`,
-    );
+    console.error(`  Python ${step} failed:\n${e.stderr?.toString() ?? e.message}`);
     process.exit(1);
   }
 
   // Find the new PNG file Python created
-  const newFiles = readdirSync(tmpDir).filter(
-    (f) => !before.has(f) && f.endsWith(".png"),
-  );
+  const newFiles = readdirSync(tmpDir).filter((f) => !before.has(f) && f.endsWith(".png"));
   if (newFiles.length === 0) {
     console.error(`  Python ${step} created no new PNG file in ${tmpDir}`);
     process.exit(1);
@@ -167,11 +150,7 @@ function runPythonStep(
   return outFile;
 }
 
-async function runTsStep(
-  step: StepName,
-  inputFile: string,
-  tmpDir: string,
-): Promise<string> {
+async function runTsStep(step: StepName, inputFile: string, tmpDir: string): Promise<string> {
   // Use a predictable output name based on the step suffix
   const stem = basename(inputFile, extname(inputFile)).replace(
     /_(warp|correct|crop|sample|gbcam)$/,
@@ -216,10 +195,7 @@ async function runTsStep(
 
 // ─── Accuracy reporting ───
 
-async function reportAccuracy(
-  finalFile: string,
-  imageName: string,
-): Promise<void> {
+async function reportAccuracy(finalFile: string, imageName: string): Promise<void> {
   // Find reference image - try multiple naming conventions
   // zelda-poster-1 -> look for zelda-poster-output-corrected.png or zelda-poster-1-output-corrected.png
   // thing-1 -> look for thing-output-corrected.png or thing-1-output-corrected.png
@@ -243,9 +219,7 @@ async function reportAccuracy(
     .toBuffer({ resolveWithObject: true });
 
   if (refInfo.width !== CAM_W || refInfo.height !== CAM_H) {
-    console.log(
-      `  Reference is ${refInfo.width}x${refInfo.height}, expected ${CAM_W}x${CAM_H}`,
-    );
+    console.log(`  Reference is ${refInfo.width}x${refInfo.height}, expected ${CAM_W}x${CAM_H}`);
     return;
   }
 
@@ -272,9 +246,7 @@ async function reportAccuracy(
     .toBuffer({ resolveWithObject: true });
 
   if (outInfo.width !== CAM_W || outInfo.height !== CAM_H) {
-    console.log(
-      `  Output is ${outInfo.width}x${outInfo.height}, expected ${CAM_W}x${CAM_H}`,
-    );
+    console.log(`  Output is ${outInfo.width}x${outInfo.height}, expected ${CAM_W}x${CAM_H}`);
     return;
   }
 
@@ -291,9 +263,7 @@ async function reportAccuracy(
   const pct = ((match / N) * 100).toFixed(2);
   const diff = N - match;
   console.log(`\n  Accuracy: ${match}/${N} pixels match (${pct}%)`);
-  console.log(
-    `  Different: ${diff} pixels (${((diff / N) * 100).toFixed(2)}%)`,
-  );
+  console.log(`  Different: ${diff} pixels (${((diff / N) * 100).toFixed(2)}%)`);
 
   if (diff > 0) {
     // Confusion-style summary: which colours are wrong
@@ -304,12 +274,10 @@ async function reportAccuracy(
       255: 0,
     };
     for (let i = 0; i < N; i++) {
-      if (ref[i] !== out[i])
-        wrongByColor[ref[i]] = (wrongByColor[ref[i]] ?? 0) + 1;
+      if (ref[i] !== out[i]) wrongByColor[ref[i]] = (wrongByColor[ref[i]] ?? 0) + 1;
     }
     for (const [color, count] of Object.entries(wrongByColor)) {
-      if (count > 0)
-        console.log(`    ref color ${color}: ${count} pixels wrong`);
+      if (count > 0) console.log(`    ref color ${color}: ${count} pixels wrong`);
     }
   }
 }
@@ -328,14 +296,9 @@ async function main(): Promise<void> {
   console.log();
 
   // Check input file
-  const inputCandidates = [
-    ".jpg",
-    ".JPG",
-    ".jpeg",
-    ".JPEG",
-    ".png",
-    ".PNG",
-  ].map((ext) => join(TEST_INPUT_DIR, image + ext));
+  const inputCandidates = [".jpg", ".JPG", ".jpeg", ".JPEG", ".png", ".PNG"].map((ext) =>
+    join(TEST_INPUT_DIR, image + ext),
+  );
   const inputFile = inputCandidates.find(existsSync);
   if (!inputFile) {
     console.error(`No input file found for ${image} in ${TEST_INPUT_DIR}`);

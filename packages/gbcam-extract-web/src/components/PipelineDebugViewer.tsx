@@ -52,18 +52,9 @@ function StepCanvas({
   }, [image, maxW]);
 
   return (
-    <Card
-      className="flex flex-col items-center gap-1 p-2 shrink-0"
-      style={{ maxWidth: maxW }}
-    >
-      <p className="text-xs font-medium text-muted-foreground text-center break-all">
-        {label}
-      </p>
-      <canvas
-        ref={canvasRef}
-        className="rounded border"
-        style={{ imageRendering: "pixelated" }}
-      />
+    <Card className="flex shrink-0 flex-col items-center gap-1 p-2" style={{ maxWidth: maxW }}>
+      <p className="text-muted-foreground break-all text-center text-xs font-medium">{label}</p>
+      <canvas ref={canvasRef} className="rounded border" style={{ imageRendering: "pixelated" }} />
       <Badge variant="secondary" className="text-[10px]">
         {image.width} × {image.height}
       </Badge>
@@ -89,10 +80,7 @@ function groupDebugImages(
     }));
 }
 
-export function PipelineDebugViewer({
-  intermediates,
-  debug,
-}: PipelineDebugViewerProps) {
+export function PipelineDebugViewer({ intermediates, debug }: PipelineDebugViewerProps) {
   const intermediateSteps = useMemo(() => {
     if (!intermediates) return [];
     return [
@@ -117,7 +105,7 @@ export function PipelineDebugViewer({
   if (intermediateSteps.length > 0) defaultOpen.push("intermediate");
 
   return (
-    <Collapsible className="mt-2 rounded-lg bg-muted/40 p-3">
+    <Collapsible className="bg-muted/40 mt-2 rounded-lg p-3">
       <CollapsibleTrigger
         render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}
       >
@@ -135,11 +123,7 @@ export function PipelineDebugViewer({
               <AccordionContent>
                 <div className="flex flex-wrap items-start gap-3">
                   {intermediateSteps.map((step) => (
-                    <StepCanvas
-                      key={step.label}
-                      label={step.label}
-                      image={step.image}
-                    />
+                    <StepCanvas key={step.label} label={step.label} image={step.image} />
                   ))}
                 </div>
               </AccordionContent>
@@ -153,7 +137,7 @@ export function PipelineDebugViewer({
                 <div className="space-y-3">
                   {debugImageGroups.map(({ step, entries }) => (
                     <div key={step}>
-                      <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+                      <p className="text-muted-foreground mb-1 text-xs uppercase tracking-wide">
                         {step}
                       </p>
                       <div className="flex flex-wrap items-start gap-3">
@@ -172,7 +156,7 @@ export function PipelineDebugViewer({
             <AccordionItem value="metrics">
               <AccordionTrigger>Metrics</AccordionTrigger>
               <AccordionContent>
-                <pre className="overflow-x-auto whitespace-pre rounded bg-background/60 p-2 text-[11px]">
+                <pre className="bg-background/60 overflow-x-auto whitespace-pre rounded p-2 text-[11px]">
                   {JSON.stringify(debug!.metrics, null, 2)}
                 </pre>
               </AccordionContent>
@@ -183,7 +167,7 @@ export function PipelineDebugViewer({
             <AccordionItem value="log">
               <AccordionTrigger>Log ({debug!.log.length} lines)</AccordionTrigger>
               <AccordionContent>
-                <pre className="overflow-x-auto whitespace-pre rounded bg-background/60 p-2 text-[11px]">
+                <pre className="bg-background/60 overflow-x-auto whitespace-pre rounded p-2 text-[11px]">
                   {debug!.log.join("\n")}
                 </pre>
               </AccordionContent>

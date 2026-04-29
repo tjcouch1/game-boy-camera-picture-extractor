@@ -1,11 +1,4 @@
-import {
-  type GBImageData,
-  SCREEN_W,
-  SCREEN_H,
-  FRAME_THICK,
-  CAM_W,
-  CAM_H,
-} from "./common.js";
+import { type GBImageData, SCREEN_W, SCREEN_H, FRAME_THICK, CAM_W, CAM_H } from "./common.js";
 import { type DebugCollector, cloneImage, strokeRect } from "./debug.js";
 
 export interface CropOptions {
@@ -47,10 +40,7 @@ export function crop(input: GBImageData, options?: CropOptions): GBImageData {
   for (let y = 0; y < outH; y++) {
     const srcOffset = ((y1 + y) * input.width + x1) * 4;
     const dstOffset = y * outW * 4;
-    data.set(
-      input.data.subarray(srcOffset, srcOffset + outW * 4),
-      dstOffset,
-    );
+    data.set(input.data.subarray(srcOffset, srcOffset + outW * 4), dstOffset);
   }
 
   if (dbg) {

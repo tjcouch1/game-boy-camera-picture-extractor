@@ -6,10 +6,7 @@ type SetValue<T> = (value: T | ((prev: T) => T)) => void;
  * Generic typed localStorage hook with JSON serialization, error tolerance,
  * and cross-tab sync via the storage event.
  */
-export function useLocalStorage<T>(
-  key: string,
-  initialValue: T,
-): [T, SetValue<T>] {
+export function useLocalStorage<T>(key: string, initialValue: T): [T, SetValue<T>] {
   const readValue = useCallback((): T => {
     try {
       const raw = localStorage.getItem(key);
@@ -27,9 +24,7 @@ export function useLocalStorage<T>(
   const setValue: SetValue<T> = useCallback(
     (next) => {
       const resolved =
-        typeof next === "function"
-          ? (next as (prev: T) => T)(valueRef.current)
-          : next;
+        typeof next === "function" ? (next as (prev: T) => T)(valueRef.current) : next;
       try {
         localStorage.setItem(key, JSON.stringify(resolved));
       } catch (e) {
