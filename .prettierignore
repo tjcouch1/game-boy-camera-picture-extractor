@@ -4,6 +4,10 @@ pnpm-lock.yaml
 # Shadcn-generated — managed by shadcn CLI
 packages/gbcam-extract-web/src/shadcn/
 
+# Build output — too large and generated
+packages/gbcam-extract-web/dist/**
+packages/gbcam-extract-web/public/licenses.html
+
 # Reference materials — preserve exact formatting
 supporting-materials/
 test-input/
