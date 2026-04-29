@@ -1,0 +1,10 @@
+# Lockfile (tracked, but not for prettier)
+pnpm-lock.yaml
+
+# Shadcn-generated — managed by shadcn CLI
+packages/gbcam-extract-web/src/shadcn/
+
+# Reference materials — preserve exact formatting
+supporting-materials/
+test-input/
+sample-pictures/

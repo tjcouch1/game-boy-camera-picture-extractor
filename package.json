@@ -9,6 +9,7 @@
     "directory": "packages/gbcam-extract"
   },
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.8.1",
   "scripts": {
     "build": "pnpm -r run build",
@@ -19,7 +20,12 @@
     "preview:host": "pnpm build && pnpm --filter gbcam-extract-web preview:host",
     "typecheck": "pnpm -r run typecheck",
     "extract": "pnpm --filter gbcam-extract run extract",
-    "test:pipeline": "pnpm --filter gbcam-extract run test:pipeline"
+    "test:pipeline": "pnpm --filter gbcam-extract run test:pipeline",
+    "lint": "pnpm -r run lint",
+    "lint:fix": "pnpm -r run lint:fix",
+    "format": "pnpm -r run format",
+    "format:check": "pnpm -r run format:check",
+    "prepare": "husky"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -32,7 +38,29 @@
     "pnpm": "10.33.0"
   },
   "devDependencies": {
+    "@eslint/compat": "1.2.0",
+    "@eslint/js": "9.0.0",
     "@types/node": "^25.5.2",
-    "gbcam-extract-web": "link:packages\\gbcam-extract-web"
+    "eslint": "9.0.0",
+    "eslint-plugin-jsx-a11y": "6.10.0",
+    "eslint-plugin-react": "7.37.0",
+    "eslint-plugin-react-hooks": "5.0.0",
+    "gbcam-extract-web": "link:packages\\gbcam-extract-web",
+    "globals": "15.0.0",
+    "husky": "9.1.0",
+    "jiti": "2.4.0",
+    "lint-staged": "15.2.0",
+    "prettier": "3.5.0",
+    "prettier-plugin-tailwindcss": "0.6.0",
+    "typescript-eslint": "8.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,html,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }

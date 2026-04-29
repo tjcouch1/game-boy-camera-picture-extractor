@@ -27,7 +27,11 @@
     "extract": "tsup scripts/extract.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/extract.js",
     "test:pipeline": "tsup scripts/run-tests.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/run-tests.js",
     "interleave": "tsup scripts/interleave-test.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/interleave-test.js",
-    "generate:palettes": "node scripts/generate-palettes.ts"
+    "generate:palettes": "node scripts/generate-palettes.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@techstark/opencv-js": "^4.10.0-release.1",
