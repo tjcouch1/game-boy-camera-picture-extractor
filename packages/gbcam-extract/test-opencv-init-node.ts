@@ -48,7 +48,7 @@ async function main() {
 
     // Test 4: Test TermCriteria
     console.log("4. Testing TermCriteria...");
-    const criteria = new cv.TermCriteria(cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 300, 1.0);
+    const _criteria = new cv.TermCriteria(cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 300, 1.0);
     console.log(`   ✓ TermCriteria created successfully\n`);
 
     console.log("✅ All tests passed!\n");

@@ -130,7 +130,7 @@ describe("generate-palettes", () => {
     const fun = extractArray("FUN_PALETTES");
 
     // Check for duplicates within each category
-    const checkUnique = (palettes: { name: string }[], category: string) => {
+    const checkUnique = (palettes: { name: string }[], _category: string) => {
       const names = palettes.map((p) => p.name);
       const uniqueNames = new Set(names);
       expect(uniqueNames.size).toBe(names.length);

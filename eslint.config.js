@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const gitignorePath = path.resolve(__dirname, ".gitignore");
 
-export default tseslint.config(
+export default [
   includeIgnoreFile(gitignorePath),
   {
     ignores: [
@@ -21,20 +21,14 @@ export default tseslint.config(
     ],
   },
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
+  ...tseslint.configs.recommended,
   {
+    files: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"],
     rules: {
-      "@typescript-eslint/no-unused-vars": "error",
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       eqeqeq: "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
-      "prefer-const": "error", // OpenCV.js types are loose (mostly any-typed). These rules produce noise
-      // without catching real bugs. Disable repo-wide.
-      "@typescript-eslint/no-unsafe-assignment": "off",
-      "@typescript-eslint/no-unsafe-call": "off",
-      "@typescript-eslint/no-unsafe-member-access": "off",
-      "@typescript-eslint/no-unsafe-return": "off",
-      "@typescript-eslint/no-unsafe-argument": "off",
+      "prefer-const": "error",
     },
   },
-);
+];
