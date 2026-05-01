@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { quantize } from "../src/quantize.js";
+import { quantize, gValleyThresholdForTest } from "../src/quantize.js";
 import { initOpenCV } from "../src/init-opencv.js";
 import { createGBImageData, GB_COLORS, CAM_W, CAM_H } from "../src/common.js";
 
@@ -38,5 +38,29 @@ describe("quantize", () => {
       expect(result.data[i]).toBe(result.data[i + 1]); // R=G=B
       expect(result.data[i]).toBe(result.data[i + 2]);
     }
+  });
+});
+
+describe("gValleyThreshold safety clamp", () => {
+  it("never returns a threshold within 8 G-units of either cluster center", () => {
+    // Monotonically-decreasing histogram (mimics 20260328_165926: very few
+    // true WH pixels, so the smoothed histogram falls off all the way to
+    // whCenterG). Without the safety clamp, the search picks the rightmost
+    // bin and returns ~whCenterG.
+    const lgCenterG = 119;
+    const whCenterG = 197;
+    const gVals: number[] = [];
+    for (let g = lgCenterG; g < whCenterG; g++) {
+      const count = Math.max(1, Math.round(1000 * Math.exp(-(g - lgCenterG) / 15)));
+      for (let k = 0; k < count; k++) gVals.push(g);
+    }
+    const t = gValleyThresholdForTest(gVals, lgCenterG, whCenterG);
+    expect(t).toBeGreaterThanOrEqual(lgCenterG + 8);
+    expect(t).toBeLessThanOrEqual(whCenterG - 8);
+  });
+
+  it("falls back to midpoint when histogram is too noisy", () => {
+    const t = gValleyThresholdForTest([], 100, 200);
+    expect(t).toBeCloseTo(150, 1);
   });
 });

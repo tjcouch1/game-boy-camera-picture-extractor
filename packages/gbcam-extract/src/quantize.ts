@@ -212,13 +212,21 @@ function gValleyThreshold(
   lgCenterG: number,
   whCenterG: number,
 ): number {
+  const SAFETY = 8; // never return a threshold within this many G-units of a center
+  const midpoint = (lgCenterG + whCenterG) / 2.0;
+  const span = whCenterG - lgCenterG;
+
+  // If centers are too close together, no histogram search can help — use midpoint.
+  if (span < 2 * SAFETY + 4) {
+    return midpoint;
+  }
+
   const lo = Math.floor(lgCenterG) + 1;
   const hi = Math.floor(whCenterG);
   if (hi <= lo + 4) {
-    return (lgCenterG + whCenterG) / 2.0;
+    return midpoint;
   }
 
-  // Build histogram: bins from lo to hi+1 (so hi-lo+1 bins covering values lo..hi)
   const nBins = hi - lo + 1;
   const hist = new Array<number>(nBins).fill(0);
   let total = 0;
@@ -231,36 +239,28 @@ function gValleyThreshold(
   }
 
   if (total < 10) {
-    return (lgCenterG + whCenterG) / 2.0;
+    return midpoint;
   }
 
   const smooth = gaussianFilter1d(hist, 3.0);
 
-  // Search from upper 2/3 of range
-  let searchLo = Math.floor((smooth.length * 2) / 3);
-  let valleyIdx = searchLo;
-  let minVal = smooth[searchLo];
-  for (let i = searchLo + 1; i < smooth.length; i++) {
+  // Search the safe interior only — never within SAFETY of either center.
+  const safeMinIdx = SAFETY;
+  const safeMaxIdx = nBins - 1 - SAFETY;
+
+  if (safeMaxIdx <= safeMinIdx) {
+    return midpoint;
+  }
+
+  let valleyIdx = safeMinIdx;
+  let minVal = smooth[safeMinIdx];
+  for (let i = safeMinIdx + 1; i <= safeMaxIdx; i++) {
     if (smooth[i] < minVal) {
       minVal = smooth[i];
       valleyIdx = i;
     }
   }
 
-  // If boundary-constrained, retry from 1/3
-  if (valleyIdx === searchLo) {
-    const widerLo = Math.max(Math.floor(smooth.length / 3), 1);
-    valleyIdx = widerLo;
-    minVal = smooth[widerLo];
-    for (let i = widerLo + 1; i < smooth.length; i++) {
-      if (smooth[i] < minVal) {
-        minVal = smooth[i];
-        valleyIdx = i;
-      }
-    }
-  }
-
-  // threshold = edges[valley_idx] = lo + valley_idx
   return lo + valleyIdx;
 }
 
@@ -608,3 +608,7 @@ function countLabels(labels: Int32Array | Uint8Array): [number, number, number, 
   }
   return c;
 }
+
+// Test-only export so unit tests can exercise gValleyThreshold directly
+// without running full quantize. Do not use from production code.
+export const gValleyThresholdForTest = gValleyThreshold;
