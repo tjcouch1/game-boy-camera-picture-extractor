@@ -334,6 +334,30 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     );
   }
 
+  // Drift diagnostic: warn when any cluster center is far from its target.
+  if (dbg) {
+    const DRIFT_THRESHOLD = 40;
+    const targets: [number, number][] = [
+      [0, 0],
+      [148, 148],
+      [255, 148],
+      [255, 255],
+    ];
+    const names = ["BK", "DG", "LG", "WH"];
+    const drifts: string[] = [];
+    for (let pi = 0; pi < 4; pi++) {
+      const dr = paletteCenters[pi][0] - targets[pi][0];
+      const dg = paletteCenters[pi][1] - targets[pi][1];
+      const dist = Math.sqrt(dr * dr + dg * dg);
+      if (dist > DRIFT_THRESHOLD) {
+        drifts.push(`${names[pi]} drifted ${dist.toFixed(0)} RG-units`);
+      }
+    }
+    if (drifts.length > 0) {
+      dbg.log(`[quantize] WARN cluster drift: ${drifts.join("; ")}`);
+    }
+  }
+
   // Build global_centers_po (palette-ordered centers)
   const globalCentersPO = new Float32Array(4 * 2);
   for (let pi = 0; pi < 4; pi++) {
