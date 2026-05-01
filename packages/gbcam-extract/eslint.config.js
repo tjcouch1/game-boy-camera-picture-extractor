@@ -8,6 +8,9 @@ const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
 export default [
   ...root,
   {
+    ignores: ["dist/**", "dist-scripts/**", "dist-test/**"],
+  },
+  {
     files: ["**/*.{ts,tsx,js,mjs,cjs}"],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
@@ -15,13 +18,11 @@ export default [
         projectService: true,
         tsconfigRootDir,
         allowDefaultProject: [
-          "eslint.config.js",
+          "*.config.js",
           "vitest.config.ts",
           "vitest.setup.ts",
           "test-opencv-init-node.ts",
           "scripts/**/*.ts",
-          "dist-scripts/**/*.js",
-          "dist-test/**/*.js",
         ],
       },
     },

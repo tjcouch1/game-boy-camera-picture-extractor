@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { crop } from "../src/crop.js";
-import { createGBImageData, SCREEN_W, SCREEN_H, FRAME_THICK, CAM_W, CAM_H } from "../src/common.js";
+import {
+  createGBImageData,
+  SCREEN_W,
+  SCREEN_H,
+  FRAME_THICK,
+  CAM_W,
+  CAM_H,
+} from "../src/common.js";
 
 describe("crop", () => {
   it("extracts the 128x112 camera area from a 160x144 screen (at scale=1)", () => {
@@ -19,7 +26,11 @@ describe("crop", () => {
 
     // Fill the camera area (16..144, 16..128) with a distinct gray
     for (let y = FRAME_THICK * scale; y < (FRAME_THICK + CAM_H) * scale; y++) {
-      for (let x = FRAME_THICK * scale; x < (FRAME_THICK + CAM_W) * scale; x++) {
+      for (
+        let x = FRAME_THICK * scale;
+        x < (FRAME_THICK + CAM_W) * scale;
+        x++
+      ) {
         const idx = (y * w + x) * 4;
         input.data[idx] = 128;
         input.data[idx + 1] = 128;
@@ -49,7 +60,11 @@ describe("crop", () => {
 
     // Fill camera area with value 100
     for (let y = FRAME_THICK * scale; y < (FRAME_THICK + CAM_H) * scale; y++) {
-      for (let x = FRAME_THICK * scale; x < (FRAME_THICK + CAM_W) * scale; x++) {
+      for (
+        let x = FRAME_THICK * scale;
+        x < (FRAME_THICK + CAM_W) * scale;
+        x++
+      ) {
         const idx = (y * w + x) * 4;
         input.data[idx] = 100;
         input.data[idx + 1] = 100;

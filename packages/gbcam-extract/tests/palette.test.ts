@@ -18,7 +18,12 @@ describe("applyPalette", () => {
       }
     }
 
-    const palette: [string, string, string, string] = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00"];
+    const palette: [string, string, string, string] = [
+      "#FF0000",
+      "#00FF00",
+      "#0000FF",
+      "#FFFF00",
+    ];
     const result = applyPalette(input, palette);
 
     expect(result.width).toBe(CAM_W);

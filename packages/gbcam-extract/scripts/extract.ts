@@ -9,7 +9,6 @@ import { resolve, join, basename, extname, dirname } from "path";
 import { existsSync, mkdirSync, readdirSync, unlinkSync } from "fs";
 import sharp from "sharp";
 import { initOpenCV } from "../src/init-opencv.js";
-import { processPicture } from "../src/index.js";
 import { warp } from "../src/warp.js";
 import { correct } from "../src/correct.js";
 import { crop } from "../src/crop.js";
@@ -144,7 +143,7 @@ function collectForStart(
 
 async function loadImage(filePath: string): Promise<GBImageData> {
   const img = sharp(filePath).removeAlpha().ensureAlpha();
-  const { width, height } = (await sharp(filePath).metadata()) as { width: number; height: number };
+  await sharp(filePath).metadata();
   const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
 
   // Convert to RGBA Uint8ClampedArray
@@ -173,7 +172,10 @@ async function saveImage(img: GBImageData, outPath: string): Promise<void> {
 
 // ─── Step runners ───
 
-const STEP_FUNCTIONS: Record<string, (input: GBImageData, scale: number) => GBImageData> = {
+const STEP_FUNCTIONS: Record<
+  string,
+  (input: GBImageData, scale: number) => GBImageData
+> = {
   warp: (input, scale) => warp(input, { scale }),
   correct: (input, scale) => correct(input, { scale }),
   crop: (input, scale) => crop(input, { scale }),
@@ -265,15 +267,21 @@ async function main() {
   const startIdx = STEP_ORDER.indexOf(args.start);
   const endIdx = STEP_ORDER.indexOf(args.end);
   if (startIdx < 0) {
-    console.error(`Invalid --start step: ${args.start}. Choices: ${STEP_ORDER.join(", ")}`);
+    console.error(
+      `Invalid --start step: ${args.start}. Choices: ${STEP_ORDER.join(", ")}`,
+    );
     process.exit(1);
   }
   if (endIdx < 0) {
-    console.error(`Invalid --end step: ${args.end}. Choices: ${STEP_ORDER.join(", ")}`);
+    console.error(
+      `Invalid --end step: ${args.end}. Choices: ${STEP_ORDER.join(", ")}`,
+    );
     process.exit(1);
   }
   if (startIdx > endIdx) {
-    console.error(`--start ${args.start} comes after --end ${args.end} in the pipeline.`);
+    console.error(
+      `--start ${args.start} comes after --end ${args.end} in the pipeline.`,
+    );
     process.exit(1);
   }
 
@@ -301,7 +309,9 @@ async function main() {
   for (let fi = 0; fi < inputFiles.length; fi++) {
     const inputPath = inputFiles[fi];
     const inputStem = stripStepSuffix(basename(inputPath, extname(inputPath)));
-    const outDir = args.outputDir ? resolve(args.outputDir) : dirname(inputPath);
+    const outDir = args.outputDir
+      ? resolve(args.outputDir)
+      : dirname(inputPath);
 
     if (!existsSync(outDir)) {
       mkdirSync(outDir, { recursive: true });
@@ -315,7 +325,10 @@ async function main() {
       for (let si = 0; si < activeSteps.length; si++) {
         const stepName = activeSteps[si];
         const isFinal = si === activeSteps.length - 1;
-        const outPath = join(outDir, `${inputStem}${STEP_SUFFIX[stepName]}.png`);
+        const outPath = join(
+          outDir,
+          `${inputStem}${STEP_SUFFIX[stepName]}.png`,
+        );
 
         console.log(`  ${stepName}...`);
         const stepFn = STEP_FUNCTIONS[stepName];
@@ -342,9 +355,13 @@ async function main() {
         }
       }
 
-      console.log(`  -> ${inputStem}${STEP_SUFFIX[activeSteps[activeSteps.length - 1]]}.png`);
+      console.log(
+        `  -> ${inputStem}${STEP_SUFFIX[activeSteps[activeSteps.length - 1]]}.png`,
+      );
     } catch (err) {
-      console.error(`  ERROR: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(
+        `  ERROR: ${err instanceof Error ? err.message : String(err)}`,
+      );
       if (args.debug && err instanceof Error) {
         console.error(err.stack);
       }
@@ -372,8 +389,12 @@ async function main() {
         removed++;
       }
     }
-    if (moved) console.log(`  [clean-steps] Moved ${moved} intermediate file(s) to debug/`);
-    if (removed) console.log(`  [clean-steps] Deleted ${removed} intermediate file(s).`);
+    if (moved)
+      console.log(
+        `  [clean-steps] Moved ${moved} intermediate file(s) to debug/`,
+      );
+    if (removed)
+      console.log(`  [clean-steps] Deleted ${removed} intermediate file(s).`);
   }
 
   const succeeded = inputFiles.length - errors;

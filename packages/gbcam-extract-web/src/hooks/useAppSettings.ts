@@ -20,7 +20,10 @@ const DEFAULTS: AppSettings = {
 };
 
 export function useAppSettings() {
-  const [settings, setSettings] = useLocalStorage<AppSettings>(STORAGE_KEY, DEFAULTS);
+  const [settings, setSettings] = useLocalStorage<AppSettings>(
+    STORAGE_KEY,
+    DEFAULTS,
+  );
 
   const updateSetting = useCallback(
     <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {

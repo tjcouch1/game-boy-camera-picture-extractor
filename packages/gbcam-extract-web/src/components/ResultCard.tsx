@@ -1,11 +1,20 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import type { PipelineResult } from "gbcam-extract";
 import { applyPalette } from "gbcam-extract";
-import { canShare, shareImage, copyImageToClipboard } from "../utils/shareImage.js";
+import {
+  canShare,
+  shareImage,
+  copyImageToClipboard,
+} from "../utils/shareImage.js";
 import { sanitizePaletteName } from "../utils/filenames.js";
 import { Button } from "@/shadcn/components/button";
 import { Badge } from "@/shadcn/components/badge";
-import { Card, CardAction, CardContent, CardHeader } from "@/shadcn/components/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+} from "@/shadcn/components/card";
 import { toast } from "sonner";
 import { X, Download, Share2, Copy as CopyIcon } from "lucide-react";
 
@@ -43,7 +52,11 @@ function buildOutputCanvas(
     tmp
       .getContext("2d")!
       .putImageData(
-        new ImageData(new Uint8ClampedArray(colored.data), colored.width, colored.height),
+        new ImageData(
+          new Uint8ClampedArray(colored.data),
+          colored.width,
+          colored.height,
+        ),
         0,
         0,
       );
@@ -95,7 +108,11 @@ export function ResultCard({
       tmp
         .getContext("2d")!
         .putImageData(
-          new ImageData(new Uint8ClampedArray(colored.data), colored.width, colored.height),
+          new ImageData(
+            new Uint8ClampedArray(colored.data),
+            colored.width,
+            colored.height,
+          ),
           0,
           0,
         );
@@ -111,7 +128,9 @@ export function ResultCard({
     const basename = filename.replace(/\.[^.]+$/, "");
     const sanitized = sanitizePaletteName(paletteName);
     const link = document.createElement("a");
-    link.download = sanitized ? `${basename}_${sanitized}_gb.png` : `${basename}_gb.png`;
+    link.download = sanitized
+      ? `${basename}_${sanitized}_gb.png`
+      : `${basename}_gb.png`;
     link.href = outputCanvas.toDataURL("image/png");
     link.click();
   }, [result, palette, outputScale, filename, paletteName]);
@@ -120,7 +139,10 @@ export function ResultCard({
     const outputCanvas = buildOutputCanvas(result, palette, outputScale);
     if (!outputCanvas) return;
     try {
-      await shareImage(outputCanvas, filename.replace(/\.[^.]+$/, "") + "_gb.png");
+      await shareImage(
+        outputCanvas,
+        filename.replace(/\.[^.]+$/, "") + "_gb.png",
+      );
     } catch (err) {
       console.error("Failed to share image:", err);
     }
@@ -181,7 +203,11 @@ export function ResultCard({
               Share
             </Button>
           )}
-          <Button variant="secondary" onClick={handleCopy} aria-label="Copy image">
+          <Button
+            variant="secondary"
+            onClick={handleCopy}
+            aria-label="Copy image"
+          >
             <CopyIcon data-icon="inline-start" />
             Copy
           </Button>

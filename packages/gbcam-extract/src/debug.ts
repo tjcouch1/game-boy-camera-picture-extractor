@@ -170,6 +170,7 @@ export function drawLine(
   let err = dx + dy;
   const half = Math.floor(thickness / 2);
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     for (let oy = -half; oy <= half; oy++) {
       for (let ox = -half; ox <= half; ox++) {
@@ -199,7 +200,15 @@ export function drawPolyline(
 ): void {
   if (points.length < 2) return;
   for (let i = 0; i < points.length - 1; i++) {
-    drawLine(img, points[i][0], points[i][1], points[i + 1][0], points[i + 1][1], rgb, thickness);
+    drawLine(
+      img,
+      points[i][0],
+      points[i][1],
+      points[i + 1][0],
+      points[i + 1][1],
+      rgb,
+      thickness,
+    );
   }
   if (closed) {
     const a = points[points.length - 1];
@@ -262,8 +271,14 @@ export function hstack(a: GBImageData, b: GBImageData): GBImageData {
   const W = a.width + b.width;
   const out = createGBImageData(W, a.height);
   for (let y = 0; y < a.height; y++) {
-    out.data.set(a.data.subarray(y * a.width * 4, (y + 1) * a.width * 4), y * W * 4);
-    out.data.set(b.data.subarray(y * b.width * 4, (y + 1) * b.width * 4), (y * W + a.width) * 4);
+    out.data.set(
+      a.data.subarray(y * a.width * 4, (y + 1) * a.width * 4),
+      y * W * 4,
+    );
+    out.data.set(
+      b.data.subarray(y * b.width * 4, (y + 1) * b.width * 4),
+      (y * W + a.width) * 4,
+    );
   }
   return out;
 }
@@ -271,7 +286,9 @@ export function hstack(a: GBImageData, b: GBImageData): GBImageData {
 /** Nearest-neighbour upscale by integer factor (used for tiny output images). */
 export function upscale(img: GBImageData, factor: number): GBImageData {
   if (factor < 1 || !Number.isInteger(factor)) {
-    throw new Error(`upscale: factor must be a positive integer, got ${factor}`);
+    throw new Error(
+      `upscale: factor must be a positive integer, got ${factor}`,
+    );
   }
   if (factor === 1) return cloneImage(img);
   const W = img.width * factor;

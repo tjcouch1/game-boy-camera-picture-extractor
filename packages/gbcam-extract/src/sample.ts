@@ -25,7 +25,10 @@ export interface SampleOptions {
  * Output: 128×112 colour RGBA PNG (R/G/B channels carry real colour data).
  * The quantize step clusters in RG colour space and requires this.
  */
-export function sample(input: GBImageData, options?: SampleOptions): GBImageData {
+export function sample(
+  input: GBImageData,
+  options?: SampleOptions,
+): GBImageData {
   const scale = options?.scale ?? 8;
   const vMargin = options?.marginV ?? Math.max(1, Math.floor(scale / 5));
   const dbg = options?.debug;
@@ -129,7 +132,9 @@ export function sample(input: GBImageData, options?: SampleOptions): GBImageData
       if (b < bMin) bMin = b;
       if (b > bMax) bMax = b;
     }
-    dbg.log(`[sample] R: ${rMin}–${rMax}  G: ${gMin}–${gMax}  B: ${bMin}–${bMax}`);
+    dbg.log(
+      `[sample] R: ${rMin}–${rMax}  G: ${gMin}–${gMax}  B: ${bMin}–${bMax}`,
+    );
     const innerStartLog = 1;
     const innerEndLog = scale - 1;
     const innerWLog = innerEndLog - innerStartLog;

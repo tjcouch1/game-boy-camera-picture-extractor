@@ -4,7 +4,9 @@ let cv: any = null;
 
 export function getCV(): any {
   if (!cv) {
-    throw new Error("OpenCV not initialized. Call initOpenCV() before using pipeline functions.");
+    throw new Error(
+      "OpenCV not initialized. Call initOpenCV() before using pipeline functions.",
+    );
   }
   return cv;
 }
@@ -25,7 +27,9 @@ export function getCV(): any {
  *
  * @param onProgress - Optional callback for progress updates (percentage 0-100)
  */
-export async function initOpenCV(onProgress?: (percentage: number) => void): Promise<void> {
+export async function initOpenCV(
+  onProgress?: (percentage: number) => void,
+): Promise<void> {
   if (cv) return;
 
   try {

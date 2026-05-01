@@ -7,9 +7,21 @@ const TEST_CASES = [
   { name: "thing-1", input: "thing-1.jpg", ref: "thing-output-corrected.png" },
   { name: "thing-2", input: "thing-2.jpg", ref: "thing-output-corrected.png" },
   { name: "thing-3", input: "thing-3.jpg", ref: "thing-output-corrected.png" },
-  { name: "zelda-poster-1", input: "zelda-poster-1.jpg", ref: "zelda-poster-output-corrected.png" },
-  { name: "zelda-poster-2", input: "zelda-poster-2.jpg", ref: "zelda-poster-output-corrected.png" },
-  { name: "zelda-poster-3", input: "zelda-poster-3.jpg", ref: "zelda-poster-output-corrected.png" },
+  {
+    name: "zelda-poster-1",
+    input: "zelda-poster-1.jpg",
+    ref: "zelda-poster-output-corrected.png",
+  },
+  {
+    name: "zelda-poster-2",
+    input: "zelda-poster-2.jpg",
+    ref: "zelda-poster-output-corrected.png",
+  },
+  {
+    name: "zelda-poster-3",
+    input: "zelda-poster-3.jpg",
+    ref: "zelda-poster-output-corrected.png",
+  },
 ];
 
 beforeAll(async () => {

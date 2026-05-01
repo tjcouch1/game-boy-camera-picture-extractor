@@ -33,11 +33,15 @@ import {
   INNER_RIGHT,
   createGBImageData,
 } from "./common.js";
-import { type DebugCollector, cropImage, hstack, renderHeatmap } from "./debug.js";
+import {
+  type DebugCollector,
+  cropImage,
+  hstack,
+  renderHeatmap,
+} from "./debug.js";
 
 // ─── Constants ───
 
-const TRUE_DARK = 82;
 const TRUE_WHITE = 255;
 
 // ─── Public interface ───
@@ -56,7 +60,10 @@ export interface CorrectOptions {
  * Input: warped image at (SCREEN_W * scale) x (SCREEN_H * scale) px.
  * Output: same dimensions, brightness-normalised grayscale.
  */
-export function correct(input: GBImageData, options?: CorrectOptions): GBImageData {
+export function correct(
+  input: GBImageData,
+  options?: CorrectOptions,
+): GBImageData {
   const scale = options?.scale ?? 8;
   const polyDegree = options?.polyDegree ?? 2;
   const darkSmooth = options?.darkSmooth ?? 13;
@@ -90,18 +97,84 @@ export function correct(input: GBImageData, options?: CorrectOptions): GBImageDa
   // ── Perform per-channel correction ──
 
   // R channel: white=255, dark=148 (DG.R)
-  const { ys: whiteYsR, xs: whiteXsR, vs: whiteVsR } = collectWhiteSamples(chR, W, H, scale);
-  const whiteSurfaceR = fitSurface(whiteYsR, whiteXsR, whiteVsR, H, W, polyDegree);
-  const { left: leftR, right: rightR, top: topR, bot: botR } = collectDarkSamples(chR, W, H, scale);
-  let darkSurfaceR = buildDarkSurface(leftR, rightR, topR, botR, H, W, scale, darkSmooth);
-  let correctedR = applyCorrectionChannel(chR, whiteSurfaceR, darkSurfaceR, W, H, 255, 148);
+  const {
+    ys: whiteYsR,
+    xs: whiteXsR,
+    vs: whiteVsR,
+  } = collectWhiteSamples(chR, W, H, scale);
+  const whiteSurfaceR = fitSurface(
+    whiteYsR,
+    whiteXsR,
+    whiteVsR,
+    H,
+    W,
+    polyDegree,
+  );
+  const {
+    left: leftR,
+    right: rightR,
+    top: topR,
+    bot: botR,
+  } = collectDarkSamples(chR, W, H, scale);
+  let darkSurfaceR = buildDarkSurface(
+    leftR,
+    rightR,
+    topR,
+    botR,
+    H,
+    W,
+    scale,
+    darkSmooth,
+  );
+  let correctedR = applyCorrectionChannel(
+    chR,
+    whiteSurfaceR,
+    darkSurfaceR,
+    W,
+    H,
+    255,
+    148,
+  );
 
   // G channel: white=255, dark=148 (DG.G)
-  const { ys: whiteYsG, xs: whiteXsG, vs: whiteVsG } = collectWhiteSamples(chG, W, H, scale);
-  const whiteSurfaceG = fitSurface(whiteYsG, whiteXsG, whiteVsG, H, W, polyDegree);
-  const { left: leftG, right: rightG, top: topG, bot: botG } = collectDarkSamples(chG, W, H, scale);
-  let darkSurfaceG = buildDarkSurface(leftG, rightG, topG, botG, H, W, scale, darkSmooth);
-  let correctedG = applyCorrectionChannel(chG, whiteSurfaceG, darkSurfaceG, W, H, 255, 148);
+  const {
+    ys: whiteYsG,
+    xs: whiteXsG,
+    vs: whiteVsG,
+  } = collectWhiteSamples(chG, W, H, scale);
+  const whiteSurfaceG = fitSurface(
+    whiteYsG,
+    whiteXsG,
+    whiteVsG,
+    H,
+    W,
+    polyDegree,
+  );
+  const {
+    left: leftG,
+    right: rightG,
+    top: topG,
+    bot: botG,
+  } = collectDarkSamples(chG, W, H, scale);
+  let darkSurfaceG = buildDarkSurface(
+    leftG,
+    rightG,
+    topG,
+    botG,
+    H,
+    W,
+    scale,
+    darkSmooth,
+  );
+  let correctedG = applyCorrectionChannel(
+    chG,
+    whiteSurfaceG,
+    darkSurfaceG,
+    W,
+    H,
+    255,
+    148,
+  );
 
   // B channel: white=dark (no correction, both are close to ~200)
   // For simplicity, keep B as-is or apply light correction
@@ -119,10 +192,12 @@ export function correct(input: GBImageData, options?: CorrectOptions): GBImageDa
         `${Math.min(...whiteVsG).toFixed(0)}–${Math.max(...whiteVsG).toFixed(0)})`,
     );
     dbg.log(
-      `[correct] white surface R: ${surfRange(whiteSurfaceR)}; ` + `G: ${surfRange(whiteSurfaceG)}`,
+      `[correct] white surface R: ${surfRange(whiteSurfaceR)}; ` +
+        `G: ${surfRange(whiteSurfaceG)}`,
     );
     dbg.log(
-      `[correct] dark surface  R: ${surfRange(darkSurfaceR)}; ` + `G: ${surfRange(darkSurfaceG)}`,
+      `[correct] dark surface  R: ${surfRange(darkSurfaceR)}; ` +
+        `G: ${surfRange(darkSurfaceG)}`,
     );
   }
 
@@ -168,7 +243,9 @@ export function correct(input: GBImageData, options?: CorrectOptions): GBImageDa
   }
 
   if (dbg && refinePasses > 0) {
-    dbg.log(`[correct] interior DG calibration: R=${calCountR}px G=${calCountG}px`);
+    dbg.log(
+      `[correct] interior DG calibration: R=${calCountR}px G=${calCountG}px`,
+    );
   }
 
   // ── Build output RGBA ──
@@ -222,12 +299,24 @@ export function correct(input: GBImageData, options?: CorrectOptions): GBImageDa
     dbg.setMetrics("correct", {
       whiteSamples: { R: whiteVsR.length, G: whiteVsG.length },
       whiteSurfaceRange: {
-        R: [Number(min(whiteSurfaceR).toFixed(2)), Number(max(whiteSurfaceR).toFixed(2))],
-        G: [Number(min(whiteSurfaceG).toFixed(2)), Number(max(whiteSurfaceG).toFixed(2))],
+        R: [
+          Number(min(whiteSurfaceR).toFixed(2)),
+          Number(max(whiteSurfaceR).toFixed(2)),
+        ],
+        G: [
+          Number(min(whiteSurfaceG).toFixed(2)),
+          Number(max(whiteSurfaceG).toFixed(2)),
+        ],
       },
       darkSurfaceRange: {
-        R: [Number(min(darkSurfaceR).toFixed(2)), Number(max(darkSurfaceR).toFixed(2))],
-        G: [Number(min(darkSurfaceG).toFixed(2)), Number(max(darkSurfaceG).toFixed(2))],
+        R: [
+          Number(min(darkSurfaceR).toFixed(2)),
+          Number(max(darkSurfaceR).toFixed(2)),
+        ],
+        G: [
+          Number(min(darkSurfaceG).toFixed(2)),
+          Number(max(darkSurfaceG).toFixed(2)),
+        ],
       },
       dgCalibrationPixels: { R: calCountR, G: calCountG },
       framePostCorrectionP85: {
@@ -306,7 +395,10 @@ function framePost85(img: GBImageData): { R: number; G: number; B: number } {
   return result;
 }
 
-function cameraRegionMean(img: GBImageData, scale: number): [number, number, number] {
+function cameraRegionMean(
+  img: GBImageData,
+  scale: number,
+): [number, number, number] {
   const x0 = FRAME_THICK * scale;
   const y0 = FRAME_THICK * scale;
   const x1 = (FRAME_THICK + CAM_W) * scale;
@@ -458,7 +550,10 @@ function collectDarkSamples(
 
 // ─── Uniform filter 1D (simple moving average with nearest boundary) ───
 
-export function uniformFilter1d(input: Float64Array, size: number): Float64Array {
+export function uniformFilter1d(
+  input: Float64Array,
+  size: number,
+): Float64Array {
   const half = Math.floor(size / 2);
   const n = input.length;
   const output = new Float64Array(n);
@@ -480,7 +575,11 @@ export function uniformFilter1d(input: Float64Array, size: number): Float64Array
 
 // ─── Linear interpolation (like numpy.interp) ───
 
-function linearInterp(xp: Float64Array, yp: Float64Array, xNew: Float64Array): Float64Array {
+function linearInterp(
+  xp: Float64Array,
+  yp: Float64Array,
+  xNew: Float64Array,
+): Float64Array {
   const result = new Float64Array(xNew.length);
   const n = xp.length;
 
@@ -601,7 +700,11 @@ function buildDarkSurface(
  * Build the Vandermonde design matrix for a bivariate polynomial.
  * Terms: x^dx * y^dy for all dx + dy <= degree.
  */
-function buildDesignMatrix(yn: Float64Array, xn: Float64Array, degree: number): Float64Array {
+function buildDesignMatrix(
+  yn: Float64Array,
+  xn: Float64Array,
+  degree: number,
+): Float64Array {
   const n = yn.length;
   // Count terms
   let numTerms = 0;
@@ -903,7 +1006,11 @@ function refinePassChannel(
   darkSmooth: number,
   whiteTarget: number,
   darkTarget: number,
-): { darkSurface: Float32Array; corrected: Float32Array; calCount: number } | null {
+): {
+  darkSurface: Float32Array;
+  corrected: Float32Array;
+  calCount: number;
+} | null {
   // Quick-sample the corrected image to get per-GB-pixel brightness
   const sampled = quickSample(corrected, W, scale);
 
@@ -939,7 +1046,11 @@ function refinePassChannel(
             values.push(channel[y * W + x]);
           }
         }
-        calV.push(values.length > 0 ? computePercentile(values, 50) : channel[py * W + px]);
+        calV.push(
+          values.length > 0
+            ? computePercentile(values, 50)
+            : channel[py * W + px],
+        );
       }
     }
   }
@@ -947,7 +1058,13 @@ function refinePassChannel(
   if (calY.length < 50) return null;
 
   // Collect border dark samples
-  const { borderY, borderX, borderV } = collectBorderDarkForPoly(channel, W, H, scale, darkSmooth);
+  const { borderY, borderX, borderV } = collectBorderDarkForPoly(
+    channel,
+    W,
+    H,
+    scale,
+    darkSmooth,
+  );
 
   // Combine border + interior calibration points
   const allY = borderY.concat(calY);
@@ -981,7 +1098,8 @@ function refinePassChannel(
         const blendFactor = distToEdge / blendMargin;
         const idx = y * W + x;
         newDarkSurface[idx] =
-          (1 - blendFactor) * darkSurface[idx] + blendFactor * newDarkSurface[idx];
+          (1 - blendFactor) * darkSurface[idx] +
+          blendFactor * newDarkSurface[idx];
       }
     }
   }
@@ -997,5 +1115,9 @@ function refinePassChannel(
     darkTarget,
   );
 
-  return { darkSurface: newDarkSurface, corrected: newCorrected, calCount: calY.length };
+  return {
+    darkSurface: newDarkSurface,
+    corrected: newCorrected,
+    calCount: calY.length,
+  };
 }

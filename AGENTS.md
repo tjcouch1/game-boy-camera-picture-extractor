@@ -159,24 +159,29 @@ When the TS pipeline runs with `debug: true` (always on for `pnpm test:pipeline`
 All filenames are prefixed with the input stem (e.g. `thing-1_`).
 
 **warp**
+
 - `<stem>_warp.png` — final warped (160·scale)×(144·scale) RGBA image (post both refinement passes). This is the regular pipeline intermediate, not strictly a "debug" image.
 - `<stem>_warp_a_corners.png` — original input photo with the four detected screen corners drawn as green discs and a green polyline. Use this to verify the corner-detection step found the right quadrilateral.
 
 **correct**
+
 - `<stem>_correct.png` — final brightness-corrected RGBA image (regular intermediate).
 - `<stem>_correct_a_before_after.png` — camera region (128·scale × 112·scale) shown side-by-side: warped input on the left, corrected output on the right. Quickest visual check of whether the brightness gradient was removed.
 - `<stem>_correct_b_white_surface.png` — JET heatmap (red=high, blue=low) of the average of the R-channel and G-channel white-reference surfaces. Visualises the front-light brightness gradient model — should be smooth.
 - `<stem>_correct_c_dark_surface.png` — same but for the dark-reference (DG) surfaces. Both surfaces together define the per-pixel affine correction.
 
 **crop**
+
 - `<stem>_crop.png` — cropped (128·scale)×(112·scale) RGBA image (regular intermediate).
 - `<stem>_crop_a_region.png` — full warp output with the crop rectangle (green) and the inner-border band (orange) overlaid. Confirms the crop is taking pixels from the right place.
 
 **sample**
+
 - `<stem>_sample.png` — 128×112 RGBA image, one pixel per GB pixel, holding the per-channel sub-pixel-aware brightness samples (regular intermediate).
 - `<stem>_sample_a_8x.png` — 8× nearest-neighbour upscale of the sample image so individual GB pixels are visible.
 
 **quantize**
+
 - `<stem>_gbcam.png` (in the parent directory, not `debug/`) — final 128×112 grayscale, values exactly 0/82/165/255.
 - `<stem>_gbcam_rgb.png` (in the parent directory) — same image rendered with the "Down" palette colors.
 - `<stem>_quantize_a_gray_8x.png` — 8× upscaled grayscale output.
@@ -197,13 +202,13 @@ Lives at `test-output/<test-name>/debug/<test-name>_debug.json`. JSON with two t
 
 Schema by step:
 
-| Step | Key fields |
-|------|------------|
-| `warp` | `threshold`, `contourArea`, `aspect`, `quadScore`, `sourceCorners`, `pass1.{edgeCurvatures, cornerErrors, refined}`, `pass2.{...}` |
-| `correct` | `whiteSamples.{R,G}` (count of frame blocks kept), `whiteSurfaceRange.{R,G}`, `darkSurfaceRange.{R,G}`, `dgCalibrationPixels.{R,G}` (interior DG pixels used in refinement), `framePostCorrectionP85.{R,G,B}` |
-| `crop` | `cameraRegion`, `borderMean`, `whiteFrameMean`, `borderToFrameRatio`, `validation` ("ok" \| "warn") |
-| `sample` | `ranges.{R,G,B}`, `subpixelCols.{B,G,R}`, `vMargin` |
-| `quantize` | `clusterCenters` (palette-ordered), `stripEnsemble.{strips, changed}`, `valleyRefinement.{threshold, changed}`, `counts.{afterGlobalKmeans, afterStripEnsemble, final}` |
+| Step       | Key fields                                                                                                                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `warp`     | `threshold`, `contourArea`, `aspect`, `quadScore`, `sourceCorners`, `pass1.{edgeCurvatures, cornerErrors, refined}`, `pass2.{...}`                                                                            |
+| `correct`  | `whiteSamples.{R,G}` (count of frame blocks kept), `whiteSurfaceRange.{R,G}`, `darkSurfaceRange.{R,G}`, `dgCalibrationPixels.{R,G}` (interior DG pixels used in refinement), `framePostCorrectionP85.{R,G,B}` |
+| `crop`     | `cameraRegion`, `borderMean`, `whiteFrameMean`, `borderToFrameRatio`, `validation` ("ok" \| "warn")                                                                                                           |
+| `sample`   | `ranges.{R,G,B}`, `subpixelCols.{B,G,R}`, `vMargin`                                                                                                                                                           |
+| `quantize` | `clusterCenters` (palette-ordered), `stripEnsemble.{strips, changed}`, `valleyRefinement.{threshold, changed}`, `counts.{afterGlobalKmeans, afterStripEnsemble, final}`                                       |
 
 #### Enabling debug from the API
 
@@ -219,6 +224,48 @@ const result = await processPicture(input, { scale: 8, debug: true });
 ```
 
 Both `pnpm test:pipeline` and the sample-pictures portion of the same script always run with `debug: true`; the standalone `pnpm extract` script does not currently surface debug output.
+
+### Linting and Formatting
+
+The repo uses **ESLint 9** (flat config) for TypeScript linting and **Prettier 3.5** for code formatting. Both tools run automatically on staged files via Husky pre-commit hooks.
+
+**Root commands:**
+
+```bash
+# Check for lint violations
+pnpm lint
+
+# Fix auto-fixable lint violations
+pnpm lint:fix
+
+# Check code formatting
+pnpm format:check
+
+# Apply Prettier formatting
+pnpm format
+```
+
+**Per-package linting:**
+
+```bash
+cd packages/gbcam-extract && pnpm lint
+cd packages/gbcam-extract-web && pnpm lint
+```
+
+**Pre-commit hooks:**
+
+Husky automatically runs `pnpm lint-staged` before each commit, which lints and formats only the staged files. If a commit fails due to lint errors, fix them, stage the changes, and try committing again. To bypass pre-commit checks (not recommended):
+
+```bash
+git commit --no-verify
+```
+
+**Configuration:**
+
+- ESLint: Root config at `eslint.config.js` (flat format), extended by per-package configs
+- Prettier: Root config at `prettier.config.js`, excludes in `.prettierignore`
+- Lint rules: Simplified to `@eslint/js` recommended + `typescript-eslint` recommended for practicality
+- Formatting: printWidth 100, all other Prettier 3 defaults (2-space indent, double quotes, semicolons, etc.)
 
 ### Website
 
@@ -377,7 +424,7 @@ app code.
 ### Theming
 
 - Theme via `next-themes`: `<ThemeProvider attribute="class"
-  defaultTheme="system">`.
+defaultTheme="system">`.
 - Mode toggle in the App header (`<ModeToggle>` — light/dark/system).
 - Theme-aware app icon: read `useTheme().resolvedTheme` and switch
   `icon.svg` ↔ `icon-dark.svg` (matching `icon.png`/`icon-dark.png`).

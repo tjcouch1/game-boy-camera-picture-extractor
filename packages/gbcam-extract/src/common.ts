@@ -16,7 +16,13 @@ export const INNER_LEFT = FRAME_THICK - 1; // 15
 export const INNER_RIGHT = FRAME_THICK + CAM_W; // 144
 
 // ─── Pipeline step registry ───
-export const STEP_ORDER = ["warp", "correct", "crop", "sample", "quantize"] as const;
+export const STEP_ORDER = [
+  "warp",
+  "correct",
+  "crop",
+  "sample",
+  "quantize",
+] as const;
 export type StepName = (typeof STEP_ORDER)[number];
 
 // ─── Framework-agnostic image type ───

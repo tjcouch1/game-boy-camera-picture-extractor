@@ -1,4 +1,11 @@
-import { type GBImageData, SCREEN_W, SCREEN_H, FRAME_THICK, CAM_W, CAM_H } from "./common.js";
+import {
+  type GBImageData,
+  SCREEN_W,
+  SCREEN_H,
+  FRAME_THICK,
+  CAM_W,
+  CAM_H,
+} from "./common.js";
 import { type DebugCollector, cloneImage, strokeRect } from "./debug.js";
 
 export interface CropOptions {
@@ -46,7 +53,13 @@ export function crop(input: GBImageData, options?: CropOptions): GBImageData {
   if (dbg) {
     // Brightness validation: inner border band should be darker than the white frame
     const borderMean = bandMean(input, x1 - scale, y1, scale, outH); // left border band
-    const whiteMean = bandMean(input, 20 * scale, 1 * scale, 120 * scale, 3 * scale);
+    const whiteMean = bandMean(
+      input,
+      20 * scale,
+      1 * scale,
+      120 * scale,
+      3 * scale,
+    );
     const ok = borderMean < whiteMean * 0.85;
     dbg.log(
       `[crop] inner-border mean=${borderMean.toFixed(1)} ` +
@@ -57,7 +70,9 @@ export function crop(input: GBImageData, options?: CropOptions): GBImageData {
       cameraRegion: { x: x1, y: y1, w: outW, h: outH },
       borderMean: Number(borderMean.toFixed(2)),
       whiteFrameMean: Number(whiteMean.toFixed(2)),
-      borderToFrameRatio: Number((borderMean / Math.max(whiteMean, 1)).toFixed(4)),
+      borderToFrameRatio: Number(
+        (borderMean / Math.max(whiteMean, 1)).toFixed(4),
+      ),
       validation: ok ? "ok" : "warn",
     });
 
@@ -76,7 +91,15 @@ export function crop(input: GBImageData, options?: CropOptions): GBImageData {
       Math.max(2, Math.round(scale / 4)),
     );
     // Crop rectangle
-    strokeRect(overlay, x1, y1, outW, outH, green, Math.max(3, Math.round(scale / 3)));
+    strokeRect(
+      overlay,
+      x1,
+      y1,
+      outW,
+      outH,
+      green,
+      Math.max(3, Math.round(scale / 3)),
+    );
     // Suppress unused warnings for x2/y2 — they're conceptual and used for clarity above
     void x2;
     void y2;
@@ -87,7 +110,13 @@ export function crop(input: GBImageData, options?: CropOptions): GBImageData {
 }
 
 /** Mean luminance (R+G+B / 3) over an axis-aligned band, clipped to image bounds. */
-function bandMean(img: GBImageData, x: number, y: number, w: number, h: number): number {
+function bandMean(
+  img: GBImageData,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): number {
   const x0 = Math.max(0, Math.floor(x));
   const y0 = Math.max(0, Math.floor(y));
   const x1 = Math.min(img.width, Math.floor(x + w));

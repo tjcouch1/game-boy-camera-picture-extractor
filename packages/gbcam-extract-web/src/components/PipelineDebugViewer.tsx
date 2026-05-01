@@ -52,9 +52,18 @@ function StepCanvas({
   }, [image, maxW]);
 
   return (
-    <Card className="flex shrink-0 flex-col items-center gap-1 p-2" style={{ maxWidth: maxW }}>
-      <p className="text-muted-foreground break-all text-center text-xs font-medium">{label}</p>
-      <canvas ref={canvasRef} className="rounded border" style={{ imageRendering: "pixelated" }} />
+    <Card
+      className="flex shrink-0 flex-col items-center gap-1 p-2"
+      style={{ maxWidth: maxW }}
+    >
+      <p className="text-muted-foreground break-all text-center text-xs font-medium">
+        {label}
+      </p>
+      <canvas
+        ref={canvasRef}
+        className="rounded border"
+        style={{ imageRendering: "pixelated" }}
+      />
       <Badge variant="secondary" className="text-[10px]">
         {image.width} × {image.height}
       </Badge>
@@ -80,7 +89,10 @@ function groupDebugImages(
     }));
 }
 
-export function PipelineDebugViewer({ intermediates, debug }: PipelineDebugViewerProps) {
+export function PipelineDebugViewer({
+  intermediates,
+  debug,
+}: PipelineDebugViewerProps) {
   const intermediateSteps = useMemo(() => {
     if (!intermediates) return [];
     return [
@@ -107,7 +119,9 @@ export function PipelineDebugViewer({ intermediates, debug }: PipelineDebugViewe
   return (
     <Collapsible className="bg-muted/40 mt-2 rounded-lg p-3">
       <CollapsibleTrigger
-        render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}
+        render={
+          <Button variant="ghost" size="sm" className="text-muted-foreground" />
+        }
       >
         Debug: Pipeline Diagnostics
         <ChevronDown
@@ -123,7 +137,11 @@ export function PipelineDebugViewer({ intermediates, debug }: PipelineDebugViewe
               <AccordionContent>
                 <div className="flex flex-wrap items-start gap-3">
                   {intermediateSteps.map((step) => (
-                    <StepCanvas key={step.label} label={step.label} image={step.image} />
+                    <StepCanvas
+                      key={step.label}
+                      label={step.label}
+                      image={step.image}
+                    />
                   ))}
                 </div>
               </AccordionContent>
@@ -165,7 +183,9 @@ export function PipelineDebugViewer({ intermediates, debug }: PipelineDebugViewe
 
           {hasLog && (
             <AccordionItem value="log">
-              <AccordionTrigger>Log ({debug!.log.length} lines)</AccordionTrigger>
+              <AccordionTrigger>
+                Log ({debug!.log.length} lines)
+              </AccordionTrigger>
               <AccordionContent>
                 <pre className="bg-background/60 overflow-x-auto whitespace-pre rounded p-2 text-[11px]">
                   {debug!.log.join("\n")}

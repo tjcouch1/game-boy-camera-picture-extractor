@@ -10,7 +10,13 @@
  */
 
 import { resolve, join, basename, extname, relative } from "path";
-import { existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  writeFileSync,
+  readFileSync,
+} from "fs";
 import sharp from "sharp";
 import { initOpenCV } from "../src/init-opencv.js";
 import { processPicture } from "../src/index.js";
@@ -19,7 +25,12 @@ import type { GBImageData } from "../src/common.js";
 import { GB_COLORS, CAM_W, CAM_H } from "../src/common.js";
 
 // "Down" palette (matches the GBA SP screen colors used as input).
-const DOWN_PALETTE: [string, string, string, string] = ["#FFFFA5", "#FF9494", "#9494FF", "#000000"];
+const DOWN_PALETTE: [string, string, string, string] = [
+  "#FFFFA5",
+  "#FF9494",
+  "#9494FF",
+  "#000000",
+];
 
 // ─── Paths ───
 
@@ -86,7 +97,9 @@ async function loadReference(filePath: string): Promise<Uint8Array> {
     .toBuffer({ resolveWithObject: true });
 
   if (info.width !== CAM_W || info.height !== CAM_H) {
-    throw new Error(`Reference image is ${info.width}x${info.height}, expected ${CAM_W}x${CAM_H}`);
+    throw new Error(
+      `Reference image is ${info.width}x${info.height}, expected ${CAM_W}x${CAM_H}`,
+    );
   }
 
   // Snap to nearest palette value
@@ -195,14 +208,11 @@ function compare(
 
   for (const rv of GB_COLORS) {
     let row = `  ${COLOR_NAMES[rv].padEnd(18)}`;
-    let totalR = 0;
     for (const cv of GB_COLORS) {
       let cnt = 0;
       for (let i = 0; i < total; i++) {
         if (result[i] === rv && reference[i] === cv) cnt++;
       }
-      if (rv === cv) totalR += cnt;
-      else totalR += cnt;
       const mark = rv === cv ? " v" : cnt === 0 ? "  " : " X";
       row += `  ${String(cnt).padStart(15)}${mark}`;
     }
@@ -415,7 +425,11 @@ async function writeDebugArtifacts(
   if (result.debug) {
     writeFileSync(
       join(debugDir, `${stem}_debug.json`),
-      JSON.stringify({ metrics: result.debug.metrics, log: result.debug.log }, null, 2),
+      JSON.stringify(
+        { metrics: result.debug.metrics, log: result.debug.log },
+        null,
+        2,
+      ),
       "utf-8",
     );
   }
@@ -432,7 +446,7 @@ interface TestResult {
   verdict: string;
 }
 
-function parseTestLog(logPath: string): Omit<TestResult, "name"> {
+function _parseTestLog(logPath: string): Omit<TestResult, "name"> {
   if (!existsSync(logPath)) {
     return {
       matchN: null,
@@ -446,7 +460,9 @@ function parseTestLog(logPath: string): Omit<TestResult, "name"> {
   const text = readFileSync(logPath, "utf-8");
 
   function extract(label: string): [number | null, number | null] {
-    const m = new RegExp(`${label}\\s*:\\s*(\\d+)\\s*\\(\\s*([\\d.]+)%\\)`).exec(text);
+    const m = new RegExp(
+      `${label}\\s*:\\s*(\\d+)\\s*\\(\\s*([\\d.]+)%\\)`,
+    ).exec(text);
     if (m) return [parseInt(m[1], 10), parseFloat(m[2])];
     return [null, null];
   }
@@ -499,7 +515,8 @@ function writeSummary(sampleExit: boolean, testResults: TestResult[]): void {
   const text = lines.join("\n") + "\n";
   console.log("\n" + text);
 
-  if (!existsSync(TEST_OUTPUT_DIR)) mkdirSync(TEST_OUTPUT_DIR, { recursive: true });
+  if (!existsSync(TEST_OUTPUT_DIR))
+    mkdirSync(TEST_OUTPUT_DIR, { recursive: true });
   writeFileSync(SUMMARY_LOG, text, "utf-8");
   console.log(`Summary written to ${SUMMARY_LOG}`);
 }
@@ -527,7 +544,8 @@ async function main() {
       console.log(`SAMPLE PICTURES: ${sampleFiles.length} file(s)`);
       console.log("=".repeat(70));
 
-      if (!existsSync(SAMPLE_PICTURES_OUT)) mkdirSync(SAMPLE_PICTURES_OUT, { recursive: true });
+      if (!existsSync(SAMPLE_PICTURES_OUT))
+        mkdirSync(SAMPLE_PICTURES_OUT, { recursive: true });
 
       for (const inputPath of sampleFiles) {
         const stem = basename(inputPath, extname(inputPath));
@@ -542,14 +560,22 @@ async function main() {
               if (pct === 100) process.stdout.write(" done\n");
             },
           });
-          await saveImage(result.grayscale, join(SAMPLE_PICTURES_OUT, `${stem}_gbcam.png`));
+          await saveImage(
+            result.grayscale,
+            join(SAMPLE_PICTURES_OUT, `${stem}_gbcam.png`),
+          );
 
           const rgb = applyPalette(result.grayscale, DOWN_PALETTE);
-          await saveImage(rgb, join(SAMPLE_PICTURES_OUT, `${stem}_gbcam_rgb.png`));
+          await saveImage(
+            rgb,
+            join(SAMPLE_PICTURES_OUT, `${stem}_gbcam_rgb.png`),
+          );
 
           await writeDebugArtifacts(result, SAMPLE_PICTURES_OUT, stem);
         } catch (err) {
-          console.error(`  ERROR: ${err instanceof Error ? err.message : String(err)}`);
+          console.error(
+            `  ERROR: ${err instanceof Error ? err.message : String(err)}`,
+          );
           sampleSuccess = false;
         }
       }
@@ -561,7 +587,9 @@ async function main() {
   // ── 2. Run test cases ──
   if (existsSync(TEST_INPUT_DIR)) {
     const allFiles = readdirSync(TEST_INPUT_DIR);
-    const referenceFiles = allFiles.filter((f) => f.endsWith(REFERENCE_SUFFIX)).sort();
+    const referenceFiles = allFiles
+      .filter((f) => f.endsWith(REFERENCE_SUFFIX))
+      .sort();
 
     for (const refFilename of referenceFiles) {
       const baseName = refFilename.slice(0, -REFERENCE_SUFFIX.length);
@@ -605,7 +633,12 @@ async function main() {
           log(`  Input:      ${relative(REPO_ROOT, inputPath)}`);
           log(`  Output dir: ${relative(REPO_ROOT, outputDir)}`);
 
-          const pipelineResult = await runPipeline(inputPath, outputDir, stem, 8);
+          const pipelineResult = await runPipeline(
+            inputPath,
+            outputDir,
+            stem,
+            8,
+          );
 
           // Echo per-step diagnostic logs into the test log
           if (pipelineResult.debugLog.length > 0) {
@@ -621,8 +654,16 @@ async function main() {
 
           // Save diagnostic images
           await saveErrorMap(resultGray, referenceGray, outputDir, stem);
-          await savePaletteImage(resultGray, outputDir, `${stem}_diag_result.png`);
-          await savePaletteImage(referenceGray, outputDir, `${stem}_diag_reference.png`);
+          await savePaletteImage(
+            resultGray,
+            outputDir,
+            `${stem}_diag_result.png`,
+          );
+          await savePaletteImage(
+            referenceGray,
+            outputDir,
+            `${stem}_diag_reference.png`,
+          );
 
           // Write log
           writeFileSync(logPath, logLines.join("\n") + "\n", "utf-8");
@@ -637,11 +678,15 @@ async function main() {
             verdict: cmp.passed ? "PASS" : "FAIL",
           });
         } catch (err) {
-          console.error(`  PIPELINE ERROR: ${err instanceof Error ? err.message : String(err)}`);
+          console.error(
+            `  PIPELINE ERROR: ${err instanceof Error ? err.message : String(err)}`,
+          );
           if (err instanceof Error) console.error(err.stack);
 
           // Write error log
-          logLines.push(`PIPELINE ERROR: ${err instanceof Error ? err.message : String(err)}`);
+          logLines.push(
+            `PIPELINE ERROR: ${err instanceof Error ? err.message : String(err)}`,
+          );
           writeFileSync(logPath, logLines.join("\n") + "\n", "utf-8");
 
           testResults.push({

@@ -28,13 +28,21 @@ async function main() {
 
     // Test 2: Verify OpenCV has required properties
     console.log("2. Verifying OpenCV module has required properties...");
-    const requiredProps = ["Mat", "kmeans", "TermCriteria", "CV_8UC4", "CV_32F"];
+    const requiredProps = [
+      "Mat",
+      "kmeans",
+      "TermCriteria",
+      "CV_8UC4",
+      "CV_32F",
+    ];
     const missingProps = requiredProps.filter((prop) => !(prop in cv));
 
     if (missingProps.length > 0) {
       throw new Error(`Missing OpenCV properties: ${missingProps.join(", ")}`);
     }
-    console.log(`   ✓ All required properties present: ${requiredProps.join(", ")}\n`);
+    console.log(
+      `   ✓ All required properties present: ${requiredProps.join(", ")}\n`,
+    );
 
     // Test 3: Create a test Mat
     console.log("3. Creating and using a test Mat...");
@@ -48,7 +56,11 @@ async function main() {
 
     // Test 4: Test TermCriteria
     console.log("4. Testing TermCriteria...");
-    const _criteria = new cv.TermCriteria(cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 300, 1.0);
+    const _criteria = new cv.TermCriteria(
+      cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER,
+      300,
+      1.0,
+    );
     console.log(`   ✓ TermCriteria created successfully\n`);
 
     console.log("✅ All tests passed!\n");

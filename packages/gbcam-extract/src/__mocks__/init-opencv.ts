@@ -12,7 +12,9 @@ let cv: any = null;
 
 export function getCV(): any {
   if (!cv) {
-    throw new Error("OpenCV not initialized. Call initOpenCV() before using pipeline functions.");
+    throw new Error(
+      "OpenCV not initialized. Call initOpenCV() before using pipeline functions.",
+    );
   }
   return cv;
 }
@@ -22,7 +24,9 @@ export function getCV(): any {
  *
  * @param onProgress - Optional callback for progress updates (percentage 0-100)
  */
-export async function initOpenCV(onProgress?: (percentage: number) => void): Promise<void> {
+export async function initOpenCV(
+  onProgress?: (percentage: number) => void,
+): Promise<void> {
   if (cv) return;
 
   // Vitest - use require() to load @techstark/opencv-js
@@ -33,7 +37,7 @@ export async function initOpenCV(onProgress?: (percentage: number) => void): Pro
     const require = createRequire(import.meta.url);
 
     // Use CommonJS require which works better with the WASM module initialization
-     
+
     const cvModule = require("@techstark/opencv-js");
 
     // Support both Promise-based and callback-based APIs

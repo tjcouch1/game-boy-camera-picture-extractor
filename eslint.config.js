@@ -18,6 +18,7 @@ export default [
       "pnpm-lock.yaml",
       "supporting-materials/**",
       "test-input/**",
+      "**/eslint.config.js",
     ],
   },
   js.configs.recommended,
@@ -25,7 +26,11 @@ export default [
   {
     files: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"],
     rules: {
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/no-explicit-any": "off",
       eqeqeq: "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "prefer-const": "error",

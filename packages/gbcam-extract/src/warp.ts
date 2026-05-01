@@ -22,7 +22,12 @@ import {
   INNER_RIGHT,
 } from "./common.js";
 import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
-import { type DebugCollector, cloneImage, drawPolyline, fillCircle } from "./debug.js";
+import {
+  type DebugCollector,
+  cloneImage,
+  drawPolyline,
+  fillCircle,
+} from "./debug.js";
 
 // ─── Public interface ───
 
@@ -59,16 +64,23 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
     );
     dbg.log(
       `[warp] detected source corners (TL TR BR BL): ` +
-        corners.map((c) => `(${Math.round(c[0])},${Math.round(c[1])})`).join(" "),
+        corners
+          .map((c) => `(${Math.round(c[0])},${Math.round(c[1])})`)
+          .join(" "),
     );
     if (detection.score > 0.15) {
-      dbg.log(`[warp] WARNING: quad quality is low — detection may be unreliable`);
+      dbg.log(
+        `[warp] WARNING: quad quality is low — detection may be unreliable`,
+      );
     }
 
     // Render input photo with corners overlaid
     const overlay = cloneImage(input);
     const green: [number, number, number] = [0, 255, 0];
-    const cornerRadius = Math.max(6, Math.round(Math.min(input.width, input.height) / 200));
+    const cornerRadius = Math.max(
+      6,
+      Math.round(Math.min(input.width, input.height) / 200),
+    );
     for (const [x, y] of corners) {
       fillCircle(overlay, x, y, cornerRadius, green);
     }
@@ -140,7 +152,11 @@ interface RefineMetrics {
   refined: boolean;
 }
 
-function recordRefinementMetrics(dbg: DebugCollector, passNum: number, m: RefineMetrics): void {
+function recordRefinementMetrics(
+  dbg: DebugCollector,
+  passNum: number,
+  m: RefineMetrics,
+): void {
   const ec = m.edgeCurvatures;
   dbg.log(
     `[warp] pass ${passNum} edge curvatures: ` +
@@ -201,11 +217,9 @@ function orderCorners(pts: Point[]): Corners {
   // Sum heuristic: TL has smallest x+y, BR has largest
   // Diff heuristic: TR has smallest x-y, BL has largest
   const sums = pts.map(([x, y]) => x + y);
-  const diffs = pts.map(([x, y]) => x - y);
 
   const tlIdx = sums.indexOf(Math.min(...sums));
   const brIdx = sums.indexOf(Math.max(...sums));
-  const trIdx = diffs.indexOf(Math.max(...diffs)); // numpy diff is col1-col0 = x-y for [x,y]; wait...
 
   // In Python: diff = np.diff(pts, axis=1).ravel() which for [[x,y]] gives [y-x]
   // Actually np.diff([[x,y]], axis=1) = [[y-x]], so diff = y-x
@@ -220,7 +234,12 @@ function orderCorners(pts: Point[]): Corners {
   return [pts[tlIdx], pts[trIdx2], pts[brIdx], pts[blIdx]];
 }
 
-function scoreQuad(ordered: Corners, imgW: number, imgH: number, targetAspect = 160 / 144): number {
+function scoreQuad(
+  ordered: Corners,
+  imgW: number,
+  imgH: number,
+  targetAspect = 160 / 144,
+): number {
   const [TL, TR, BR, BL] = ordered;
   const top = Math.hypot(TR[0] - TL[0], TR[1] - TL[1]);
   const bot = Math.hypot(BR[0] - BL[0], BR[1] - BL[1]);
@@ -231,7 +250,8 @@ function scoreQuad(ordered: Corners, imgW: number, imgH: number, targetAspect = 
   if (hAvg < 10) return 1e9;
   const aspectErr = Math.abs(wAvg / hAvg / targetAspect - 1.0);
   const parallelErr =
-    Math.abs(top - bot) / Math.max(wAvg, 1) + Math.abs(left - right) / Math.max(hAvg, 1);
+    Math.abs(top - bot) / Math.max(wAvg, 1) +
+    Math.abs(left - right) / Math.max(hAvg, 1);
   const margin = 5;
   let clips = 0;
   if (TL[0] < margin) clips++;
@@ -253,11 +273,14 @@ interface CornerDetection {
   aspect: number;
 }
 
-function findScreenCorners(bgr: any, threshVal: number): Corners {
+function _findScreenCorners(bgr: any, threshVal: number): Corners {
   return findScreenCornersWithMetrics(bgr, threshVal).ordered;
 }
 
-function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetection {
+function findScreenCornersWithMetrics(
+  bgr: any,
+  threshVal: number,
+): CornerDetection {
   const cv = getCV();
 
   return withMats((track, _untrack) => {
@@ -285,7 +308,13 @@ function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetect
 
       const contours = track(new cv.MatVector());
       const hierarchy = track(new cv.Mat());
-      cv.findContours(closed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      cv.findContours(
+        closed,
+        contours,
+        hierarchy,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_SIMPLE,
+      );
 
       if (contours.size() === 0) continue;
 
@@ -374,7 +403,16 @@ function initialWarp(bgr: any, corners: Corners, scale: number): WarpResult {
     corners[3][0],
     corners[3][1],
   ]);
-  const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W - 1, 0, W - 1, H - 1, 0, H - 1]);
+  const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0,
+    0,
+    W - 1,
+    0,
+    W - 1,
+    H - 1,
+    0,
+    H - 1,
+  ]);
 
   const M = cv.getPerspectiveTransform(srcPts, dstPts);
   srcPts.delete();
@@ -424,7 +462,13 @@ function firstDarkFromFrame(profile: number[], smoothSigma = 1.5): number {
 /**
  * Compute column means of a grayscale Mat sub-region (mean along axis=0 → one value per column).
  */
-function colMeans(mat: any, r1: number, r2: number, c1: number, c2: number): number[] {
+function colMeans(
+  mat: any,
+  r1: number,
+  r2: number,
+  c1: number,
+  c2: number,
+): number[] {
   const result: number[] = [];
   for (let c = c1; c < c2; c++) {
     let sum = 0;
@@ -441,7 +485,13 @@ function colMeans(mat: any, r1: number, r2: number, c1: number, c2: number): num
 /**
  * Compute row means of a grayscale Mat sub-region (mean along axis=1 → one value per row).
  */
-function rowMeans(mat: any, r1: number, r2: number, c1: number, c2: number): number[] {
+function rowMeans(
+  mat: any,
+  r1: number,
+  r2: number,
+  c1: number,
+  c2: number,
+): number[] {
   const result: number[] = [];
   for (let r = r1; r < r2; r++) {
     let sum = 0;
@@ -457,7 +507,12 @@ function rowMeans(mat: any, r1: number, r2: number, c1: number, c2: number): num
 
 // ─── Find border corners ───
 
-interface CornerPts { TL: Point; TR: Point; BR: Point; BL: Point }
+interface CornerPts {
+  TL: Point;
+  TR: Point;
+  BR: Point;
+  BL: Point;
+}
 
 function findBorderCorners(channel: any, scale: number): CornerPts {
   const H = channel.rows;
@@ -630,7 +685,11 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
 
 // ─── Validate inner border (diagnostic) ───
 
-function validateInnerBorder(_warped: any, _scale: number, _passNum: number): void {
+function _validateInnerBorder(
+  _warped: any,
+  _scale: number,
+  _passNum: number,
+): void {
   // Diagnostic logging only — validation results are not used for control flow.
   // In the TypeScript port we keep this as a no-op stub; real validation
   // happens visually (debug images) or in integration tests.
@@ -638,7 +697,7 @@ function validateInnerBorder(_warped: any, _scale: number, _passNum: number): vo
 
 // ─── Verify dash positions (diagnostic) ───
 
-function verifyDashPositions(_warped: any, _scale: number): void {
+function _verifyDashPositions(_warped: any, _scale: number): void {
   // Diagnostic logging only — verification results are not used for control flow.
 }
 
@@ -698,7 +757,8 @@ function refineWarpWithMetrics(
   const edgeCurvatures = {
     top:
       borderPoints.top.length > 0
-        ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) / borderPoints.top.length
+        ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) /
+          borderPoints.top.length
         : 0,
     bottom:
       borderPoints.bottom.length > 0
@@ -707,11 +767,13 @@ function refineWarpWithMetrics(
         : 0,
     left:
       borderPoints.left.length > 0
-        ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) / borderPoints.left.length
+        ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) /
+          borderPoints.left.length
         : 0,
     right:
       borderPoints.right.length > 0
-        ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length
+        ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) /
+          borderPoints.right.length
         : 0,
   };
 
@@ -719,8 +781,14 @@ function refineWarpWithMetrics(
   const cornerErrors = {
     TL: [corners.TL[0] - expLeft, corners.TL[1] - expTop] as [number, number],
     TR: [corners.TR[0] - expRight, corners.TR[1] - expTop] as [number, number],
-    BR: [corners.BR[0] - expRight, corners.BR[1] - expBottom] as [number, number],
-    BL: [corners.BL[0] - expLeft, corners.BL[1] - expBottom] as [number, number],
+    BR: [corners.BR[0] - expRight, corners.BR[1] - expBottom] as [
+      number,
+      number,
+    ],
+    BL: [corners.BL[0] - expLeft, corners.BL[1] - expBottom] as [
+      number,
+      number,
+    ],
   };
 
   // Adjust corners for edge curvature
@@ -782,7 +850,16 @@ function refineWarpWithMetrics(
     Hcorr.delete();
 
     // Canvas corners in warped space
-    const canvas = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W - 1, 0, W - 1, H - 1, 0, H - 1]);
+    const canvas = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0,
+      0,
+      W - 1,
+      0,
+      W - 1,
+      H - 1,
+      0,
+      H - 1,
+    ]);
 
     // Transform canvas through H_corr^-1
     const cornersInWarped = new cv.Mat();
@@ -814,7 +891,16 @@ function refineWarpWithMetrics(
     ]);
     cornersInSrc.delete();
 
-    const dstCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W - 1, 0, W - 1, H - 1, 0, H - 1]);
+    const dstCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0,
+      0,
+      W - 1,
+      0,
+      W - 1,
+      H - 1,
+      0,
+      H - 1,
+    ]);
 
     const Mnew = cv.getPerspectiveTransform(srcCorners, dstCorners);
     srcCorners.delete();
@@ -835,10 +921,22 @@ function refineWarpWithMetrics(
           right: Number(edgeCurvatures.right.toFixed(3)),
         },
         cornerErrors: {
-          TL: [Number(cornerErrors.TL[0].toFixed(2)), Number(cornerErrors.TL[1].toFixed(2))],
-          TR: [Number(cornerErrors.TR[0].toFixed(2)), Number(cornerErrors.TR[1].toFixed(2))],
-          BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
-          BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
+          TL: [
+            Number(cornerErrors.TL[0].toFixed(2)),
+            Number(cornerErrors.TL[1].toFixed(2)),
+          ],
+          TR: [
+            Number(cornerErrors.TR[0].toFixed(2)),
+            Number(cornerErrors.TR[1].toFixed(2)),
+          ],
+          BR: [
+            Number(cornerErrors.BR[0].toFixed(2)),
+            Number(cornerErrors.BR[1].toFixed(2)),
+          ],
+          BL: [
+            Number(cornerErrors.BL[0].toFixed(2)),
+            Number(cornerErrors.BL[1].toFixed(2)),
+          ],
         },
         refined: true,
       },
@@ -858,10 +956,22 @@ function refineWarpWithMetrics(
           right: Number(edgeCurvatures.right.toFixed(3)),
         },
         cornerErrors: {
-          TL: [Number(cornerErrors.TL[0].toFixed(2)), Number(cornerErrors.TL[1].toFixed(2))],
-          TR: [Number(cornerErrors.TR[0].toFixed(2)), Number(cornerErrors.TR[1].toFixed(2))],
-          BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
-          BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
+          TL: [
+            Number(cornerErrors.TL[0].toFixed(2)),
+            Number(cornerErrors.TL[1].toFixed(2)),
+          ],
+          TR: [
+            Number(cornerErrors.TR[0].toFixed(2)),
+            Number(cornerErrors.TR[1].toFixed(2)),
+          ],
+          BR: [
+            Number(cornerErrors.BR[0].toFixed(2)),
+            Number(cornerErrors.BR[1].toFixed(2)),
+          ],
+          BL: [
+            Number(cornerErrors.BL[0].toFixed(2)),
+            Number(cornerErrors.BL[1].toFixed(2)),
+          ],
         },
         refined: false,
       },

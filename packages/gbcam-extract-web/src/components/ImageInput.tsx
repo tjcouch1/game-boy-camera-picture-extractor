@@ -16,7 +16,9 @@ export function ImageInput({ onImagesSelected, disabled }: ImageInputProps) {
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
-      const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+      const imageFiles = Array.from(files).filter((f) =>
+        f.type.startsWith("image/"),
+      );
       if (imageFiles.length > 0) {
         onImagesSelected(imageFiles);
       }
@@ -62,8 +64,12 @@ export function ImageInput({ onImagesSelected, disabled }: ImageInputProps) {
       >
         <div className="flex flex-col items-center gap-3">
           <Upload className="size-10 opacity-50" />
-          <p className="text-sm">Drag and drop images here, or click to browse</p>
-          <p className="text-muted-foreground text-xs">Supports multiple files</p>
+          <p className="text-sm">
+            Drag and drop images here, or click to browse
+          </p>
+          <p className="text-muted-foreground text-xs">
+            Supports multiple files
+          </p>
         </div>
       </div>
 

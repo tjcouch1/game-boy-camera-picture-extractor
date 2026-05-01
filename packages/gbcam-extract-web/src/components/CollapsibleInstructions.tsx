@@ -11,7 +11,10 @@ import { MarkdownRenderer } from "./MarkdownRenderer.js";
 const INSTRUCTIONS_STORAGE_KEY = "gbcam-instructions-open";
 
 export function CollapsibleInstructions({ markdown }: { markdown: string }) {
-  const [isOpen, setIsOpen] = useLocalStorage<boolean>(INSTRUCTIONS_STORAGE_KEY, true);
+  const [isOpen, setIsOpen] = useLocalStorage<boolean>(
+    INSTRUCTIONS_STORAGE_KEY,
+    true,
+  );
 
   return (
     <Collapsible

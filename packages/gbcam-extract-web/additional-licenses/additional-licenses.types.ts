@@ -107,7 +107,8 @@ export const EXAMPLE_AUGMENTED_LICENSE: AugmentedLicense = {
   version: "4.5.0",
   licenses: "Apache-2.0",
   copyright: "Copyright (C) 2000-2021, Intel Corporation",
-  licenseText: "Apache License\nVersion 2.0, January 2004\n\nTERMS AND CONDITIONS...",
+  licenseText:
+    "Apache License\nVersion 2.0, January 2004\n\nTERMS AND CONDITIONS...",
   repository: "https://github.com/opencv/opencv.js",
   url: "https://opencv.org/",
   description: "JavaScript binding of OpenCV for web deployment",
@@ -132,9 +133,11 @@ export const EXAMPLE_ADDITIONAL_LICENSES_FILE: AdditionalLicensesFile = {
       name: "Game Boy Camera Frame Reference",
       version: "1.0.0",
       licenses: "MIT",
-      copyright: "Copyright (c) 2024 Game Boy Camera Frame Project Contributors",
+      copyright:
+        "Copyright (c) 2024 Game Boy Camera Frame Project Contributors",
       licenseText: "MIT License text...",
-      description: "Reference frame images and assets for Game Boy Camera screen calibration",
+      description:
+        "Reference frame images and assets for Game Boy Camera screen calibration",
     },
   ],
 };

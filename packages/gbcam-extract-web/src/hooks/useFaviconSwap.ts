@@ -16,7 +16,9 @@ export function useFaviconSwap() {
     const href = isDark ? "./icon-dark.svg" : "./icon.svg";
     const cacheBuster = `?v=${resolvedTheme}`;
 
-    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"][data-runtime="true"]');
+    let link = document.querySelector<HTMLLinkElement>(
+      'link[rel="icon"][data-runtime="true"]',
+    );
     if (!link) {
       link = document.createElement("link");
       link.rel = "icon";

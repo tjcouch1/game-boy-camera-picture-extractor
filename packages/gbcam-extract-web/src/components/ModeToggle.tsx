@@ -31,7 +31,13 @@ export function ModeToggle() {
     setTheme(CYCLE[current] ?? "light");
   };
 
-  const Icon = !mounted ? Sun : theme === "system" ? SunMoon : theme === "dark" ? Moon : Sun;
+  const Icon = !mounted
+    ? Sun
+    : theme === "system"
+      ? SunMoon
+      : theme === "dark"
+        ? Moon
+        : Sun;
 
   return (
     <>
@@ -64,15 +70,24 @@ export function ModeToggle() {
                 "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
               )}
             >
-              <MenuPrimitive.Item className={itemClass} onClick={() => setTheme("light")}>
+              <MenuPrimitive.Item
+                className={itemClass}
+                onClick={() => setTheme("light")}
+              >
                 <Sun data-icon="inline-start" />
                 Light
               </MenuPrimitive.Item>
-              <MenuPrimitive.Item className={itemClass} onClick={() => setTheme("dark")}>
+              <MenuPrimitive.Item
+                className={itemClass}
+                onClick={() => setTheme("dark")}
+              >
                 <Moon data-icon="inline-start" />
                 Dark
               </MenuPrimitive.Item>
-              <MenuPrimitive.Item className={itemClass} onClick={() => setTheme("system")}>
+              <MenuPrimitive.Item
+                className={itemClass}
+                onClick={() => setTheme("system")}
+              >
                 <SunMoon data-icon="inline-start" />
                 System
               </MenuPrimitive.Item>
