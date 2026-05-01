@@ -179,12 +179,45 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
     }
 
     const chosen = candidates[bestIdx];
-    void chosen; // used in Task 8
 
     // ── 2d. Map back, expand, rotate, crop ──
-    // (added in Task 8; for now, return passthrough)
+    const workToOrig = 1 / work.scale;
+    const screenCornersOrig = scaleCorners(chosen.corners, workToOrig);
+    const expanded = expandRotatedRect(screenCornersOrig, MARGIN_RATIO);
+    const clamped = clampCorners(expanded, input.width, input.height);
 
-    return cloneImage(input);
+    // Detect pass-through: if every clamped corner equals its expanded
+    // counterpart, no clamping happened and the margin was applied freely.
+    // If they differ, the margin was clipped — likely an already-cropped input.
+    const passThrough = expanded.some((p, i) => p[0] !== clamped[i][0] || p[1] !== clamped[i][1]);
+
+    const output = extractRotatedRect(src, clamped);
+
+    if (dbg) {
+      dbg.addImage(
+        "locate_d_output_region",
+        drawOutputRegion(input, screenCornersOrig, clamped),
+      );
+      dbg.log(
+        `[locate] output region: ${output.width}×${output.height} ` +
+          `(margin=${(MARGIN_RATIO * 100).toFixed(1)}%, ` +
+          `passThrough=${passThrough})`,
+      );
+      dbg.setMetrics("locate", {
+        marginRatio: MARGIN_RATIO,
+        outputCorners: clamped.map(([x, y]) => [Math.round(x), Math.round(y)]),
+        outputSize: [output.width, output.height],
+        passThrough,
+        chosenCandidate: {
+          score: chosen.score,
+          area: chosen.area,
+          corners: screenCornersOrig.map(([x, y]) => [Math.round(x), Math.round(y)]),
+          validation: bestScore,
+        },
+      });
+    }
+
+    return output;
   });
 }
 
@@ -534,6 +567,90 @@ function fillRectRGBA(
       img.data[idx + 3] = 255;
     }
   }
+}
+
+/**
+ * Scale a corner array from working-resolution coords to original-image
+ * coords. `workToOrig` = 1 / `scale` from `downsampleToWorking`.
+ */
+function scaleCorners(corners: Corners, workToOrig: number): Corners {
+  return corners.map(([x, y]) => [x * workToOrig, y * workToOrig] as Point) as Corners;
+}
+
+/**
+ * Expand a (possibly rotated) rectangle outward by a fraction of its
+ * longest side. The expansion is along the rectangle's own axes — the
+ * rectangle stays the same shape, just bigger. Corners are returned in
+ * the same TL/TR/BR/BL order.
+ */
+function expandRotatedRect(corners: Corners, ratio: number): Corners {
+  const [TL, TR, BR, BL] = corners;
+  const cx = (TL[0] + TR[0] + BR[0] + BL[0]) / 4;
+  const cy = (TL[1] + TR[1] + BR[1] + BL[1]) / 4;
+  const expand = (p: Point): Point => {
+    const dx = p[0] - cx;
+    const dy = p[1] - cy;
+    return [cx + dx * (1 + ratio), cy + dy * (1 + ratio)];
+  };
+  return [expand(TL), expand(TR), expand(BR), expand(BL)];
+}
+
+/**
+ * Clamp each corner to [0, imgW]×[0, imgH]. This keeps the warp from
+ * sampling out-of-bounds; for already-cropped inputs the clamp is what
+ * makes the step a near-no-op.
+ */
+function clampCorners(corners: Corners, imgW: number, imgH: number): Corners {
+  return corners.map(([x, y]) => [
+    clamp(x, 0, imgW - 1),
+    clamp(y, 0, imgH - 1),
+  ] as Point) as Corners;
+}
+
+/**
+ * Extract the rotated rectangle defined by `corners` from `srcRgba`,
+ * producing an axis-aligned RGBA image. Output dimensions equal the
+ * average side lengths of the rectangle (rounded to integers).
+ */
+function extractRotatedRect(srcRgba: any /* cv.Mat */, corners: Corners): GBImageData {
+  const cv = getCV();
+  const [TL, TR, BR, BL] = corners;
+  const topLen = Math.hypot(TR[0] - TL[0], TR[1] - TL[1]);
+  const botLen = Math.hypot(BR[0] - BL[0], BR[1] - BL[1]);
+  const leftLen = Math.hypot(BL[0] - TL[0], BL[1] - TL[1]);
+  const rightLen = Math.hypot(BR[0] - TR[0], BR[1] - TR[1]);
+  const outW = Math.max(1, Math.round((topLen + botLen) / 2));
+  const outH = Math.max(1, Math.round((leftLen + rightLen) / 2));
+
+  return withMats((track) => {
+    const srcPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      TL[0], TL[1], TR[0], TR[1], BR[0], BR[1], BL[0], BL[1],
+    ]));
+    const dstPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0, outW - 1, 0, outW - 1, outH - 1, 0, outH - 1,
+    ]));
+    const Mhom = track(cv.getPerspectiveTransform(srcPts, dstPts));
+    const out = track(new cv.Mat());
+    cv.warpPerspective(srcRgba, out, Mhom, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
+    return matToImageData(out);
+  });
+}
+
+/**
+ * Draw a polyline on a copy of `img` showing the final output region.
+ * `screenCorners` are the chosen-screen corners (cyan); `outputCorners`
+ * are the post-margin, post-clamp corners (green).
+ */
+function drawOutputRegion(
+  img: GBImageData,
+  screenCorners: Corners,
+  outputCorners: Corners,
+): GBImageData {
+  const out = cloneImage(img);
+  const thick = Math.max(2, Math.round(Math.min(img.width, img.height) / 400));
+  drawPolylineRGBA(out, screenCorners, [0, 255, 255], thick, true); // cyan
+  drawPolylineRGBA(out, outputCorners, [0, 255, 0], thick, true);   // green
+  return out;
 }
 
 /**
