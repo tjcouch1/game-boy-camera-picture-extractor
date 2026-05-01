@@ -100,7 +100,27 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
     }
 
     // ── 2b. Generate candidate quads ──
-    // (added in Task 6)
+    const candidates = findCandidates(binary, TOP_N_CANDIDATES);
+
+    if (candidates.length === 0) {
+      throw new Error(
+        `[locate] No candidate quadrilaterals found at threshold=${BRIGHTNESS_THRESHOLD}. ` +
+          `The Game Boy Screen may be too dark or the photo too distant.`,
+      );
+    }
+
+    if (dbg) {
+      const workingRgba = matToImageData(work.mat);
+      // Chosen index is unknown until validation runs (Task 7). Draw all
+      // candidates as red here; Task 7 overwrites this debug image with
+      // the chosen candidate highlighted in green.
+      dbg.addImage("locate_b_candidates", drawCandidates(workingRgba, candidates, -1));
+      dbg.log(
+        `[locate] found ${candidates.length} candidate(s); ` +
+          `top score=${candidates[0].score.toFixed(3)}`,
+      );
+      dbg.setMetric("locate", "candidateCount", candidates.length);
+    }
 
     // ── 2c. Validate candidates against Frame 02 ──
     // (added in Task 7)
@@ -113,6 +133,114 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
 }
 
 // ─── Helpers ───
+
+type Point = [number, number];
+type Corners = [Point, Point, Point, Point]; // TL, TR, BR, BL
+
+interface Candidate {
+  /** Corners ordered TL, TR, BR, BL in working-resolution pixel coords. */
+  corners: Corners;
+  /** Width/height from the candidate's minAreaRect, sorted so width >= height. */
+  width: number;
+  height: number;
+  area: number;
+  /** Composite score (lower = better fit to expected screen shape). */
+  score: number;
+}
+
+/**
+ * Compute the four vertices of a `cv.minAreaRect` result. OpenCV.js doesn't
+ * expose `cv.boxPoints`, so we compute the points from the rect's `center`,
+ * `size`, and `angle` (degrees) ourselves.
+ */
+function rotatedRectPoints(rect: { center: { x: number; y: number }; size: { width: number; height: number }; angle: number }): Point[] {
+  const { center, size, angle } = rect;
+  const rad = (angle * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const hw = size.width / 2;
+  const hh = size.height / 2;
+  const local: Point[] = [
+    [-hw, -hh],
+    [hw, -hh],
+    [hw, hh],
+    [-hw, hh],
+  ];
+  return local.map(([x, y]) => [
+    center.x + x * cos - y * sin,
+    center.y + x * sin + y * cos,
+  ]);
+}
+
+/**
+ * Order four points TL, TR, BR, BL using the same sum/diff heuristic that
+ * warp.ts uses, so detected corners are consistent across the codebase.
+ */
+function orderCornersTLTRBRBL(pts: Point[]): Corners {
+  const sums = pts.map(([x, y]) => x + y);
+  const yMinusX = pts.map(([x, y]) => y - x);
+  const tlIdx = sums.indexOf(Math.min(...sums));
+  const brIdx = sums.indexOf(Math.max(...sums));
+  const trIdx = yMinusX.indexOf(Math.min(...yMinusX));
+  const blIdx = yMinusX.indexOf(Math.max(...yMinusX));
+  return [pts[tlIdx], pts[trIdx], pts[brIdx], pts[blIdx]];
+}
+
+/**
+ * Find candidate quads in a binary (already-thresholded) working-resolution
+ * image. Returns up to `topN` candidates ranked by score (lower is better).
+ */
+function findCandidates(binary: any, topN: number): Candidate[] {
+  const cv = getCV();
+  const imgArea = binary.cols * binary.rows;
+  const minArea = imgArea * MIN_CANDIDATE_AREA_FRAC;
+
+  return withMats((track) => {
+    const contours = track(new cv.MatVector());
+    const hierarchy = track(new cv.Mat());
+    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    const candidates: Candidate[] = [];
+    for (let i = 0; i < contours.size(); i++) {
+      const contour = contours.get(i);
+      const area = cv.contourArea(contour);
+      if (area < minArea) continue;
+
+      const rect = cv.minAreaRect(contour);
+      // OpenCV.js doesn't expose cv.boxPoints as a free function — compute
+      // the four vertices of the rotated rectangle manually from its
+      // (center, size, angle) representation.
+      const pts = rotatedRectPoints(rect);
+      const corners = orderCornersTLTRBRBL(pts);
+
+      const w = rect.size.width;
+      const h = rect.size.height;
+      const longSide = Math.max(w, h);
+      const shortSide = Math.max(Math.min(w, h), 1);
+      const aspect = longSide / shortSide;
+      const aspectErr = Math.abs(aspect / TARGET_ASPECT - 1);
+
+      // Quad-ness: how close the contour's area is to the minAreaRect's area.
+      // Genuine rectangles fill their minAreaRect tightly.
+      const rectArea = w * h;
+      const fillRatio = rectArea > 0 ? area / rectArea : 0;
+      const quadnessErr = Math.max(0, 1 - fillRatio);
+
+      const score = aspectErr * 1.5 + quadnessErr * 1.0;
+
+      candidates.push({
+        corners,
+        width: longSide,
+        height: shortSide,
+        area,
+        score,
+      });
+    }
+
+    candidates.sort((a, b) => a.score - b.score);
+    return candidates.slice(0, topN);
+  });
+}
 
 /**
  * Downsample `src` so the longest side is at most `maxDim`. Returns the
@@ -137,4 +265,74 @@ function downsampleToWorking(src: any, maxDim: number): { mat: any; scale: numbe
   const out = new cv.Mat();
   cv.resize(src, out, new cv.Size(newW, newH), 0, 0, cv.INTER_AREA);
   return { mat: out, scale };
+}
+
+/**
+ * Draw all candidates on a copy of the working-resolution photo. The
+ * `chosen` candidate (index into `candidates`, or -1 for none) is drawn in
+ * green; all others in red. Each is labeled with its score.
+ */
+function drawCandidates(
+  workingRgba: GBImageData,
+  candidates: Candidate[],
+  chosen: number,
+): GBImageData {
+  // We avoid pulling in font rendering — just a polyline per candidate is
+  // enough for visual debugging. Scores appear in the structured JSON metrics.
+  const out = cloneImage(workingRgba);
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    const color: [number, number, number] = i === chosen ? [0, 255, 0] : [255, 0, 0];
+    drawPolylineRGBA(out, c.corners, color, 2, true);
+  }
+  return out;
+}
+
+function drawPolylineRGBA(
+  img: GBImageData,
+  pts: Point[],
+  color: [number, number, number],
+  thickness: number,
+  closed: boolean,
+): void {
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    if (i === n - 1 && !closed) break;
+    const [x0, y0] = pts[i];
+    const [x1, y1] = pts[(i + 1) % n];
+    drawLineRGBA(img, x0, y0, x1, y1, color, thickness);
+  }
+}
+
+function drawLineRGBA(
+  img: GBImageData,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  color: [number, number, number],
+  thickness: number,
+): void {
+  // Bresenham with a thickness pad
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const steps = Math.max(dx, dy);
+  const r = Math.max(1, Math.floor(thickness / 2));
+  for (let i = 0; i <= steps; i++) {
+    const t = steps === 0 ? 0 : i / steps;
+    const x = Math.round(x0 + (x1 - x0) * t);
+    const y = Math.round(y0 + (y1 - y0) * t);
+    for (let dyp = -r; dyp <= r; dyp++) {
+      for (let dxp = -r; dxp <= r; dxp++) {
+        const px = x + dxp;
+        const py = y + dyp;
+        if (px < 0 || py < 0 || px >= img.width || py >= img.height) continue;
+        const idx = (py * img.width + px) * 4;
+        img.data[idx] = color[0];
+        img.data[idx + 1] = color[1];
+        img.data[idx + 2] = color[2];
+        img.data[idx + 3] = 255;
+      }
+    }
+  }
 }
