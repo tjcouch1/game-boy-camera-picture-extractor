@@ -47,7 +47,6 @@ export interface PipelineResult {
 }
 
 export interface PipelineOptions {
-  scale?: number;
   debug?: boolean;
   onProgress?: (step: string, pct: number) => void;
 }

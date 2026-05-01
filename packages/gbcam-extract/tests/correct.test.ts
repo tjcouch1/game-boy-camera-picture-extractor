@@ -26,7 +26,7 @@ describe("correct", () => {
       }
     }
 
-    const result = correct(input, { scale });
+    const result = correct(input);
     expect(result.width).toBe(w);
     expect(result.height).toBe(h);
   });

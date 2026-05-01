@@ -34,7 +34,6 @@ OPTIONS
   -d, --dir DIR     Directory of input images to glob for .jpg/.jpeg/.png files
   -o, --output-dir DIR
                     Output directory (created if needed). Default: same as input.
-  --scale N         Working scale (default: 8)
   --start STEP      Start pipeline at this step (warp/correct/crop/sample/quantize)
   --end STEP        End pipeline at this step
   --clean-steps     Delete intermediate files after pipeline completes
@@ -171,12 +170,12 @@ async function saveImage(img: GBImageData, outPath: string): Promise<void> {
 
 // ─── Step runners ───
 
-const STEP_FUNCTIONS: Record<string, (input: GBImageData, scale: number) => GBImageData> = {
-  warp: (input, scale) => warp(input, { scale }),
-  correct: (input, scale) => correct(input, { scale }),
-  crop: (input, scale) => crop(input, { scale }),
-  sample: (input, scale) => sample(input, { scale }),
-  quantize: (input, _scale) => quantize(input),
+const STEP_FUNCTIONS: Record<string, (input: GBImageData) => GBImageData> = {
+  warp: (input) => warp(input),
+  correct: (input) => correct(input),
+  crop: (input) => crop(input),
+  sample: (input) => sample(input),
+  quantize: (input) => quantize(input),
 };
 
 // ─── CLI arg parsing ───
@@ -185,7 +184,6 @@ interface CLIArgs {
   inputs: string[];
   dir?: string;
   outputDir?: string;
-  scale: number;
   start: StepName;
   end: StepName;
   cleanSteps: boolean;
@@ -196,7 +194,6 @@ interface CLIArgs {
 function parseArgs(argv: string[]): CLIArgs {
   const args: CLIArgs = {
     inputs: [],
-    scale: 8,
     start: "warp",
     end: "quantize",
     cleanSteps: false,
@@ -219,9 +216,6 @@ function parseArgs(argv: string[]): CLIArgs {
       case "--output-dir":
       case "-o":
         args.outputDir = argv[++i];
-        break;
-      case "--scale":
-        args.scale = parseInt(argv[++i], 10);
         break;
       case "--start":
         args.start = argv[++i] as StepName;
@@ -285,7 +279,7 @@ async function main() {
 
   const activeSteps = STEP_ORDER.slice(startIdx, endIdx + 1);
   console.log(
-    `Pipeline: ${activeSteps.join(" -> ")}  |  scale=${args.scale}  |  ${inputFiles.length} input file(s)`
+    `Pipeline: ${activeSteps.join(" -> ")}  |  scale=auto  |  ${inputFiles.length} input file(s)`
   );
 
   // Initialize OpenCV
@@ -317,7 +311,7 @@ async function main() {
 
         console.log(`  ${stepName}...`);
         const stepFn = STEP_FUNCTIONS[stepName];
-        current = stepFn(current, args.scale);
+        current = stepFn(current);
 
         // Save output
         await saveImage(current, outPath);

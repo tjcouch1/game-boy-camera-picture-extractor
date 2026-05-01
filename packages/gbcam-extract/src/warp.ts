@@ -20,17 +20,16 @@ import {
   drawPolyline,
   fillCircle,
 } from "./debug.js";
+import { computeAutoScale } from "./auto-scale.js";
 
 // ─── Public interface ───
 
 export interface WarpOptions {
-  scale?: number;
   threshold?: number;
   debug?: DebugCollector;
 }
 
 export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
-  const scale = options?.scale ?? 8;
   const threshVal = options?.threshold ?? 180;
   const dbg = options?.debug;
 
@@ -78,6 +77,22 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
       true,
     );
     dbg.addImage("warp_a_corners", overlay);
+  }
+
+  // a2 — Auto-scale: pick the smallest integer scale that doesn't downsample
+  // the detected screen quad along either axis.
+  const auto = computeAutoScale(corners);
+  const scale = auto.scale;
+
+  if (dbg) {
+    const fmt = (n: number) => n.toFixed(1);
+    dbg.log(
+      `[warp] auto-scale: edges T=${fmt(auto.edgeLengths.top)} ` +
+        `B=${fmt(auto.edgeLengths.bottom)} L=${fmt(auto.edgeLengths.left)} ` +
+        `R=${fmt(auto.edgeLengths.right)}, ` +
+        `maxH=${fmt(auto.maxHorizontal)} maxV=${fmt(auto.maxVertical)}, ` +
+        `scale=${scale}`,
+    );
 
     dbg.setMetrics("warp", {
       threshold: detection.thresh,
@@ -85,6 +100,17 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
       aspect: Number(detection.aspect.toFixed(4)),
       quadScore: Number(detection.score.toFixed(4)),
       sourceCorners: corners.map(([x, y]) => [Math.round(x), Math.round(y)]),
+      autoScale: {
+        edgeLengths: {
+          top: Number(auto.edgeLengths.top.toFixed(2)),
+          bottom: Number(auto.edgeLengths.bottom.toFixed(2)),
+          left: Number(auto.edgeLengths.left.toFixed(2)),
+          right: Number(auto.edgeLengths.right.toFixed(2)),
+        },
+        maxHorizontal: Number(auto.maxHorizontal.toFixed(2)),
+        maxVertical: Number(auto.maxVertical.toFixed(2)),
+        scale,
+      },
     });
   }
 

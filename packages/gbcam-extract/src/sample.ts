@@ -2,7 +2,6 @@ import { type GBImageData, CAM_W, CAM_H, createGBImageData } from "./common.js";
 import { type DebugCollector, upscale } from "./debug.js";
 
 export interface SampleOptions {
-  scale?: number;
   method?: "mean" | "median"; // kept for API compat; internally always uses mean (matching Python)
   marginH?: number; // ignored; replaced by subpixel col offsets
   marginV?: number;
@@ -29,18 +28,22 @@ export function sample(
   input: GBImageData,
   options?: SampleOptions,
 ): GBImageData {
-  const scale = options?.scale ?? 8;
-  const vMargin = options?.marginV ?? Math.max(1, Math.floor(scale / 5));
   const dbg = options?.debug;
 
-  const expectedW = CAM_W * scale;
-  const expectedH = CAM_H * scale;
-  if (input.width !== expectedW || input.height !== expectedH) {
+  if (input.width === 0 || input.height === 0 || input.width % CAM_W !== 0) {
     throw new Error(
-      `Unexpected input size ${input.width}x${input.height}; ` +
-        `expected ${expectedW}x${expectedH} (scale=${scale})`,
+      `[sample] unexpected input size ${input.width}x${input.height}; ` +
+        `width must be a positive integer multiple of CAM_W=${CAM_W}`,
     );
   }
+  const scale = input.width / CAM_W;
+  if (input.height !== CAM_H * scale) {
+    throw new Error(
+      `[sample] unexpected input size ${input.width}x${input.height}; ` +
+        `expected ${CAM_W * scale}x${CAM_H * scale} (inferred scale=${scale})`,
+    );
+  }
+  const vMargin = options?.marginV ?? Math.max(1, Math.floor(scale / 5));
 
   // Subpixel column offsets
   const innerStart = 1;

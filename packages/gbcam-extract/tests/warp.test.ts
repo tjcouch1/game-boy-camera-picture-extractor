@@ -8,9 +8,11 @@ beforeAll(async () => {
 }, 5_000);
 
 describe("warp", () => {
-  it("produces output with correct dimensions at default scale", () => {
-    const scale = 8;
-    // Create synthetic test image: bright rectangle on dark background
+  it("produces output sized at SCREEN_W*k by SCREEN_H*k for some integer k", () => {
+    // Synthetic 640x480 photo with a 400x360 bright rectangle simulating the
+    // GB screen frame. Auto-scale should pick scale = ceil(max(400/160, 360/144))
+    // = ceil(2.5) = 3 — but we don't pin that exactly because corner detection
+    // can shift by a pixel or two. We only assert the shape constraint.
     const w = 640, h = 480;
     const data = new Uint8ClampedArray(w * h * 4);
 
@@ -30,8 +32,19 @@ describe("warp", () => {
       }
     }
 
-    const result = warp({ data, width: w, height: h }, { scale });
-    expect(result.width).toBe(SCREEN_W * scale);
-    expect(result.height).toBe(SCREEN_H * scale);
+    const result = warp({ data, width: w, height: h });
+
+    // width and height must both be positive integer multiples of SCREEN_W and
+    // SCREEN_H, with the same scale factor applied to each.
+    expect(result.width % SCREEN_W).toBe(0);
+    expect(result.height % SCREEN_H).toBe(0);
+    expect(result.width).toBeGreaterThan(0);
+    const k = result.width / SCREEN_W;
+    expect(result.height).toBe(SCREEN_H * k);
+
+    // For the synthetic 400x360 quad, auto-scale should land at 3 (small jitter
+    // from corner detection won't push past 4 or below 2).
+    expect(k).toBeGreaterThanOrEqual(2);
+    expect(k).toBeLessThanOrEqual(4);
   });
 });
