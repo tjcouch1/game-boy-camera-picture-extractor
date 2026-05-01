@@ -246,18 +246,20 @@ The input is a phone photo of a Game Boy Camera image displayed on a Game Boy Ad
 
 ### Screen Structure (outermost to innermost)
 
-1. **Dark bezel** — the GBA SP housing around the screen, appearing as uneven dark areas due to the front-light.
-2. **Game Boy Screen** (160x144 SP pixels) — contains:
+1. **Background environment** — whatever is around the GBA SP in the photo. Can be dark (table, cloth) or cluttered/bright (cables, posters, text).
+2. **GBA SP bezel** — the plastic housing of the Game Boy Advance SP. Color varies by hardware (pink, silver, black, etc.); not a reliable detection signal.
+3. **GBA SP screen (LCD)** — the GBA SP's higher-resolution 240x160 LCD panel. The area *outside* the rendered Game Boy Screen is the LCD displaying black, brightened unevenly by the bottom-mounted front-light. This produces a dark-but-not-pure-black ring immediately surrounding the Game Boy Screen. This ring is the most reliable cue for locating the Game Boy Screen within the photo.
+4. **Game Boy Screen** (160x144 SP pixels) — the rendered GB image area on the GBA SP LCD. Contains:
    - A 16-pixel-thick frame on each side. The frame is primarily #FFFFA5 (white) with a one-pixel-thick inner border in #9494FF (dark gray). The frame has black dashes running through it: 17 horizontal dashes along top/bottom (5 pixels from outer edge) and 14 vertical dashes along left/right sides (1 pixel from outer edge). Corner dashes are fused.
    - `supporting-materials/Frame 02.png` is a 160x144 grayscale palette-swapped reference of the exact frame. The grayscale-to-color mapping is: #FFFFFF -> #FFFFA5, #A5A5A5 -> #FF9494, #525252 -> #9494FF, #000000 -> #000000.
    - `supporting-materials/frame_ascii.txt` is an ASCII art version (` ` = white, `·` = light gray, `▓` = dark gray, `█` = black).
-3. **Game Boy Camera image** (128x112 SP pixels) — the actual picture to extract, displayed in four colors: #FFFFA5, #FF9494, #9494FF, #000000.
+5. **Game Boy Camera image** (128x112 SP pixels) — the actual picture to extract, displayed in four colors: #FFFFA5, #FF9494, #9494FF, #000000.
 
 ### Image Quality Issues
 
 - **Perspective distortion** — the phone is not perfectly aligned; the screen appears as an irregular quadrilateral with lens distortion.
 - **Washed out / tinted colors** — the GBA SP front-light brightens and slightly blue-tints the screen.
-- **Uneven brightness gradient** — the side-mounted front-light creates a smooth 2D brightness gradient. Both black floor and white ceiling shift together (affine per-pixel).
+- **Uneven brightness gradient** — the bottom-mounted front-light creates a smooth 2D brightness gradient. Both black floor and white ceiling shift together (affine per-pixel).
 - **Pixel gaps** — thin dark vertical lines between LCD pixel columns, and less prominent horizontal lines between rows. Especially visible in darker areas.
 - **Pixel bleeding** — brighter pixels bleed light into adjacent dimmer pixels, especially vertically.
 - **Sub-pixel colors** — TN LCD sub-pixels (blue left, green middle, red right) cause color alignment artifacts within each pixel.
