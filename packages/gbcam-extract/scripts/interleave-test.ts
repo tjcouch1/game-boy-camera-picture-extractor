@@ -194,7 +194,7 @@ async function runTsStep(
   let output: GBImageData;
   switch (step) {
     case "warp":
-      output = warp(input, { scale: 8 });
+      output = warp(input);
       break;
     case "correct":
       output = correct(input);

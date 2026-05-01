@@ -40,14 +40,13 @@ export async function processPicture(
   input: GBImageData,
   options?: PipelineOptions,
 ): Promise<PipelineResult> {
-  const scale = options?.scale ?? 8;
   const debug = options?.debug ?? false;
   const onProgress = options?.onProgress;
 
   const collector = debug ? createDebugCollector() : undefined;
 
   onProgress?.("warp", 0);
-  const warped = warp(input, { scale, debug: collector });
+  const warped = warp(input, { debug: collector });
   onProgress?.("warp", 100);
 
   onProgress?.("correct", 0);
