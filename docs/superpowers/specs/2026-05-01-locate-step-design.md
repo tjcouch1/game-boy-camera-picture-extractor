@@ -164,17 +164,33 @@ This validates the whole step end-to-end against ground truth. Tight feedback lo
 
 ### Pipeline tests — `scripts/run-tests.ts`
 
-Refactor the test runner from one hardcoded corpus to a list of `{ inputDir, outputDir, locate }` configs:
+Refactor the test runner from one hardcoded corpus to a list of corpus configs. There are two tiers:
 
-| Corpus | `locate` mode | Output dir | Purpose |
-|---|---|---|---|
-| `test-input/` | `false` | `test-output/` | **Baseline accuracy.** Existing pre-cropped inputs through the existing pipeline. Locks in current numbers; any regression here is a `warp`/`correct`/etc. issue, not a `locate` issue. |
-| `test-input-full/` | `true` | `test-output-full/` | **Primary `locate` check.** End-to-end accuracy starting from full photos. Bottom-line metric for whether the new step works. |
-| `test-input/` | `true` | `test-output-locate/` | **Robustness check.** Confirms `locate` is a near-no-op on already-cropped inputs. A drop vs the baseline indicates `locate` is mangling something it shouldn't touch. |
+**Tier 1 — Accuracy against ground truth.** `test-input/` has hand-corrected reference images (`thing-output-corrected.png`, `zelda-poster-output-corrected.png`). The pipeline output is diffed pixel-by-pixel against the reference.
 
-Each corpus produces its own `test-summary.log`, per-image `<name>.log`, and `debug/` directory under its respective output dir. The existing `test-output/` layout for `test-input/locate:false` is preserved unchanged for back-compat.
+| Corpus | `locate` mode | Output dir | Reference | Purpose |
+|---|---|---|---|---|
+| `test-input/` | `false` | `test-output/` | hand-corrected refs in `test-input/` | **Baseline accuracy.** Existing pre-cropped inputs through the existing pipeline. Locks in current numbers; any regression here is a `warp`/`correct`/etc. issue, not a `locate` issue. |
+| `test-input-full/` | `true` | `test-output-full/` | hand-corrected refs in `test-input/` | **Primary `locate` check.** End-to-end accuracy starting from full photos. Bottom-line metric for whether the new step works. |
+| `test-input/` | `true` | `test-output-locate/` | hand-corrected refs in `test-input/` | **Robustness check.** Confirms `locate` is a near-no-op on already-cropped inputs. A drop vs the baseline indicates `locate` is mangling something it shouldn't touch. |
 
-The robustness check (row 3) is a soft signal — it's not a gate for shipping, but it's worth running from day one because it's cheap and any regression there is informative.
+**Tier 2 — Self-consistency on `sample-pictures/`.** No hand-corrected truth exists, but we can use the `sample-pictures + locate:false` pipeline output as a *de facto reference* and check that the locate-enabled runs produce essentially the same final image. This widens coverage to 6 real-world photos that aren't in the unit-test set.
+
+| Corpus | `locate` mode | Output dir | Reference | Purpose |
+|---|---|---|---|---|
+| `sample-pictures/` | `false` | `sample-pictures-out/` | (none — this run *is* the reference) | **Reference baseline** for tier-2 checks. Existing extraction behavior; outputs are emitted normally. |
+| `sample-pictures/` | `true` | `sample-pictures-out-locate/` | `sample-pictures-out/` outputs from this same test-pipeline run | **Self-consistency robustness.** Confirms `locate` doesn't mangle already-cropped real-world inputs. |
+| `sample-pictures-full/` | `true` | `sample-pictures-out-full/` | `sample-pictures-out/` outputs from this same test-pipeline run | **Self-consistency primary.** Confirms `locate` on real full-photo inputs reproduces the same final image as the manually-cropped version. |
+
+The tier-2 reference is regenerated each test run (the locate:false sample-pictures run produces it, then the two locate:true runs are diffed against it). This makes it self-correcting: if the `warp/correct/...` pipeline changes, all three sample-pictures runs change together and the diffs stay meaningful.
+
+Tier-2 diffs are reported in the summary log as pixel-difference percentages, alongside the tier-1 accuracy numbers. They're soft signals — large divergence is a flag to investigate, not an automatic test failure.
+
+Run order matters for tier 2: the locate:false `sample-pictures` run must complete before the two diff-against-it runs start. The test runner orders the config list accordingly; locate:true runs that need a reference declare it via a `referenceFrom: <outputDir>` field on their config.
+
+Each corpus produces its own `test-summary.log`, per-image `<name>.log`, and `debug/` directory under its respective output dir. The existing `test-output/` and `sample-pictures-out/` layouts are preserved unchanged for back-compat.
+
+The robustness/self-consistency checks (rows 3, 5, 6) are soft signals — informative but not hard gates. Worth running from day one because they're cheap and regressions are interesting feedback.
 
 ---
 
@@ -225,8 +241,8 @@ The `log` array gets human-readable lines like `[locate] threshold=180, candidat
 - `packages/gbcam-extract/src/common.ts` — `STEP_ORDER`, `StepName`, `PipelineOptions.locate`, `PipelineResult.intermediates.locate`
 - `packages/gbcam-extract/src/index.ts` — export `locate`, run it conditionally in `processPicture`
 - `packages/gbcam-extract/scripts/extract.ts` — register `locate` in step maps, default `--start` to `"locate"`, update help text and examples
-- `packages/gbcam-extract/scripts/run-tests.ts` — iterate over the three corpus configs above
-- `AGENTS.md` — new `### 1. Locate` under `## Pipeline Steps` (existing 1–5 renumbered to 2–6); test-results section picks up `test-output-full/` and `test-output-locate/`; debug-output section documents the new images and metrics
+- `packages/gbcam-extract/scripts/run-tests.ts` — iterate over the six corpus configs above (tier 1 + tier 2); add tier-2 self-consistency diffing against `sample-pictures-out/` produced earlier in the same run
+- `AGENTS.md` — new `### 1. Locate` under `## Pipeline Steps` (existing 1–5 renumbered to 2–6); test-results section picks up `test-output-full/`, `test-output-locate/`, `sample-pictures-out-locate/`, `sample-pictures-out-full/`; debug-output section documents the new images and metrics; describe the new `sample-pictures-full/` corpus alongside the existing `sample-pictures/` description
 
 ### Untouched
 
@@ -252,8 +268,15 @@ Whether to add the optional dash-pattern correlation to validation is decided ba
 
 ## Success Criteria
 
-- `pnpm test:pipeline` produces three test summaries (`test-output/`, `test-output-full/`, `test-output-locate/`).
+**Hard gates:**
+
+- `pnpm test:pipeline` produces six output directories (`test-output/`, `test-output-full/`, `test-output-locate/`, `sample-pictures-out/`, `sample-pictures-out-locate/`, `sample-pictures-out-full/`), each with its own summary log.
 - `test-output/` accuracy is unchanged from current numbers (no regressions to the existing pipeline).
-- `test-output-full/` accuracy is comparable to `test-output/` — i.e. starting from a full phone photo doesn't meaningfully degrade end-to-end accuracy.
-- `test-output-locate/` accuracy is comparable to `test-output/` (soft signal — informative but not a hard gate).
-- `tests/locate.test.ts` passes with all six `test-input-full/` images within tolerance of `corners.json`.
+- `test-output-full/` accuracy is comparable to `test-output/` — starting from a full phone photo doesn't meaningfully degrade end-to-end accuracy.
+- `tests/locate.test.ts` passes with all `test-input-full/` images within tolerance of `corners.json`.
+
+**Soft signals (informative, not gates):**
+
+- `test-output-locate/` accuracy ≈ `test-output/` accuracy (locate is a near-no-op on already-cropped inputs).
+- `sample-pictures-out-locate/` outputs ≈ `sample-pictures-out/` outputs (self-consistency on already-cropped real-world photos).
+- `sample-pictures-out-full/` outputs ≈ `sample-pictures-out/` outputs (self-consistency on full real-world photos — closest analogue to the bottom-line user experience).
