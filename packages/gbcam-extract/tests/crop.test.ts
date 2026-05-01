@@ -27,7 +27,7 @@ describe("crop", () => {
       }
     }
 
-    const result = crop(input, { scale });
+    const result = crop(input);
 
     expect(result.width).toBe(CAM_W * scale);
     expect(result.height).toBe(CAM_H * scale);
@@ -58,7 +58,7 @@ describe("crop", () => {
       }
     }
 
-    const result = crop(input, { scale });
+    const result = crop(input);
 
     expect(result.width).toBe(CAM_W * scale); // 1024
     expect(result.height).toBe(CAM_H * scale); // 896

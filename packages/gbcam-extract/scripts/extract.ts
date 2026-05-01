@@ -174,7 +174,7 @@ async function saveImage(img: GBImageData, outPath: string): Promise<void> {
 const STEP_FUNCTIONS: Record<string, (input: GBImageData, scale: number) => GBImageData> = {
   warp: (input, scale) => warp(input, { scale }),
   correct: (input, scale) => correct(input, { scale }),
-  crop: (input, scale) => crop(input, { scale }),
+  crop: (input, _scale) => crop(input),
   sample: (input, _scale) => sample(input),
   quantize: (input, _scale) => quantize(input),
 };

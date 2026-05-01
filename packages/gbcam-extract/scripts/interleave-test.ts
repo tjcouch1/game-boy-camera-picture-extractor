@@ -200,7 +200,7 @@ async function runTsStep(
       output = correct(input, { scale: 8 });
       break;
     case "crop":
-      output = crop(input, { scale: 8 });
+      output = crop(input);
       break;
     case "sample":
       output = sample(input);
