@@ -154,10 +154,38 @@ export function correct(
     );
   }
 
+  // Bright-heavy content heuristic: if camera region mean R is very high,
+  // the interior DG calibration is likely to mis-classify and pull the
+  // surfaces. Skip iterative refinement in that case.
+  let cameraMeanR = 0;
+  {
+    const x0 = FRAME_THICK * scale;
+    const y0 = FRAME_THICK * scale;
+    const x1 = (FRAME_THICK + CAM_W) * scale;
+    const y1 = (FRAME_THICK + CAM_H) * scale;
+    let sum = 0;
+    let n = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        sum += correctedR[y * W + x];
+        n++;
+      }
+    }
+    cameraMeanR = n > 0 ? sum / n : 0;
+  }
+  const BRIGHT_HEAVY_THRESH = 160;
+  const skipRefinement = cameraMeanR > BRIGHT_HEAVY_THRESH;
+  if (dbg) {
+    dbg.log(
+      `[correct] bright-heavy heuristic: cameraMeanR=${cameraMeanR.toFixed(1)}` +
+        ` skipRefinement=${skipRefinement}`,
+    );
+  }
+
   // ── Iterative refinement (optional: can apply per channel) ──
   let calCountR = 0;
   let calCountG = 0;
-  for (let pass = 0; pass < refinePasses; pass++) {
+  for (let pass = 0; pass < refinePasses && !skipRefinement; pass++) {
     const refinedR = refinePassChannel(
       correctedR,
       chR,
