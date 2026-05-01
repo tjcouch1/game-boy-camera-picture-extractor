@@ -137,6 +137,11 @@ function runPythonStep(
   inputFile: string,
   tmpDir: string,
 ): string {
+  // The Python pipeline still takes --scale; the TypeScript pipeline
+  // auto-detects scale internally. We hardcode --scale 8 here to keep the
+  // Python side comparable to the historical TS scale=8 default. If the TS
+  // side now picks a different scale, the per-step interleaving compares
+  // outputs at different resolutions, which is expected.
   const scaleArg = step !== "quantize" ? "--scale 8" : "";
   const cmd = `"${VENV_PYTHON}" "${PY_SCRIPTS[step]}" "${inputFile}" ${scaleArg} --output-dir "${tmpDir}"`;
 

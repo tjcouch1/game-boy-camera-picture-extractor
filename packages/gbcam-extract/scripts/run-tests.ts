@@ -368,11 +368,9 @@ async function runPipeline(
   inputPath: string,
   outputDir: string,
   stem: string,
-  scale: number = 8
 ): Promise<PipelineRunResult> {
   const input = await loadImage(inputPath);
   const result = await processPicture(input, {
-    scale,
     debug: true,
     onProgress: (step, pct) => {
       if (pct === 0) process.stdout.write(`  ${step}...`);
@@ -561,7 +559,6 @@ async function main() {
         try {
           const input = await loadImage(inputPath);
           const result = await processPicture(input, {
-            scale: 8,
             debug: true,
             onProgress: (step, pct) => {
               if (pct === 0) process.stdout.write(`    ${step}...`);
@@ -645,7 +642,6 @@ async function main() {
             inputPath,
             outputDir,
             stem,
-            8
           );
 
           // Echo per-step diagnostic logs into the test log
