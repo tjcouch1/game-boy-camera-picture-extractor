@@ -6,6 +6,7 @@ PIPELINE RUN
 PIPELINE DIAGNOSTICS
   [warp] corner detection: area=1193644 aspect=1.134 (target 1.111) thresh=180 score=0.0307
   [warp] detected source corners (TL TR BR BL): (32,21) (1185,31) (1167,1068) (28,1062)
+  [warp] auto-scale: edges T=1153.0 B=1139.0 L=1041.0 R=1037.2, maxH=1153.0 maxV=1041.0, scale=8
   [warp] pass 1 edge curvatures: top=-0.47 bot=-0.48 left=-2.34 right=4.03
   [warp] pass 1 corner errors: TL=(-2.8,-0.2) TR=(4.0,-1.1) BR=(3.4,0.1) BL=(-1.8,-0.7)
   [warp] pass 2 edge curvatures: top=0.07 bot=-0.26 left=-1.10 right=2.12
