@@ -1,6 +1,26 @@
 import { type GBImageData, CAM_W, CAM_H, createGBImageData } from "./common.js";
 import { type DebugCollector, upscale } from "./debug.js";
 
+/**
+ * Compute the trimmed mean: drop the lowest and highest fraction of values,
+ * average the rest. Falls back to plain mean when fewer than 5 values.
+ */
+function trimmedMean(values: number[], trimFrac: number): number {
+  const n = values.length;
+  if (n === 0) return 0;
+  if (n < 5) {
+    let s = 0;
+    for (const v of values) s += v;
+    return s / n;
+  }
+  values.sort((a, b) => a - b);
+  const lo = Math.floor(n * trimFrac);
+  const hi = n - lo;
+  let s = 0;
+  for (let i = lo; i < hi; i++) s += values[i];
+  return s / (hi - lo);
+}
+
 export interface SampleOptions {
   scale?: number;
   method?: "mean" | "median"; // kept for API compat; internally always uses mean (matching Python)
@@ -82,32 +102,27 @@ export function sample(
       const rLo = innerStart + 2 * Math.floor(innerW / 3);
       const rHi = innerEnd;
 
-      let rSum = 0,
-        gSum = 0,
-        bSum = 0;
-      let rCount = 0,
-        gCount = 0,
-        bCount = 0;
+      const rVals: number[] = [];
+      const gVals: number[] = [];
+      const bVals: number[] = [];
 
       for (let y = y1; y < y2; y++) {
         const rowBase = y * input.width;
         for (let dx = rLo; dx < rHi; dx++) {
-          rSum += input.data[(rowBase + x0 + dx) * 4];
-          rCount++;
+          rVals.push(input.data[(rowBase + x0 + dx) * 4]);
         }
         for (let dx = gLo; dx < gHi; dx++) {
-          gSum += input.data[(rowBase + x0 + dx) * 4 + 1];
-          gCount++;
+          gVals.push(input.data[(rowBase + x0 + dx) * 4 + 1]);
         }
         for (let dx = bLo; dx < bHi; dx++) {
-          bSum += input.data[(rowBase + x0 + dx) * 4 + 2];
-          bCount++;
+          bVals.push(input.data[(rowBase + x0 + dx) * 4 + 2]);
         }
       }
 
-      output.data[outIdx] = Math.round(rCount > 0 ? rSum / rCount : 0);
-      output.data[outIdx + 1] = Math.round(gCount > 0 ? gSum / gCount : 0);
-      output.data[outIdx + 2] = Math.round(bCount > 0 ? bSum / bCount : 0);
+      const TRIM = 0.2;
+      output.data[outIdx] = Math.round(trimmedMean(rVals, TRIM));
+      output.data[outIdx + 1] = Math.round(trimmedMean(gVals, TRIM));
+      output.data[outIdx + 2] = Math.round(trimmedMean(bVals, TRIM));
       output.data[outIdx + 3] = 255;
     }
   }
