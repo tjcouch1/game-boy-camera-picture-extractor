@@ -201,13 +201,44 @@ export function correct(
     );
   }
 
-  // ── Build output RGBA ──
+  // ── Build provisional output to measure frame post-correction ──
+  const provisional = createGBImageData(W, H);
+  for (let i = 0; i < H * W; i++) {
+    const j = i * 4;
+    provisional.data[j] = Math.max(0, Math.min(255, Math.round(correctedR[i])));
+    provisional.data[j + 1] = Math.max(0, Math.min(255, Math.round(correctedG[i])));
+    provisional.data[j + 2] = Math.max(0, Math.min(255, Math.round(correctedB[i])));
+    provisional.data[j + 3] = 255;
+  }
+
+  // ── Frame post-correction calibration (global per-channel scale) ──
+  const framePostMeasured = framePost85(provisional);
+  const TARGET_FRAME = { R: 255, G: 255, B: 165 };
+  const SCALE_TOL = 8;
+  const safeScale = (m: number, t: number): number => {
+    if (m < 1) return 1;
+    const s = t / m;
+    return Math.max(0.85, Math.min(1.18, s));
+  };
+  const scaleR =
+    Math.abs(framePostMeasured.R - TARGET_FRAME.R) > SCALE_TOL
+      ? safeScale(framePostMeasured.R, TARGET_FRAME.R)
+      : 1;
+  const scaleG =
+    Math.abs(framePostMeasured.G - TARGET_FRAME.G) > SCALE_TOL
+      ? safeScale(framePostMeasured.G, TARGET_FRAME.G)
+      : 1;
+  const scaleB =
+    Math.abs(framePostMeasured.B - TARGET_FRAME.B) > SCALE_TOL
+      ? safeScale(framePostMeasured.B, TARGET_FRAME.B)
+      : 1;
+
   const output = createGBImageData(W, H);
   for (let i = 0; i < H * W; i++) {
     const j = i * 4;
-    output.data[j] = Math.max(0, Math.min(255, Math.round(correctedR[i])));
-    output.data[j + 1] = Math.max(0, Math.min(255, Math.round(correctedG[i])));
-    output.data[j + 2] = Math.max(0, Math.min(255, Math.round(correctedB[i])));
+    output.data[j] = Math.max(0, Math.min(255, Math.round(provisional.data[j] * scaleR)));
+    output.data[j + 1] = Math.max(0, Math.min(255, Math.round(provisional.data[j + 1] * scaleG)));
+    output.data[j + 2] = Math.max(0, Math.min(255, Math.round(provisional.data[j + 2] * scaleB)));
     output.data[j + 3] = 255;
   }
 
@@ -235,12 +266,15 @@ export function correct(
     }
     dbg.addImage("correct_c_dark_surface", renderHeatmap(darkAvg, W, H));
 
-    // Frame post-correction p85 — verifies the correction landed where expected
     const framePost = framePost85(output);
     dbg.log(
-      `[correct] frame post-correction p85: ` +
+      `[correct] frame post-correction p85 (pre-scale): ` +
+        `R=${framePostMeasured.R.toFixed(0)} G=${framePostMeasured.G.toFixed(0)} B=${framePostMeasured.B.toFixed(0)}`,
+    );
+    dbg.log(
+      `[correct] frame post-correction p85 (post-scale): ` +
         `R=${framePost.R.toFixed(0)} G=${framePost.G.toFixed(0)} B=${framePost.B.toFixed(0)} ` +
-        `(target #FFFFA5 = R255 G255 B165)`,
+        `(target #FFFFA5 = R255 G255 B165, scales R=${scaleR.toFixed(3)} G=${scaleG.toFixed(3)} B=${scaleB.toFixed(3)})`,
     );
     // Drift diagnostic: warn when frame post-correction is off-target.
     {
