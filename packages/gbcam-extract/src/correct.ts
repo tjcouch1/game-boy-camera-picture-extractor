@@ -242,6 +242,18 @@ export function correct(
         `R=${framePost.R.toFixed(0)} G=${framePost.G.toFixed(0)} B=${framePost.B.toFixed(0)} ` +
         `(target #FFFFA5 = R255 G255 B165)`,
     );
+    // Drift diagnostic: warn when frame post-correction is off-target.
+    {
+      const TARGET = { R: 255, G: 255, B: 165 };
+      const TOL = 30;
+      const offs: string[] = [];
+      if (Math.abs(framePost.R - TARGET.R) > TOL) offs.push(`R off by ${(framePost.R - TARGET.R).toFixed(0)}`);
+      if (Math.abs(framePost.G - TARGET.G) > TOL) offs.push(`G off by ${(framePost.G - TARGET.G).toFixed(0)}`);
+      if (Math.abs(framePost.B - TARGET.B) > TOL) offs.push(`B off by ${(framePost.B - TARGET.B).toFixed(0)}`);
+      if (offs.length > 0) {
+        dbg.log(`[correct] WARN frame post-correction off-target: ${offs.join("; ")}`);
+      }
+    }
     dbg.log(
       `[correct] camera region mean: ` +
         cameraRegionMean(output, scale)
