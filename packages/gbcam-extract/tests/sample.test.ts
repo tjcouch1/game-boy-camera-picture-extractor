@@ -27,7 +27,7 @@ describe("sample", () => {
       }
     }
 
-    const result = sample(input, { scale });
+    const result = sample(input);
 
     expect(result.width).toBe(CAM_W);
     expect(result.height).toBe(CAM_H);
@@ -52,7 +52,7 @@ describe("sample", () => {
       input.data[i + 3] = 255;
     }
 
-    const result = sample(input, { scale });
+    const result = sample(input);
     expect(result.width).toBe(CAM_W);
     expect(result.height).toBe(CAM_H);
     expect(result.data[0]).toBe(42);
@@ -75,7 +75,7 @@ describe("sample", () => {
       input.data[i + 3] = 255; // A
     }
 
-    const result = sample(input, { scale });
+    const result = sample(input);
 
     expect(result.width).toBe(CAM_W);
     expect(result.height).toBe(CAM_H);

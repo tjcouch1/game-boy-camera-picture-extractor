@@ -203,7 +203,7 @@ async function runTsStep(
       output = crop(input, { scale: 8 });
       break;
     case "sample":
-      output = sample(input, { scale: 8 });
+      output = sample(input);
       break;
     case "quantize":
       output = quantize(input);

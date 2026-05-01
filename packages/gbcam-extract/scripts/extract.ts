@@ -175,7 +175,7 @@ const STEP_FUNCTIONS: Record<string, (input: GBImageData, scale: number) => GBIm
   warp: (input, scale) => warp(input, { scale }),
   correct: (input, scale) => correct(input, { scale }),
   crop: (input, scale) => crop(input, { scale }),
-  sample: (input, scale) => sample(input, { scale }),
+  sample: (input, _scale) => sample(input),
   quantize: (input, _scale) => quantize(input),
 };
 

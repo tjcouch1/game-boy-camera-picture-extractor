@@ -59,7 +59,7 @@ export async function processPicture(
   onProgress?.("crop", 100);
 
   onProgress?.("sample", 0);
-  const sampled = sample(cropped, { scale, debug: collector });
+  const sampled = sample(cropped, { debug: collector });
   onProgress?.("sample", 100);
 
   onProgress?.("quantize", 0);
