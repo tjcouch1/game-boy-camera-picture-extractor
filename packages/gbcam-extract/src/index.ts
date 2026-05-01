@@ -16,6 +16,7 @@ export {
 } from "./common.js";
 export { initOpenCV } from "./init-opencv.js";
 export { applyPalette } from "./palette.js";
+export { locate } from "./locate.js";
 export { warp } from "./warp.js";
 export { correct } from "./correct.js";
 export { crop } from "./crop.js";
@@ -29,6 +30,7 @@ export {
 } from "./data/palettes-generated.js";
 
 import type { GBImageData, PipelineResult, PipelineOptions } from "./common.js";
+import { locate } from "./locate.js";
 import { warp } from "./warp.js";
 import { correct } from "./correct.js";
 import { crop } from "./crop.js";
@@ -42,12 +44,17 @@ export async function processPicture(
 ): Promise<PipelineResult> {
   const scale = options?.scale ?? 8;
   const debug = options?.debug ?? false;
+  const runLocate = options?.locate ?? true;
   const onProgress = options?.onProgress;
 
   const collector = debug ? createDebugCollector() : undefined;
 
+  onProgress?.("locate", 0);
+  const located = runLocate ? locate(input, { debug: collector }) : input;
+  onProgress?.("locate", 100);
+
   onProgress?.("warp", 0);
-  const warped = warp(input, { scale, debug: collector });
+  const warped = warp(located, { scale, debug: collector });
   onProgress?.("warp", 100);
 
   onProgress?.("correct", 0);
@@ -69,6 +76,7 @@ export async function processPicture(
   const result: PipelineResult = { grayscale: quantized };
   if (debug) {
     result.intermediates = {
+      locate: located,
       warp: warped,
       correct: corrected,
       crop: cropped,
