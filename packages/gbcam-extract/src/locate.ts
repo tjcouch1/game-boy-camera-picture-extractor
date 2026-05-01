@@ -123,7 +123,63 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
     }
 
     // ── 2c. Validate candidates against Frame 02 ──
-    // (added in Task 7)
+    let bestIdx = -1;
+    let bestScore: ValidationScore | null = null;
+    const allScores: ValidationScore[] = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const score = validateCandidate(work.mat, candidates[i]);
+      allScores.push(score);
+      if (!bestScore || score.totalScore > bestScore.totalScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+
+    if (!bestScore || bestScore.totalScore < MIN_VALIDATION_SCORE) {
+      const top = bestScore
+        ? `top totalScore=${bestScore.totalScore.toFixed(3)} ` +
+          `(innerBorder=${bestScore.innerBorderScore.toFixed(3)}, ` +
+          `darkRing=${bestScore.darkRingScore.toFixed(3)})`
+        : "no candidates";
+      throw new Error(
+        `[locate] No candidate passed Frame 02 validation. ${top}, ` +
+          `min required = ${MIN_VALIDATION_SCORE}.`,
+      );
+    }
+
+    if (dbg) {
+      // Re-emit the candidates debug image with the chosen one in green.
+      const workingRgba = matToImageData(work.mat);
+      dbg.addImage("locate_b_candidates", drawCandidates(workingRgba, candidates, bestIdx));
+      // Emit the chosen-candidate validation visualization.
+      dbg.addImage(
+        "locate_c_validation",
+        renderValidationOverlay(work.mat, candidates[bestIdx], bestScore),
+      );
+      dbg.log(
+        `[locate] chose candidate ${bestIdx}: ` +
+          `totalScore=${bestScore.totalScore.toFixed(3)} ` +
+          `(innerBorder=${bestScore.innerBorderScore.toFixed(3)}, ` +
+          `darkRing=${bestScore.darkRingScore.toFixed(3)})`,
+      );
+      dbg.setMetrics("locate", {
+        chosenCandidate: {
+          score: candidates[bestIdx].score,
+          area: candidates[bestIdx].area,
+          // corners in original-image coords are written in Task 8
+          validation: bestScore,
+        },
+        rejectedScores: allScores.map((s, i) => ({
+          index: i,
+          totalScore: s.totalScore,
+          innerBorderScore: s.innerBorderScore,
+          darkRingScore: s.darkRingScore,
+        })).filter((_, i) => i !== bestIdx),
+      });
+    }
+
+    const chosen = candidates[bestIdx];
+    void chosen; // used in Task 8
 
     // ── 2d. Map back, expand, rotate, crop ──
     // (added in Task 8; for now, return passthrough)
@@ -240,6 +296,244 @@ function findCandidates(binary: any, topN: number): Candidate[] {
     candidates.sort((a, b) => a.score - b.score);
     return candidates.slice(0, topN);
   });
+}
+
+interface ValidationScore {
+  /** Score 0–1 measuring how dark the expected inner-border ring is. */
+  innerBorderScore: number;
+  /** Score 0–1 measuring how dark the band immediately outside the candidate is. */
+  darkRingScore: number;
+  /** Composite total, 0–1 (higher = better). */
+  totalScore: number;
+}
+
+/**
+ * Validate a candidate by perspective-warping it to a normalized 160×144
+ * image and scoring two Frame 02 features:
+ *   - Inner-border ring: at the expected location of Frame 02's #9494FF
+ *     inner border (inset 16 px from the outer edge), the ring should be
+ *     darker than the surrounding white frame.
+ *   - Surrounding dark ring: a band immediately outside the candidate (in
+ *     working-resolution coords) should be darker than the candidate's
+ *     interior — this is the GBA SP LCD-black under the front-light.
+ *
+ * Both signals are normalized to 0–1 and averaged into `totalScore`.
+ */
+function validateCandidate(
+  workingRgba: any /* cv.Mat */,
+  candidate: Candidate,
+): ValidationScore {
+  const cv = getCV();
+
+  return withMats((track) => {
+    // ── Inner-border ring: warp candidate to normalized 160×144 ──
+    const N = 160; // normalized width
+    const M = 144; // normalized height
+    const srcPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      candidate.corners[0][0], candidate.corners[0][1],
+      candidate.corners[1][0], candidate.corners[1][1],
+      candidate.corners[2][0], candidate.corners[2][1],
+      candidate.corners[3][0], candidate.corners[3][1],
+    ]));
+    const dstPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0,
+      N - 1, 0,
+      N - 1, M - 1,
+      0, M - 1,
+    ]));
+    const Mhom = track(cv.getPerspectiveTransform(srcPts, dstPts));
+    const warped = track(new cv.Mat());
+    cv.warpPerspective(workingRgba, warped, Mhom, new cv.Size(N, M), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
+
+    const warpedGray = track(new cv.Mat());
+    cv.cvtColor(warped, warpedGray, cv.COLOR_RGBA2GRAY);
+
+    // Inner-border ring sits at row/col 15 of the normalized frame
+    // (16-px-thick frame, inner border at outer edge of the camera area).
+    // We measure two means:
+    //   meanFrame   — interior of the 16-px frame band (excluding the ring itself)
+    //   meanRing    — the inner-border ring at row/col 15
+    // Score = clamp((meanFrame - meanRing) / 80, 0, 1)
+    //   80 is a reasonable expected contrast (white-frame ≈ 230, ring ≈ 100).
+    const ringRow = 15;
+    let meanFrame = 0, frameCnt = 0;
+    let meanRing = 0, ringCnt = 0;
+    const data = warpedGray.data; // Uint8Array, length N*M
+    for (let y = 0; y < M; y++) {
+      for (let x = 0; x < N; x++) {
+        const v = data[y * N + x];
+        const inFrame =
+          (y < 16 || y >= M - 16 || x < 16 || x >= N - 16) &&
+          !(y === ringRow || y === M - 1 - ringRow || x === ringRow || x === N - 1 - ringRow);
+        const onRing =
+          (y === ringRow && x >= ringRow && x <= N - 1 - ringRow) ||
+          (y === M - 1 - ringRow && x >= ringRow && x <= N - 1 - ringRow) ||
+          (x === ringRow && y > ringRow && y < M - 1 - ringRow) ||
+          (x === N - 1 - ringRow && y > ringRow && y < M - 1 - ringRow);
+        if (inFrame) { meanFrame += v; frameCnt++; }
+        if (onRing) { meanRing += v; ringCnt++; }
+      }
+    }
+    meanFrame = frameCnt > 0 ? meanFrame / frameCnt : 0;
+    meanRing = ringCnt > 0 ? meanRing / ringCnt : 0;
+    const innerBorderScore = clamp((meanFrame - meanRing) / 80, 0, 1);
+
+    // ── Surrounding dark ring: in working-resolution coords ──
+    // Sample a band of width = ringWidth pixels just outside each edge of
+    // the candidate's bounding box and compute its mean. Compare to the
+    // candidate's overall interior mean.
+    const ringWidth = Math.max(4, Math.round(Math.min(candidate.width, candidate.height) * 0.05));
+    const bbox = boundingBoxOfCorners(candidate.corners, workingRgba.cols, workingRgba.rows);
+    const interiorMean = meanGrayInBox(workingRgba, bbox, 0);
+    const outsideMean = meanGrayInRingAround(workingRgba, bbox, ringWidth);
+    // Expected: outsideMean << interiorMean. Score normalized to 0–1.
+    const darkRingScore = clamp((interiorMean - outsideMean) / 100, 0, 1);
+
+    const totalScore = (innerBorderScore + darkRingScore) / 2;
+    return { innerBorderScore, darkRingScore, totalScore };
+  });
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+interface Bbox { x0: number; y0: number; x1: number; y1: number; }
+
+function boundingBoxOfCorners(corners: Corners, imgW: number, imgH: number): Bbox {
+  const xs = corners.map((c) => c[0]);
+  const ys = corners.map((c) => c[1]);
+  return {
+    x0: Math.max(0, Math.floor(Math.min(...xs))),
+    y0: Math.max(0, Math.floor(Math.min(...ys))),
+    x1: Math.min(imgW, Math.ceil(Math.max(...xs))),
+    y1: Math.min(imgH, Math.ceil(Math.max(...ys))),
+  };
+}
+
+function meanGrayInBox(rgba: any /* cv.Mat */, b: Bbox, channel: number): number {
+  const cv = getCV();
+  return withMats((track) => {
+    const gray = track(new cv.Mat());
+    cv.cvtColor(rgba, gray, cv.COLOR_RGBA2GRAY);
+    let sum = 0, cnt = 0;
+    for (let y = b.y0; y < b.y1; y++) {
+      for (let x = b.x0; x < b.x1; x++) {
+        sum += gray.data[y * gray.cols + x];
+        cnt++;
+      }
+    }
+    void channel; // retained for future per-channel scoring; unused for now.
+    return cnt > 0 ? sum / cnt : 0;
+  });
+}
+
+function meanGrayInRingAround(rgba: any /* cv.Mat */, b: Bbox, ringWidth: number): number {
+  const cv = getCV();
+  return withMats((track) => {
+    const gray = track(new cv.Mat());
+    cv.cvtColor(rgba, gray, cv.COLOR_RGBA2GRAY);
+    let sum = 0, cnt = 0;
+    const W = gray.cols;
+    const H = gray.rows;
+    const xa = Math.max(0, b.x0 - ringWidth);
+    const xb = Math.min(W, b.x1 + ringWidth);
+    const ya = Math.max(0, b.y0 - ringWidth);
+    const yb = Math.min(H, b.y1 + ringWidth);
+    for (let y = ya; y < yb; y++) {
+      for (let x = xa; x < xb; x++) {
+        const inInner = (x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
+        if (inInner) continue;
+        sum += gray.data[y * W + x];
+        cnt++;
+      }
+    }
+    return cnt > 0 ? sum / cnt : 0;
+  });
+}
+
+/**
+ * Render an 8x-upscaled normalized-160×144 view of the chosen candidate
+ * with overlays showing the inner-border ring (red) and an annotation of
+ * the score values (drawn as colored squares — top-left red square's
+ * brightness encodes innerBorderScore, top-right encodes darkRingScore).
+ *
+ * The visualization is intentionally minimal — clusters of pixels with
+ * known meaning rather than text — so we don't pull in font rendering.
+ */
+function renderValidationOverlay(
+  workingMat: any /* cv.Mat */,
+  candidate: Candidate,
+  score: ValidationScore,
+): GBImageData {
+  const cv = getCV();
+  const N = 160, M = 144, UPSCALE = 8;
+  return withMats((track) => {
+    const srcPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      candidate.corners[0][0], candidate.corners[0][1],
+      candidate.corners[1][0], candidate.corners[1][1],
+      candidate.corners[2][0], candidate.corners[2][1],
+      candidate.corners[3][0], candidate.corners[3][1],
+    ]));
+    const dstPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0, N - 1, 0, N - 1, M - 1, 0, M - 1,
+    ]));
+    const Mhom = track(cv.getPerspectiveTransform(srcPts, dstPts));
+    const warped = track(new cv.Mat());
+    cv.warpPerspective(workingMat, warped, Mhom, new cv.Size(N, M), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
+
+    const upscaled = track(new cv.Mat());
+    cv.resize(warped, upscaled, new cv.Size(N * UPSCALE, M * UPSCALE), 0, 0, cv.INTER_NEAREST);
+
+    const out = matToImageData(upscaled);
+
+    // Overlay the inner-border ring at row/col 15 in normalized space — i.e.
+    // row/col 15*UPSCALE in upscaled space — as a red rectangle outline.
+    const ringPx = 15 * UPSCALE;
+    const ringPts: Point[] = [
+      [ringPx, ringPx],
+      [(N - 1 - 15) * UPSCALE, ringPx],
+      [(N - 1 - 15) * UPSCALE, (M - 1 - 15) * UPSCALE],
+      [ringPx, (M - 1 - 15) * UPSCALE],
+    ];
+    drawPolylineRGBA(out, ringPts, [255, 0, 0], 2, true);
+
+    // Score annotations: two filled squares in the top-left corner whose
+    // brightness encodes the two component scores.
+    const sq = 12 * UPSCALE;
+    fillRectRGBA(out, 4, 4, sq, sq, [
+      Math.round(255 * score.innerBorderScore),
+      0,
+      0,
+    ]);
+    fillRectRGBA(out, 4 + sq + 4, 4, sq, sq, [
+      0,
+      Math.round(255 * score.darkRingScore),
+      0,
+    ]);
+
+    return out;
+  });
+}
+
+function fillRectRGBA(
+  img: GBImageData,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: [number, number, number],
+): void {
+  for (let yy = y; yy < y + h; yy++) {
+    for (let xx = x; xx < x + w; xx++) {
+      if (xx < 0 || yy < 0 || xx >= img.width || yy >= img.height) continue;
+      const idx = (yy * img.width + xx) * 4;
+      img.data[idx] = color[0];
+      img.data[idx + 1] = color[1];
+      img.data[idx + 2] = color[2];
+      img.data[idx + 3] = 255;
+    }
+  }
 }
 
 /**
