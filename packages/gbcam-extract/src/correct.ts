@@ -48,7 +48,6 @@ const TRUE_WHITE = 255;
 // ─── Public interface ───
 
 export interface CorrectOptions {
-  scale?: number;
   polyDegree?: number;
   darkSmooth?: number;
   refinePasses?: number;
@@ -65,18 +64,22 @@ export function correct(
   input: GBImageData,
   options?: CorrectOptions,
 ): GBImageData {
-  const scale = options?.scale ?? 8;
   const polyDegree = options?.polyDegree ?? 2;
   const darkSmooth = options?.darkSmooth ?? 13;
   const refinePasses = options?.refinePasses ?? 1;
   const dbg = options?.debug;
 
-  const expectedW = SCREEN_W * scale;
-  const expectedH = SCREEN_H * scale;
-  if (input.width !== expectedW || input.height !== expectedH) {
+  if (input.width === 0 || input.height === 0 || input.width % SCREEN_W !== 0) {
     throw new Error(
-      `Unexpected input size ${input.width}x${input.height}; ` +
-        `expected ${expectedW}x${expectedH} (scale=${scale})`,
+      `[correct] unexpected input size ${input.width}x${input.height}; ` +
+        `width must be a positive integer multiple of SCREEN_W=${SCREEN_W}`,
+    );
+  }
+  const scale = input.width / SCREEN_W;
+  if (input.height !== SCREEN_H * scale) {
+    throw new Error(
+      `[correct] unexpected input size ${input.width}x${input.height}; ` +
+        `expected ${SCREEN_W * scale}x${SCREEN_H * scale} (inferred scale=${scale})`,
     );
   }
 

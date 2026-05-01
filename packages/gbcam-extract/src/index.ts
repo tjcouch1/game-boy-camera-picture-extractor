@@ -51,7 +51,7 @@ export async function processPicture(
   onProgress?.("warp", 100);
 
   onProgress?.("correct", 0);
-  const corrected = correct(warped, { scale, debug: collector });
+  const corrected = correct(warped, { debug: collector });
   onProgress?.("correct", 100);
 
   onProgress?.("crop", 0);

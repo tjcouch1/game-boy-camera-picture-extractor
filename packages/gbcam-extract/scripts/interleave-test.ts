@@ -197,7 +197,7 @@ async function runTsStep(
       output = warp(input, { scale: 8 });
       break;
     case "correct":
-      output = correct(input, { scale: 8 });
+      output = correct(input);
       break;
     case "crop":
       output = crop(input);
