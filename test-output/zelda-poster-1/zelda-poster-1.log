@@ -26,27 +26,27 @@ PIPELINE DIAGNOSTICS
   [crop] inner-border mean=152.8 white-frame mean=188.4 (ratio 0.811, OK)
   [sample] R: 31–255  G: 0–255  B: 67–166
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=2
-  [quantize] global k-means cluster centers (palette-ordered):  BK=(R75,G39,B114)  DG=(R162,G164,B148)  LG=(R240,G171,B130)  WH=(R249,G252,B142)
-  [quantize] after global kmeans: BK=1572  DG=3506  LG=4241  WH=5017
-  [quantize] WARN cluster drift: BK drifted 142 RGB-units; DG drifted 109 RGB-units
-  [quantize] strip ensemble: 7 strips, changed 35 px  now: BK=1572  DG=3519  LG=4248  WH=4997
-  [quantize] G-valley refinement: threshold=226.0 (LG center G=170.6, WH center G=251.9), changed 14 px
-  [quantize] final: BK=1572 (11.0%)  DG=3519 (24.5%)  LG=4262 (29.7%)  WH=4983 (34.8%)
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R75,G39)  DG=(R162,G164)  LG=(R240,G171)  WH=(R249,G252)
+  [quantize] after global kmeans: BK=1571  DG=3502  LG=4253  WH=5010
+  [quantize] WARN cluster drift: BK drifted 85 RG-units
+  [quantize] strip ensemble: 7 strips, changed 35 px  now: BK=1572  DG=3518  LG=4251  WH=4995
+  [quantize] G-valley refinement: threshold=226.0 (LG center G=170.6, WH center G=251.9), changed 12 px
+  [quantize] final: BK=1572 (11.0%)  DG=3518 (24.5%)  LG=4263 (29.7%)  WH=4983 (34.8%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14329  (99.95%)
-  Different    : 7   (0.05%)
+  Matching     : 14328  (99.94%)
+  Different    : 8   (0.06%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1572        1572  +0
-  DG  #9494FF                 3519        3526  -7
-  LG  #FF9494                 4262        4255  +7
+  DG  #9494FF                 3518        3526  -8
+  LG  #FF9494                 4263        4255  +8
   WH  #FFFFA5                 4983        4983  +0
 
 ----------------------------------------------------------------------
@@ -54,21 +54,21 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1572 v                0                  0                  0      1572
-  DG  #9494FF                       0               3519 v                0                  0      3519
-  LG  #FF9494                       0                  7 X             4255 v                0      4262
+  DG  #9494FF                       0               3518 v                0                  0      3518
+  LG  #FF9494                       0                  8 X             4255 v                0      4263
   WH  #FFFFA5                       0                  0                  0               4983 v    4983
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  LG  #FF9494  ->  DG  #9494FF : 7 px
+  LG  #FF9494  ->  DG  #9494FF : 8 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14329  (99.95%)
-  Different    : 7   (0.05%)
+  Matching     : 14328  (99.94%)
+  Different    : 8   (0.06%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
