@@ -44,6 +44,9 @@ const TEST_OUTPUT_DIR = join(REPO_ROOT, "test-output");
 const TEST_INPUT_FULL_DIR = join(REPO_ROOT, "test-input-full");
 const TEST_OUTPUT_FULL_DIR = join(REPO_ROOT, "test-output-full");
 const TEST_OUTPUT_LOCATE_DIR = join(REPO_ROOT, "test-output-locate");
+const SAMPLE_PICTURES_FULL_DIR = join(REPO_ROOT, "sample-pictures-full");
+const SAMPLE_PICTURES_OUT_LOCATE = join(REPO_ROOT, "sample-pictures-out-locate");
+const SAMPLE_PICTURES_OUT_FULL = join(REPO_ROOT, "sample-pictures-out-full");
 const REFERENCE_SUFFIX = "-output-corrected.png";
 
 // ─── Color constants ───
@@ -683,6 +686,22 @@ async function main() {
       outputDir: TEST_OUTPUT_LOCATE_DIR,
       locate: true,
       comparison: "reference",
+    },
+    {
+      name: "sample-pictures (locate:true) [self-consistency]",
+      inputDir: SAMPLE_PICTURES_DIR,
+      outputDir: SAMPLE_PICTURES_OUT_LOCATE,
+      locate: true,
+      comparison: "self",
+      referenceFromOutputDir: SAMPLE_PICTURES_OUT,
+    },
+    {
+      name: "sample-pictures-full (locate:true) [self-consistency]",
+      inputDir: SAMPLE_PICTURES_FULL_DIR,
+      outputDir: SAMPLE_PICTURES_OUT_FULL,
+      locate: true,
+      comparison: "self",
+      referenceFromOutputDir: SAMPLE_PICTURES_OUT,
     },
   ];
 
