@@ -8,8 +8,10 @@ PIPELINE DIAGNOSTICS
   [warp] detected source corners (TL TR BR BL): (38,25) (1266,42) (1251,1140) (34,1147)
   [warp] pass 1 edge curvatures: top=-1.24 bot=-0.57 left=-2.30 right=2.00
   [warp] pass 1 corner errors: TL=(-2.2,-0.8) TR=(2.8,-1.1) BR=(2.1,-0.1) BL=(-2.5,-1.0)
+  [warp] pass1 residual: maxCornerErr=2.80 meanEdgeCurv=1.53
   [warp] pass 2 edge curvatures: top=-1.01 bot=-0.14 left=-1.03 right=0.43
   [warp] pass 2 corner errors: TL=(-1.0,-0.5) TR=(1.1,-0.7) BR=(0.7,-0.0) BL=(-1.1,-0.5)
+  [warp] pass2 residual: maxCornerErr=1.10 meanEdgeCurv=0.65
   [white-balance] raw frame median: R=223 G=220 B=211 (target 255 255 165)
   [white-balance] scales: R=1.143 G=1.161 B=0.784 (clamp [0.4, 2.5])
   [white-balance] balanced frame median: R=255 G=255 B=165
