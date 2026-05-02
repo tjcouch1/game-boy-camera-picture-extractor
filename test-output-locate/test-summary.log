@@ -1,8 +1,8 @@
 ======================================================================
-CORPUS SUMMARY — test-input (locate:false)
+CORPUS SUMMARY — test-input (locate:true)
   inputDir:   test-input
-  outputDir:  test-output
-  locate:     false
+  outputDir:  test-output-locate
+  locate:     true
   comparison: reference
 ======================================================================
 

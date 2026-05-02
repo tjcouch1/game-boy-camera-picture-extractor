@@ -1,0 +1,73 @@
+PIPELINE RUN
+  Input:      sample-pictures-full\20260313_213430.jpg
+  Output dir: sample-pictures-out-full\20260313_213430
+  locate:     true
+
+PIPELINE DIAGNOSTICS
+  [locate] working-res 1000×450 (scale=0.248 from 4032×1816)
+  [locate] found 5 candidate(s); top score=0.003
+  [locate] chose candidate 0: totalScore=0.998 (innerBorder=1.000, darkRing=1.000)
+  [locate] output region: 1323×1192 (margin=6.0%, passThrough=false)
+  [warp] corner detection: area=1399331 aspect=1.108 (target 1.111) thresh=180 score=0.0178
+  [warp] detected source corners (TL TR BR BL): (41,35) (1281,37) (1282,1160) (39,1161)
+  [warp] pass 1 edge curvatures: top=-1.65 bot=0.38 left=-2.18 right=3.96
+  [warp] pass 1 corner errors: TL=(-2.5,-2.1) TR=(4.0,-1.5) BR=(4.0,0.8) BL=(-1.7,0.2)
+  [warp] pass 2 edge curvatures: top=-0.53 bot=-0.03 left=-1.07 right=1.70
+  [warp] pass 2 corner errors: TL=(-1.1,-0.9) TR=(1.8,-0.6) BR=(1.8,0.1) BL=(-0.8,-0.1)
+  [correct] R: white samples kept=7156 (median 192.0, range 144–222)
+  [correct] G: white samples kept=7324 (median 211.0, range 157–251)
+  [correct] white surface R: 166–206; G: 181–233
+  [correct] dark surface  R: 86–121; G: 131–158
+  [correct] interior DG calibration: R=3381px G=4738px
+  [correct] frame post-correction p85: R=252 G=253 B=244 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=183.2 G=154.2 B=227.1
+  [crop] inner-border mean=176.4 white-frame mean=212.0 (ratio 0.832, OK)
+  [sample] R: 36–255  G: 0–255  B: 112–255
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R77,G30)  DG=(R157,G155)  LG=(R237,G166)  WH=(R243,G251)
+  [quantize] after global kmeans: BK=1572  DG=3521  LG=4258  WH=4985
+  [quantize] strip ensemble: 7 strips, changed 3 px  now: BK=1572  DG=3520  LG=4261  WH=4983
+  [quantize] G-valley refinement: threshold=220.0 (LG center G=166.2, WH center G=250.9), changed 0 px
+  [quantize] final: BK=1572 (11.0%)  DG=3520 (24.6%)  LG=4261 (29.7%)  WH=4983 (34.8%)
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14331  (99.97%)
+  Different    : 5   (0.03%)
+
+----------------------------------------------------------------------
+COLOR DISTRIBUTION
+----------------------------------------------------------------------
+  Color                     Result   Reference      Diff
+  BK  #000000                 1572        1572  +0
+  DG  #9494FF                 3520        3521  -1
+  LG  #FF9494                 4261        4260  +1
+  WH  #FFFFA5                 4983        4983  +0
+
+----------------------------------------------------------------------
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+----------------------------------------------------------------------
+  Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
+  BK  #000000                    1572 v                0                  0                  0      1572
+  DG  #9494FF                       0               3518 v                2 X                0      3520
+  LG  #FF9494                       0                  3 X             4258 v                0      4261
+  WH  #FFFFA5                       0                  0                  0               4983 v    4983
+
+----------------------------------------------------------------------
+ERROR BREAKDOWN  (result -> reference)
+----------------------------------------------------------------------
+  DG  #9494FF  ->  LG  #FF9494 : 2 px
+  LG  #FF9494  ->  DG  #9494FF : 3 px
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14331  (99.97%)
+  Different    : 5   (0.03%)
+
+======================================================================
+RESULT: FAIL — see diagnostics above and in the output directory.
+======================================================================

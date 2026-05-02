@@ -1,0 +1,73 @@
+PIPELINE RUN
+  Input:      test-input-full\thing-3.jpg
+  Output dir: test-output-full\thing-3
+  locate:     true
+
+PIPELINE DIAGNOSTICS
+  [locate] working-res 1000×450 (scale=0.248 from 4032×1816)
+  [locate] found 3 candidate(s); top score=0.023
+  [locate] chose candidate 0: totalScore=0.960 (innerBorder=0.910, darkRing=0.978)
+  [locate] output region: 1294×1178 (margin=6.0%, passThrough=false)
+  [warp] corner detection: area=1358552 aspect=1.105 (target 1.111) thresh=180 score=0.0220
+  [warp] detected source corners (TL TR BR BL): (35,38) (1257,37) (1260,1143) (38,1150)
+  [warp] pass 1 edge curvatures: top=-0.59 bot=-0.52 left=-2.53 right=2.05
+  [warp] pass 1 corner errors: TL=(-2.4,-0.1) TR=(2.5,-0.8) BR=(2.3,0.0) BL=(-2.4,-0.4)
+  [warp] pass 2 edge curvatures: top=-0.38 bot=-0.63 left=-1.29 right=0.54
+  [warp] pass 2 corner errors: TL=(-1.1,-0.1) TR=(0.9,-0.5) BR=(0.8,-0.1) BL=(-1.1,-0.3)
+  [correct] R: white samples kept=7275 (median 223.6, range 167–254)
+  [correct] G: white samples kept=7431 (median 221.0, range 165–254)
+  [correct] white surface R: 191–243; G: 185–244
+  [correct] dark surface  R: 120–155; G: 147–175
+  [correct] interior DG calibration: R=7623px G=8651px
+  [correct] frame post-correction p85: R=254 G=255 B=204 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=157.3 G=143.4 B=208.6
+  [crop] inner-border mean=174.7 white-frame mean=201.0 (ratio 0.869, WARN)
+  [sample] R: 30–255  G: 0–255  B: 70–253
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R77,G29)  DG=(R144,G149)  LG=(R223,G173)  WH=(R236,G253)
+  [quantize] after global kmeans: BK=1335  DG=8616  LG=2678  WH=1707
+  [quantize] strip ensemble: 7 strips, changed 247 px  now: BK=1335  DG=8622  LG=2435  WH=1944
+  [quantize] G-valley refinement: threshold=230.0 (LG center G=173.4, WH center G=252.9), changed 260 px
+  [quantize] final: BK=1335 (9.3%)  DG=8622 (60.1%)  LG=2695 (18.8%)  WH=1684 (11.7%)
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14330  (99.96%)
+  Different    : 6   (0.04%)
+
+----------------------------------------------------------------------
+COLOR DISTRIBUTION
+----------------------------------------------------------------------
+  Color                     Result   Reference      Diff
+  BK  #000000                 1335        1336  -1
+  DG  #9494FF                 8622        8626  -4
+  LG  #FF9494                 2695        2690  +5
+  WH  #FFFFA5                 1684        1684  +0
+
+----------------------------------------------------------------------
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+----------------------------------------------------------------------
+  Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
+  BK  #000000                    1335 v                0                  0                  0      1335
+  DG  #9494FF                       1 X             8621 v                0                  0      8622
+  LG  #FF9494                       0                  5 X             2690 v                0      2695
+  WH  #FFFFA5                       0                  0                  0               1684 v    1684
+
+----------------------------------------------------------------------
+ERROR BREAKDOWN  (result -> reference)
+----------------------------------------------------------------------
+  DG  #9494FF  ->  BK  #000000 : 1 px
+  LG  #FF9494  ->  DG  #9494FF : 5 px
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14330  (99.96%)
+  Different    : 6   (0.04%)
+
+======================================================================
+RESULT: FAIL — see diagnostics above and in the output directory.
+======================================================================

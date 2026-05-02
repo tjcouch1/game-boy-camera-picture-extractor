@@ -1,9 +1,10 @@
 PIPELINE RUN
-  Input:      test-input\zelda-poster-1.jpg
-  Output dir: test-output\zelda-poster-1
-  locate:     false
+  Input:      sample-pictures\20260313_213430.jpg
+  Output dir: sample-pictures-out-locate\20260313_213430
+  locate:     true
 
 PIPELINE DIAGNOSTICS
+  [locate] input 1297×1188 aspect=1.092 ≈ target 1.111; treating as already-cropped (passThrough)
   [warp] corner detection: area=1401849 aspect=1.108 (target 1.111) thresh=180 score=0.0317
   [warp] detected source corners (TL TR BR BL): (24,20) (1270,34) (1255,1155) (17,1152)
   [warp] pass 1 edge curvatures: top=-0.80 bot=0.63 left=-2.32 right=4.08
@@ -30,16 +31,16 @@ PIPELINE DIAGNOSTICS
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14331  (99.97%)
-  Different    : 5   (0.03%)
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1572        1572  +0
-  DG  #9494FF                 3521        3526  -5
-  LG  #FF9494                 4260        4255  +5
+  DG  #9494FF                 3521        3521  +0
+  LG  #FF9494                 4260        4260  +0
   WH  #FFFFA5                 4983        4983  +0
 
 ----------------------------------------------------------------------
@@ -48,21 +49,16 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1572 v                0                  0                  0      1572
   DG  #9494FF                       0               3521 v                0                  0      3521
-  LG  #FF9494                       0                  5 X             4255 v                0      4260
+  LG  #FF9494                       0                  0               4260 v                0      4260
   WH  #FFFFA5                       0                  0                  0               4983 v    4983
-
-----------------------------------------------------------------------
-ERROR BREAKDOWN  (result -> reference)
-----------------------------------------------------------------------
-  LG  #FF9494  ->  DG  #9494FF : 5 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14331  (99.97%)
-  Different    : 5   (0.03%)
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
 
 ======================================================================
-RESULT: FAIL — see diagnostics above and in the output directory.
+RESULT: PASS — all pixels match the reference.
 ======================================================================

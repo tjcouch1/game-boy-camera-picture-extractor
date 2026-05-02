@@ -1,9 +1,10 @@
 PIPELINE RUN
   Input:      test-input\zelda-poster-2.jpg
-  Output dir: test-output\zelda-poster-2
-  locate:     false
+  Output dir: test-output-locate\zelda-poster-2
+  locate:     true
 
 PIPELINE DIAGNOSTICS
+  [locate] input 1208×1092 aspect=1.106 ≈ target 1.111; treating as already-cropped (passThrough)
   [warp] corner detection: area=1193644 aspect=1.134 (target 1.111) thresh=180 score=0.0307
   [warp] detected source corners (TL TR BR BL): (32,21) (1185,31) (1167,1068) (28,1062)
   [warp] pass 1 edge curvatures: top=-0.47 bot=-0.48 left=-2.34 right=4.03

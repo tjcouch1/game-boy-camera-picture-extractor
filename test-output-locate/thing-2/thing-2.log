@@ -1,9 +1,10 @@
 PIPELINE RUN
   Input:      test-input\thing-2.jpg
-  Output dir: test-output\thing-2
-  locate:     false
+  Output dir: test-output-locate\thing-2
+  locate:     true
 
 PIPELINE DIAGNOSTICS
+  [locate] input 1261×1129 aspect=1.117 ≈ target 1.111; treating as already-cropped (passThrough)
   [warp] corner detection: area=1301997 aspect=1.130 (target 1.111) thresh=180 score=0.0432
   [warp] detected source corners (TL TR BR BL): (21,22) (1244,23) (1217,1100) (35,1104)
   [warp] pass 1 edge curvatures: top=-0.67 bot=-0.08 left=-1.81 right=1.45

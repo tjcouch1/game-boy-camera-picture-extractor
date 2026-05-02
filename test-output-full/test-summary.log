@@ -1,0 +1,19 @@
+======================================================================
+CORPUS SUMMARY — test-input-full (locate:true)
+  inputDir:   test-input-full
+  outputDir:  test-output-full
+  locate:     true
+  comparison: reference
+======================================================================
+
+  Test             Matching            Different           Verdict
+  ----------------------------------------------------------------
+  thing-1          14322 ( 99.90%)      14 (  0.10%)   FAIL
+  thing-2          14305 ( 99.78%)      31 (  0.22%)   FAIL
+  thing-3          14330 ( 99.96%)       6 (  0.04%)   FAIL
+  zelda-poster-1   14330 ( 99.96%)       6 (  0.04%)   FAIL
+  zelda-poster-2   14333 ( 99.98%)       3 (  0.02%)   FAIL
+  zelda-poster-3   13726 ( 95.74%)     610 (  4.26%)   FAIL
+
+  0/6 passed
+
