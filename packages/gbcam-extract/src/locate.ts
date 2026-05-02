@@ -179,6 +179,18 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
       );
       dbg.setMetric("locate", "workingDim", [work.mat.cols, work.mat.rows]);
       dbg.setMetric("locate", "candidatePoolSize", candidatePool.length);
+      dbg.setMetric(
+        "locate",
+        "candidatePool",
+        candidatePool.map((c) => ({
+          source: c.source,
+          score: Number(c.score.toFixed(3)),
+          width: Math.round(c.width),
+          height: Math.round(c.height),
+          centerX: Math.round((c.corners[0][0] + c.corners[2][0]) / 2),
+          centerY: Math.round((c.corners[0][1] + c.corners[2][1]) / 2),
+        })),
+      );
     }
 
     if (candidates.length === 0) {
