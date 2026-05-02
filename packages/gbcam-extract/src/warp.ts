@@ -17,6 +17,7 @@ import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
 import {
   type DebugCollector,
   cloneImage,
+  drawLine,
   drawPolyline,
   fillCircle,
 } from "./debug.js";
@@ -117,11 +118,75 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   // Convert back to RGBA ImageData
   const rgba = new cv.Mat();
   cv.cvtColor(currentWarped, rgba, cv.COLOR_BGR2RGBA);
-  currentWarped.delete();
   const result = matToImageData(rgba);
   rgba.delete();
 
+  if (dbg) {
+    addInnerBorderResidualImage(dbg, currentWarped, result, scale);
+  }
+
+  currentWarped.delete();
+
   return result;
+}
+
+function addInnerBorderResidualImage(
+  dbg: DebugCollector,
+  warpedBgr: any,
+  warpedRgba: GBImageData,
+  scale: number,
+): void {
+  const cv = getCV();
+  const H = warpedBgr.rows;
+  const W = warpedBgr.cols;
+
+  const rbCh = withMats((track, untrack) => {
+    const rgb = track(new cv.Mat());
+    cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
+    const out = new cv.Mat(H, W, cv.CV_8UC1);
+    const rgbData = rgb.data;
+    const outData = out.data;
+    for (let i = 0; i < H * W; i++) {
+      const r = rgbData[i * 3];
+      const b = rgbData[i * 3 + 2];
+      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+    }
+    return untrack(out);
+  });
+
+  const borderPoints = findBorderPoints(rbCh, scale);
+  const corners = findBorderCorners(rbCh, scale);
+  rbCh.delete();
+
+  const overlay = cloneImage(warpedRgba);
+
+  const expTop = INNER_TOP * scale;
+  const expBottom = INNER_BOT * scale;
+  const expLeft = INNER_LEFT * scale;
+  const expRight = INNER_RIGHT * scale;
+
+  const green: [number, number, number] = [0, 255, 0];
+  drawLine(overlay, expLeft, expTop, expRight, expTop, green, 1);
+  drawLine(overlay, expLeft, expBottom, expRight, expBottom, green, 1);
+  drawLine(overlay, expLeft, expTop, expLeft, expBottom, green, 1);
+  drawLine(overlay, expRight, expTop, expRight, expBottom, green, 1);
+
+  const red: [number, number, number] = [255, 0, 0];
+  for (const [x, y] of [
+    ...borderPoints.top,
+    ...borderPoints.bottom,
+    ...borderPoints.left,
+    ...borderPoints.right,
+  ]) {
+    fillCircle(overlay, x, y, 1, red);
+  }
+
+  const yellow: [number, number, number] = [255, 255, 0];
+  for (const [x, y] of [corners.TL, corners.TR, corners.BR, corners.BL]) {
+    fillCircle(overlay, x, y, 3, yellow);
+  }
+
+  dbg.addImage("warp_b_inner_border_residual", overlay);
 }
 
 // ─── Refinement metrics recorder ───
