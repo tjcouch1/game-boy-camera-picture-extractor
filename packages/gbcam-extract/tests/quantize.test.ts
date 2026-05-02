@@ -11,18 +11,27 @@ describe("quantize", () => {
   it("maps pixels near palette values to exact palette values", () => {
     const input = createGBImageData(CAM_W, CAM_H);
 
-    // Fill with 4 horizontal bands, each near a palette color
+    // Fill with 4 horizontal bands, each near a palette colour. Quantize
+    // works in 3D RGB now; using R=G=B grayscale bands still falls under
+    // BK/DG-line/WH on the cluster geometry (the LG/DG/WH targets share
+    // R=G=255/148/255 axes anyway), so we use a low-saturation triple
+    // that sits near each palette anchor.
     const bandHeight = Math.floor(CAM_H / 4);
-    const nearValues = [5, 78, 170, 250]; // near 0, 82, 165, 255
+    const nearRGB: [number, number, number][] = [
+      [5, 5, 5],         // near BK (0,0,0)
+      [150, 150, 250],   // near DG (148,148,255)
+      [250, 150, 150],   // near LG (255,148,148)
+      [250, 250, 165],   // near WH (255,255,165)
+    ];
 
     for (let y = 0; y < CAM_H; y++) {
       const band = Math.min(Math.floor(y / bandHeight), 3);
-      const val = nearValues[band];
+      const [r, g, b] = nearRGB[band];
       for (let x = 0; x < CAM_W; x++) {
         const idx = (y * CAM_W + x) * 4;
-        input.data[idx] = val;
-        input.data[idx + 1] = val;
-        input.data[idx + 2] = val;
+        input.data[idx] = r;
+        input.data[idx + 1] = g;
+        input.data[idx + 2] = b;
         input.data[idx + 3] = 255;
       }
     }
@@ -35,8 +44,41 @@ describe("quantize", () => {
     // Every output pixel should be one of the 4 palette values
     for (let i = 0; i < result.data.length; i += 4) {
       expect(GB_COLORS).toContain(result.data[i]);
-      expect(result.data[i]).toBe(result.data[i + 1]); // R=G=B
+      expect(result.data[i]).toBe(result.data[i + 1]);
       expect(result.data[i]).toBe(result.data[i + 2]);
+    }
+  });
+
+  it("classifies four bands at exact palette RGB to the right grays", () => {
+    const input = createGBImageData(CAM_W, CAM_H);
+    const bandHeight = Math.floor(CAM_H / 4);
+    const palette: [number, number, number][] = [
+      [0, 0, 0],         // BK -> 0
+      [148, 148, 255],   // DG -> 82
+      [255, 148, 148],   // LG -> 165
+      [255, 255, 165],   // WH -> 255
+    ];
+    const expectedGray = [0, 82, 165, 255];
+    for (let y = 0; y < CAM_H; y++) {
+      const band = Math.min(Math.floor(y / bandHeight), 3);
+      const [r, g, b] = palette[band];
+      for (let x = 0; x < CAM_W; x++) {
+        const idx = (y * CAM_W + x) * 4;
+        input.data[idx] = r;
+        input.data[idx + 1] = g;
+        input.data[idx + 2] = b;
+        input.data[idx + 3] = 255;
+      }
+    }
+
+    const result = quantize(input);
+    for (let y = 0; y < CAM_H; y++) {
+      const band = Math.min(Math.floor(y / bandHeight), 3);
+      const expected = expectedGray[band];
+      // Spot-check the middle pixel of each row
+      const midX = Math.floor(CAM_W / 2);
+      const idx = (y * CAM_W + midX) * 4;
+      expect(result.data[idx]).toBe(expected);
     }
   });
 });
