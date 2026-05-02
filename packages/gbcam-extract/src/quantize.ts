@@ -444,28 +444,65 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     );
   }
 
-  // Drift diagnostic: warn when any cluster center is far from its target.
-  if (dbg) {
-    const DRIFT_THRESHOLD = 40;
-    const targets: [number, number][] = [
-      [0, 0],
-      [148, 148],
-      [255, 148],
-      [255, 255],
-    ];
-    const names = ["BK", "DG", "LG", "WH"];
-    const drifts: string[] = [];
-    for (let pi = 0; pi < 4; pi++) {
-      const dr = paletteCenters[pi][0] - targets[pi][0];
-      const dg = paletteCenters[pi][1] - targets[pi][1];
-      const dist = Math.sqrt(dr * dr + dg * dg);
-      if (dist > DRIFT_THRESHOLD) {
-        drifts.push(`${names[pi]} drifted ${dist.toFixed(0)} RG-units`);
+  // Drift-conditional cluster anchoring: when a cluster centre has drifted
+  // far from its palette target AND that cluster has few pixels (sparse
+  // representation), snap the centre back to the palette target. This
+  // recovers the WH-cluster-pulled-toward-LG case on images with few true
+  // WH pixels (e.g., the new yellow-cast image where the bottom-middle was
+  // misclassified as LG until the LCD-pixel-aware sample step in R1 fixed
+  // the input). Snap also affects the strip-ensemble init centres (more
+  // accurate per-strip k-means) and the final label assignment.
+  const SNAP_DRIFT_THRESHOLD = 30;
+  const SNAP_SPARSE_FRACTION = 0.10;
+  const driftDistances: number[] = [];
+  const snappedFlags: boolean[] = [false, false, false, false];
+  for (let pi = 0; pi < 4; pi++) {
+    const dr = paletteCenters[pi][0] - targetsRG[pi][0];
+    const dg = paletteCenters[pi][1] - targetsRG[pi][1];
+    const dist = Math.sqrt(dr * dr + dg * dg);
+    driftDistances.push(dist);
+    const fraction = globalCounts[pi] / N;
+    if (dist > SNAP_DRIFT_THRESHOLD && fraction < SNAP_SPARSE_FRACTION) {
+      paletteCenters[pi] = [targetsRG[pi][0], targetsRG[pi][1]];
+      snappedFlags[pi] = true;
+    }
+  }
+  const anySnapped = snappedFlags.some(Boolean);
+  if (anySnapped) {
+    // Reassign labels by nearest palette centre (on the snapped set).
+    for (let i = 0; i < N; i++) {
+      const r = flatRG[i * 2];
+      const g = flatRG[i * 2 + 1];
+      let bestPi = 0;
+      let bestD = Infinity;
+      for (let pi = 0; pi < 4; pi++) {
+        const cr = paletteCenters[pi][0];
+        const cg = paletteCenters[pi][1];
+        const d = (r - cr) * (r - cr) + (g - cg) * (g - cg);
+        if (d < bestD) {
+          bestD = d;
+          bestPi = pi;
+        }
       }
+      labelsFlat[i] = bestPi;
     }
-    if (drifts.length > 0) {
-      dbg.log(`[quantize] WARN cluster drift: ${drifts.join("; ")}`);
+    // Update global.centers (cluster-ordered) so downstream reflects snaps.
+    for (let ci = 0; ci < 4; ci++) {
+      const pi = clusterToPalette[ci];
+      global.centers[ci * 2] = paletteCenters[pi][0];
+      global.centers[ci * 2 + 1] = paletteCenters[pi][1];
     }
+  }
+
+  if (dbg) {
+    const names = ["BK", "DG", "LG", "WH"];
+    const driftStr = driftDistances.map(
+      (d, i) => `${names[i]}=${d.toFixed(0)}` + (snappedFlags[i] ? "*" : ""),
+    ).join(" ");
+    dbg.log(
+      `[quantize] drift snap (${snappedFlags.filter(Boolean).length} snapped, ` +
+        `* marks snapped): ${driftStr}`,
+    );
   }
 
   // Build global_centers_po (palette-ordered centers)
