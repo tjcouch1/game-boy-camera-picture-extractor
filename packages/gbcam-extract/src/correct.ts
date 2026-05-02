@@ -565,7 +565,7 @@ function computePercentile(values: number[], percentile: number): number {
 
 // ─── White surface estimation ───
 
-function collectWhiteSamples(
+export function collectWhiteSamples(
   gray: Float32Array,
   W: number,
   H: number,

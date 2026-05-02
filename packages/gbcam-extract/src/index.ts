@@ -17,6 +17,7 @@ export {
 export { initOpenCV } from "./init-opencv.js";
 export { applyPalette } from "./palette.js";
 export { warp } from "./warp.js";
+export { whiteBalance } from "./white-balance.js";
 export { correct } from "./correct.js";
 export { crop } from "./crop.js";
 export { sample } from "./sample.js";
@@ -30,6 +31,7 @@ export {
 
 import type { GBImageData, PipelineResult, PipelineOptions } from "./common.js";
 import { warp } from "./warp.js";
+import { whiteBalance } from "./white-balance.js";
 import { correct } from "./correct.js";
 import { crop } from "./crop.js";
 import { sample } from "./sample.js";
@@ -50,8 +52,10 @@ export async function processPicture(
   const warped = warp(input, { scale, debug: collector });
   onProgress?.("warp", 100);
 
+  const balanced = whiteBalance(warped, { scale, debug: collector });
+
   onProgress?.("correct", 0);
-  const corrected = correct(warped, { scale, debug: collector });
+  const corrected = correct(balanced, { scale, debug: collector });
   onProgress?.("correct", 100);
 
   onProgress?.("crop", 0);
