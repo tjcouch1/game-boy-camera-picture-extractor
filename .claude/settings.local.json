@@ -77,7 +77,8 @@
       "Bash(pnpm --filter gbcam-extract-web add *)",
       "Bash(pnpm --filter gbcam-extract-web dev *)",
       "Bash(pnpm --filter gbcam-extract-web extract *)",
-      "Bash(pnpm --filter gbcam-extract-web vitest *)"
+      "Bash(pnpm --filter gbcam-extract-web vitest *)",
+      "Bash(pnpm test:pipeline:all)"
     ],
     "deny": [
       "Bash(rm -rf /)",
