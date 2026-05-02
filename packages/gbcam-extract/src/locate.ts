@@ -54,15 +54,42 @@ const APPROX_EPSILON_FRAC = 0.04;
 const MARGIN_RATIO = 0.06;
 
 /**
- * Extra outward expansion applied to Canny-derived candidates to compensate
- * for Canny's intrinsic edge-inset bias: edges land at the brightness
- * gradient peak, which is slightly *inside* the white frame's outer edge.
- * Empirically tuned on `corners.json`: detected screens were systematically
- * 3-5% narrower than the hand-marked frame outer edges; ~4% compensation
- * brings the detection close enough that warp's frame-corner detection
- * has the white frame fully visible inside its search area.
+ * Fixed expansion applied AFTER per-edge dash refinement. Empirically the
+ * downstream `warp` step's brightness-based corner detection needs a few
+ * percent of dark LCD-ring margin around the white frame to lock onto
+ * stable corners — without this, even a perfectly-aligned locate crop
+ * causes downstream warp to misdetect, costing accuracy.
  */
 const CANNY_INSET_COMPENSATION = 0.04;
+
+// ─── Frame 02 reference dash positions (extracted from supporting-materials/frame_ascii.txt) ───
+//
+// Frame 02 is a 160×144 grayscale layout. The white frame is 16 px thick on
+// each side. Inside the frame, BLACK dashes provide a structural reference:
+//   - 17 horizontal dashes along the top frame, with their 5-px-tall body
+//     at rows 5-9 (main contrast at rows 6-7 in the template).
+//   - 17 horizontal dashes along the bottom, body at rows 134-138.
+//   - 14 vertical dashes along the left frame, body at cols 1-5.
+//   - 14 vertical dashes along the right frame, body at cols 153-158.
+// Corner dashes are fused into the L-shapes at each corner.
+//
+// We find the dash row/col in a warped 160×144 view by scanning each edge's
+// search window and picking the row/col with maximum variance (alternating
+// bright frame / dark dashes → high variance; LCD ring → low variance,
+// uniformly dark; frame interior → low variance, uniformly bright). Offset
+// from these expected positions tells us how the candidate is mis-aligned.
+
+/** Expected dash row for top edge (center of dash body, in the 160×144 template). */
+const EXPECTED_TOP_DASH_ROW = 7;
+/** Expected dash row for bottom edge. */
+const EXPECTED_BOTTOM_DASH_ROW = 136;
+/** Expected dash col for left edge. */
+const EXPECTED_LEFT_DASH_COL = 3;
+/** Expected dash col for right edge. */
+const EXPECTED_RIGHT_DASH_COL = 156;
+
+/** Scan window for finding each side's actual dash row/col (in normalized space). */
+const DASH_SEARCH_WINDOW = 16;
 
 /** Minimum total validation score to accept a candidate (0–1). */
 const MIN_VALIDATION_SCORE = 0.25;
@@ -271,13 +298,48 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
 
     const chosen = candidates[bestIdx];
 
-    // ── 2d. Map back, expand, rotate, crop ──
-    const workToOrig = 1 / work.scale;
-    let screenCornersOrig = scaleCorners(chosen.corners, workToOrig);
+    // ── 2d. Per-edge refinement using Frame 02 dash positions ──
+    // Warp the working-res grayscale to a 160×144 normalized view using the
+    // candidate's corners, then find each side's actual dash row/col by
+    // variance (the dash row alternates bright frame/dark dashes → high
+    // variance, distinguishing it from frame interior or LCD ring). The
+    // offset from the expected dash position tells us how each edge is
+    // misaligned, and we expand each edge outward (in original-image
+    // coordinates) by that amount.
+    let refinedCorners = chosen.corners;
+    if (chosen.source === "canny") {
+      const warped = track(warpToNormalized(gray, chosen.corners));
+      const dashOffsets = findDashOffsets(warped);
+      const dashRows = findDashRowDebug(warped);
+      refinedCorners = applyEdgeOffsets(chosen.corners, dashOffsets);
 
-    // Compensate for Canny's edge-inset bias before the main margin step.
-    // The bias is intrinsic to gradient-based edge detection; without this,
-    // the detected screen is consistently ~3-5% narrower than the actual frame.
+      if (dbg) {
+        const warpedRgba = track(new cv.Mat());
+        cv.cvtColor(warped, warpedRgba, cv.COLOR_GRAY2RGBA);
+        // Upscale 4× for visibility
+        const up = track(new cv.Mat());
+        cv.resize(warpedRgba, up, new cv.Size(640, 576), 0, 0, cv.INTER_NEAREST);
+        dbg.addImage("locate_e_dash_warp", matToImageData(up));
+        const variances = findDashVariances(warped);
+        dbg.log(
+          `[locate] dash search: top@row=${dashRows.topRow} (expected ${EXPECTED_TOP_DASH_ROW}, off ${dashOffsets.top}), ` +
+            `bottom@row=${dashRows.bottomRow} (expected ${EXPECTED_BOTTOM_DASH_ROW}, off ${dashOffsets.bottom}), ` +
+            `left@col=${dashRows.leftCol} (expected ${EXPECTED_LEFT_DASH_COL}, off ${dashOffsets.left}), ` +
+            `right@col=${dashRows.rightCol} (expected ${EXPECTED_RIGHT_DASH_COL}, off ${dashOffsets.right})`,
+        );
+        dbg.setMetric("locate", "dashOffsets", dashOffsets);
+        dbg.setMetric("locate", "dashRows", dashRows);
+        dbg.setMetric("locate", "dashVariances", variances);
+      }
+    }
+
+    const workToOrig = 1 / work.scale;
+    let screenCornersOrig = scaleCorners(refinedCorners, workToOrig);
+
+    // Small safety expansion after dash refinement (the dash-variance peak
+    // is at the dash centerline, ~5 px inside the frame outer edge in the
+    // template, so dash-aligned corners are still slightly inside the
+    // actual frame outer edge).
     if (chosen.source === "canny") {
       screenCornersOrig = expandRotatedRect(screenCornersOrig, CANNY_INSET_COMPENSATION);
     }
@@ -541,6 +603,262 @@ function dedupeAndRank(pool: Candidate[], topN: number): Candidate[] {
     if (kept.length >= topN) break;
   }
   return kept;
+}
+
+/**
+ * Warp a working-resolution grayscale image to the normalized 160×144 frame
+ * coordinate system using the candidate's corners (TL → (0,0), TR → (159,0),
+ * BR → (159, 143), BL → (0, 143)). Returns a new Mat (caller must delete or
+ * track via withMats).
+ */
+function warpToNormalized(gray: any /* cv.Mat (CV_8UC1) */, corners: Corners): any {
+  const cv = getCV();
+  const N = 160;
+  const M = 144;
+  return withMats((track) => {
+    const srcPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      corners[0][0], corners[0][1],
+      corners[1][0], corners[1][1],
+      corners[2][0], corners[2][1],
+      corners[3][0], corners[3][1],
+    ]));
+    const dstPts = track(cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0,
+      N - 1, 0,
+      N - 1, M - 1,
+      0, M - 1,
+    ]));
+    const Mhom = track(cv.getPerspectiveTransform(srcPts, dstPts));
+    const out = new cv.Mat();
+    cv.warpPerspective(gray, out, Mhom, new cv.Size(N, M), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
+    return out;
+  });
+}
+
+interface DashOffsets {
+  /** Outward offset for top edge in normalized rows (positive = expand outward). */
+  top: number;
+  /** Outward offset for right edge in normalized cols. */
+  right: number;
+  /** Outward offset for bottom edge in normalized rows. */
+  bottom: number;
+  /** Outward offset for left edge in normalized cols. */
+  left: number;
+}
+
+/**
+ * Compute brightness variance of a row in `warped`, sampling only the inner
+ * column range [colStart, colEnd) to avoid the fused corner dashes.
+ */
+function rowVariance(warped: any /* cv.Mat */, row: number, colStart: number, colEnd: number): number {
+  const cols: number = warped.cols;
+  const data: Uint8Array = warped.data;
+  let sum = 0, sumSq = 0, n = 0;
+  for (let x = colStart; x < colEnd; x++) {
+    const v = data[row * cols + x];
+    sum += v;
+    sumSq += v * v;
+    n++;
+  }
+  if (n === 0) return 0;
+  const mean = sum / n;
+  return sumSq / n - mean * mean;
+}
+
+/**
+ * Compute brightness variance of a column in `warped`, sampling only the
+ * inner row range [rowStart, rowEnd).
+ */
+function colVariance(warped: any /* cv.Mat */, col: number, rowStart: number, rowEnd: number): number {
+  const cols: number = warped.cols;
+  const data: Uint8Array = warped.data;
+  let sum = 0, sumSq = 0, n = 0;
+  for (let y = rowStart; y < rowEnd; y++) {
+    const v = data[y * cols + col];
+    sum += v;
+    sumSq += v * v;
+    n++;
+  }
+  if (n === 0) return 0;
+  const mean = sum / n;
+  return sumSq / n - mean * mean;
+}
+
+/** Debug helper: returns the variance profiles for each side. */
+function findDashVariances(warped: any): { topVar: number[]; bottomVar: number[]; leftVar: number[]; rightVar: number[] } {
+  const N = warped.cols;
+  const M = warped.rows;
+  const innerColStart = 16, innerColEnd = N - 16;
+  const innerRowStart = 16, innerRowEnd = M - 16;
+  const topVar: number[] = [];
+  for (let r = 0; r < DASH_SEARCH_WINDOW; r++) {
+    topVar.push(Math.round(rowVariance(warped, r, innerColStart, innerColEnd)));
+  }
+  const bottomVar: number[] = [];
+  for (let r = M - DASH_SEARCH_WINDOW; r < M; r++) {
+    bottomVar.push(Math.round(rowVariance(warped, r, innerColStart, innerColEnd)));
+  }
+  const leftVar: number[] = [];
+  for (let c = 0; c < DASH_SEARCH_WINDOW; c++) {
+    leftVar.push(Math.round(colVariance(warped, c, innerRowStart, innerRowEnd)));
+  }
+  const rightVar: number[] = [];
+  for (let c = N - DASH_SEARCH_WINDOW; c < N; c++) {
+    rightVar.push(Math.round(colVariance(warped, c, innerRowStart, innerRowEnd)));
+  }
+  return { topVar, bottomVar, leftVar, rightVar };
+}
+
+/** Debug helper: returns the actual rows/cols where dashes were found. */
+function findDashRowDebug(warped: any): { topRow: number; bottomRow: number; leftCol: number; rightCol: number } {
+  const N = warped.cols;
+  const M = warped.rows;
+  const innerColStart = 16, innerColEnd = N - 16;
+  const innerRowStart = 16, innerRowEnd = M - 16;
+  let topMax = -Infinity, topRow = EXPECTED_TOP_DASH_ROW;
+  for (let r = 0; r < DASH_SEARCH_WINDOW; r++) {
+    const v = rowVariance(warped, r, innerColStart, innerColEnd);
+    if (v > topMax) { topMax = v; topRow = r; }
+  }
+  let botMax = -Infinity, bottomRow = EXPECTED_BOTTOM_DASH_ROW;
+  for (let r = M - DASH_SEARCH_WINDOW; r < M; r++) {
+    const v = rowVariance(warped, r, innerColStart, innerColEnd);
+    if (v > botMax) { botMax = v; bottomRow = r; }
+  }
+  let leftMax = -Infinity, leftCol = EXPECTED_LEFT_DASH_COL;
+  for (let c = 0; c < DASH_SEARCH_WINDOW; c++) {
+    const v = colVariance(warped, c, innerRowStart, innerRowEnd);
+    if (v > leftMax) { leftMax = v; leftCol = c; }
+  }
+  let rightMax = -Infinity, rightCol = EXPECTED_RIGHT_DASH_COL;
+  for (let c = N - DASH_SEARCH_WINDOW; c < N; c++) {
+    const v = colVariance(warped, c, innerRowStart, innerRowEnd);
+    if (v > rightMax) { rightMax = v; rightCol = c; }
+  }
+  return { topRow, bottomRow, leftCol, rightCol };
+}
+
+/**
+ * Find the dash row/col by scanning each edge's search window and picking
+ * the row/col with maximum variance. Returns offsets per edge in normalized
+ * (160×144) space — positive offset means we need to expand that edge
+ * outward (the dashes are at a smaller-than-expected coordinate, indicating
+ * the candidate is inset).
+ */
+function findDashOffsets(warped: any /* cv.Mat (CV_8UC1) */): DashOffsets {
+  const N = warped.cols;
+  const M = warped.rows;
+
+  // Inner column range to sample for top/bottom (skip first/last 16 cols
+  // which are corners with fused dashes that confuse the variance calc).
+  const innerColStart = 16;
+  const innerColEnd = N - 16;
+  const innerRowStart = 16;
+  const innerRowEnd = M - 16;
+
+  // ── TOP: scan rows [0, DASH_SEARCH_WINDOW), find max-variance row ──
+  let topMaxVar = -Infinity;
+  let topDashRow = EXPECTED_TOP_DASH_ROW;
+  for (let r = 0; r < DASH_SEARCH_WINDOW; r++) {
+    const v = rowVariance(warped, r, innerColStart, innerColEnd);
+    if (v > topMaxVar) { topMaxVar = v; topDashRow = r; }
+  }
+
+  // ── BOTTOM: scan rows [M-DASH_SEARCH_WINDOW, M), find max-variance row ──
+  let botMaxVar = -Infinity;
+  let bottomDashRow = EXPECTED_BOTTOM_DASH_ROW;
+  for (let r = M - DASH_SEARCH_WINDOW; r < M; r++) {
+    const v = rowVariance(warped, r, innerColStart, innerColEnd);
+    if (v > botMaxVar) { botMaxVar = v; bottomDashRow = r; }
+  }
+
+  // ── LEFT: scan cols [0, DASH_SEARCH_WINDOW), find max-variance col ──
+  let leftMaxVar = -Infinity;
+  let leftDashCol = EXPECTED_LEFT_DASH_COL;
+  for (let c = 0; c < DASH_SEARCH_WINDOW; c++) {
+    const v = colVariance(warped, c, innerRowStart, innerRowEnd);
+    if (v > leftMaxVar) { leftMaxVar = v; leftDashCol = c; }
+  }
+
+  // ── RIGHT: scan cols [N-DASH_SEARCH_WINDOW, N), find max-variance col ──
+  let rightMaxVar = -Infinity;
+  let rightDashCol = EXPECTED_RIGHT_DASH_COL;
+  for (let c = N - DASH_SEARCH_WINDOW; c < N; c++) {
+    const v = colVariance(warped, c, innerRowStart, innerRowEnd);
+    if (v > rightMaxVar) { rightMaxVar = v; rightDashCol = c; }
+  }
+
+  return {
+    top: EXPECTED_TOP_DASH_ROW - topDashRow,         // observed < expected → +offset → expand outward
+    right: rightDashCol - EXPECTED_RIGHT_DASH_COL,   // observed > expected → +offset → expand outward
+    bottom: bottomDashRow - EXPECTED_BOTTOM_DASH_ROW, // observed > expected → +offset → expand outward
+    left: EXPECTED_LEFT_DASH_COL - leftDashCol,      // observed < expected → +offset → expand outward
+  };
+}
+
+/**
+ * Move each edge of a quad outward by the per-edge offset (in normalized
+ * 160×144 units), translated to the working-res scale of the candidate.
+ * Reconstruct the corners as the intersections of adjacent moved edges.
+ */
+function applyEdgeOffsets(corners: Corners, offsets: DashOffsets): Corners {
+  // Clamp absurd offsets — if dash detection found something at the very
+  // edge of the search window, that's likely a false positive (LCD ring or
+  // similar) rather than a real dash.
+  const MAX_OFFSET_NORM = 6;
+  const top = clamp(offsets.top, -MAX_OFFSET_NORM, MAX_OFFSET_NORM);
+  const right = clamp(offsets.right, -MAX_OFFSET_NORM, MAX_OFFSET_NORM);
+  const bottom = clamp(offsets.bottom, -MAX_OFFSET_NORM, MAX_OFFSET_NORM);
+  const left = clamp(offsets.left, -MAX_OFFSET_NORM, MAX_OFFSET_NORM);
+
+  // The candidate's TL → (0,0), TR → (160-1, 0), BR → (160-1, 144-1),
+  // BL → (0, 144-1). Moving an edge in the normalized space by Δ is
+  // equivalent to translating its corners by Δ along the edge's outward
+  // perpendicular in the candidate's coordinate frame. We use the
+  // candidate's edge vectors directly so the translation works for any
+  // rotation/skew in the original photo.
+  const [TL, TR, BR, BL] = corners;
+  // Top edge (TL→TR) outward perpendicular in the candidate's frame is
+  // -(TL→BL) direction (away from BL). Similarly for the other sides.
+  const perp = (a: Point, b: Point, len: number, scaleNorm: number): Point => {
+    // Returns a vector of working-res-pixel length representing `scaleNorm`
+    // normalized units along the outward perpendicular of edge a→b.
+    // Outward perpendicular = unit vector from a→b, rotated 90° AWAY from
+    // quad center. For our corners (TL, TR, BR, BL clockwise), CCW rotation
+    // by 90° points outward.
+    const ex = b[0] - a[0];
+    const ey = b[1] - a[1];
+    const elen = Math.hypot(ex, ey);
+    // CCW: (x, y) → (-y, x). Outward normal:
+    let nx = -ey / elen;
+    let ny = ex / elen;
+    // Verify outwardness via center.
+    const cx = (TL[0] + TR[0] + BR[0] + BL[0]) / 4;
+    const cy = (TL[1] + TR[1] + BR[1] + BL[1]) / 4;
+    const midX = (a[0] + b[0]) / 2;
+    const midY = (a[1] + b[1]) / 2;
+    if (nx * (cx - midX) + ny * (cy - midY) > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    // 1 normalized unit on the top/bottom edge = elen / 159 candidate-px
+    // (since edge spans normalized 0..159). For left/right edges, len = 143.
+    return [nx * (elen / (len - 1)) * scaleNorm, ny * (elen / (len - 1)) * scaleNorm];
+  };
+
+  const topShift = perp(TL, TR, 160, top);
+  const rightShift = perp(TR, BR, 144, right);
+  const bottomShift = perp(BR, BL, 160, bottom);
+  const leftShift = perp(BL, TL, 144, left);
+
+  // Each corner is shared by two edges; sum their shifts to move it.
+  const moved: Corners = [
+    [TL[0] + topShift[0] + leftShift[0], TL[1] + topShift[1] + leftShift[1]],
+    [TR[0] + topShift[0] + rightShift[0], TR[1] + topShift[1] + rightShift[1]],
+    [BR[0] + bottomShift[0] + rightShift[0], BR[1] + bottomShift[1] + rightShift[1]],
+    [BL[0] + bottomShift[0] + leftShift[0], BL[1] + bottomShift[1] + leftShift[1]],
+  ];
+  return moved;
 }
 
 /** Convert a single-channel binary Mat to RGBA so it can be saved as a PNG. */

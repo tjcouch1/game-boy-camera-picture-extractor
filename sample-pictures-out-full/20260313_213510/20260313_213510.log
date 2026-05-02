@@ -7,27 +7,28 @@ PIPELINE DIAGNOSTICS
   [locate] working-res 1000×450 (scale=0.248 from 4032×1816)
   [locate] found 4 candidate(s); top score=0.014
   [locate] chose candidate 0: totalScore=0.785 (innerBorder=1.000, darkRing=0.659)
-  [locate] output region: 1353×1227 (margin=6.0%, passThrough=false)
-  [warp] corner detection: area=1362964 aspect=1.105 (target 1.111) thresh=180 score=0.0186
-  [warp] detected source corners (TL TR BR BL): (66,60) (1289,61) (1290,1170) (65,1171)
-  [warp] pass 1 edge curvatures: top=-2.19 bot=2.06 left=-3.23 right=3.53
-  [warp] pass 1 corner errors: TL=(-4.1,-2.7) TR=(3.3,-2.4) BR=(3.9,2.0) BL=(-2.5,2.1)
-  [warp] pass 2 edge curvatures: top=-0.87 bot=0.99 left=-1.43 right=1.55
-  [warp] pass 2 corner errors: TL=(-1.8,-1.1) TR=(1.4,-0.9) BR=(1.7,0.9) BL=(-1.1,0.9)
+  [locate] dash search: top@row=7 (expected 7, off 0), bottom@row=137 (expected 136, off 1), left@col=2 (expected 3, off 1), right@col=157 (expected 156, off 1)
+  [locate] output region: 1371×1235 (margin=6.0%, passThrough=false)
+  [warp] corner detection: area=1363395 aspect=1.105 (target 1.111) thresh=180 score=0.0135
+  [warp] detected source corners (TL TR BR BL): (73,61) (1298,61) (1300,1169) (74,1171)
+  [warp] pass 1 edge curvatures: top=-2.48 bot=2.32 left=-2.70 right=3.49
+  [warp] pass 1 corner errors: TL=(-3.1,-3.1) TR=(3.4,-2.3) BR=(3.6,2.5) BL=(-2.3,2.2)
+  [warp] pass 2 edge curvatures: top=-1.02 bot=1.07 left=-1.18 right=0.76
+  [warp] pass 2 corner errors: TL=(-1.4,-1.3) TR=(1.5,-0.9) BR=(1.6,1.1) BL=(-1.0,1.0)
   [correct] R: white samples kept=7248 (median 176.0, range 131–203)
-  [correct] G: white samples kept=7477 (median 203.0, range 152–253)
-  [correct] white surface R: 149–189; G: 175–222
-  [correct] dark surface  R: 42–105; G: 125–164
-  [correct] interior DG calibration: R=7046px G=1612px
+  [correct] G: white samples kept=7500 (median 203.0, range 152–252)
+  [correct] white surface R: 149–188; G: 176–221
+  [correct] dark surface  R: 41–106; G: 126–164
+  [correct] interior DG calibration: R=6977px G=1567px
   [correct] frame post-correction p85: R=254 G=255 B=250 (target #FFFFA5 = R255 G255 B165)
-  [correct] camera region mean: R=147.9 G=71.8 B=199.9
-  [crop] inner-border mean=185.9 white-frame mean=224.8 (ratio 0.827, OK)
-  [sample] R: 42–255  G: 0–255  B: 113–255
+  [correct] camera region mean: R=148.1 G=70.2 B=199.9
+  [crop] inner-border mean=186.4 white-frame mean=225.2 (ratio 0.828, OK)
+  [sample] R: 44–255  G: 0–255  B: 113–255
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
-  [quantize] global k-means cluster centers (palette-ordered):  BK=(R122,G25)  DG=(R162,G155)  LG=(R242,G180)  WH=(R248,G252)
-  [quantize] after global kmeans: BK=9494  DG=1872  LG=1406  WH=1564
-  [quantize] strip ensemble: 7 strips, changed 20 px  now: BK=9494  DG=1871  LG=1414  WH=1557
-  [quantize] G-valley refinement: threshold=227.0 (LG center G=179.5, WH center G=252.5), changed 2 px
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R122,G23)  DG=(R161,G156)  LG=(R241,G182)  WH=(R247,G252)
+  [quantize] after global kmeans: BK=9494  DG=1870  LG=1398  WH=1574
+  [quantize] strip ensemble: 7 strips, changed 29 px  now: BK=9494  DG=1871  LG=1413  WH=1558
+  [quantize] G-valley refinement: threshold=229.0 (LG center G=182.5, WH center G=252.5), changed 3 px
   [quantize] final: BK=9494 (66.2%)  DG=1871 (13.1%)  LG=1416 (9.9%)  WH=1555 (10.8%)
 
 ======================================================================

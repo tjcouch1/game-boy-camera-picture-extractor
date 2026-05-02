@@ -8,12 +8,12 @@ CORPUS SUMMARY — test-input-full (locate:true)
 
   Test             Matching            Different           Verdict
   ----------------------------------------------------------------
-  thing-1          14298 ( 99.73%)      38 (  0.27%)   FAIL
-  thing-2          14307 ( 99.80%)      29 (  0.20%)   FAIL
+  thing-1          14306 ( 99.79%)      30 (  0.21%)   FAIL
+  thing-2          14292 ( 99.69%)      44 (  0.31%)   FAIL
   thing-3          14331 ( 99.97%)       5 (  0.03%)   FAIL
-  zelda-poster-1   14332 ( 99.97%)       4 (  0.03%)   FAIL
-  zelda-poster-2   14329 ( 99.95%)       7 (  0.05%)   FAIL
-  zelda-poster-3   14263 ( 99.49%)      73 (  0.51%)   FAIL
+  zelda-poster-1   14329 ( 99.95%)       7 (  0.05%)   FAIL
+  zelda-poster-2   14333 ( 99.98%)       3 (  0.02%)   FAIL
+  zelda-poster-3   14279 ( 99.60%)      57 (  0.40%)   FAIL
 
   0/6 passed
 
