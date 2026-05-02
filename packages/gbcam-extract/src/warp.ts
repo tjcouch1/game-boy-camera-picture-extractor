@@ -189,6 +189,221 @@ function addInnerBorderResidualImage(
   dbg.addImage("warp_b_inner_border_residual", overlay);
 }
 
+// ─── Dash positions ───
+//
+// The frame contains 17 horizontal dashes along top/bottom edges and 14 vertical
+// dashes along left/right edges. Corner dashes are fused with the adjacent edge
+// dashes. We use only the *interior* dashes (skipping corner-fused first/last
+// dashes on each side) as anchor points: 15 + 15 + 12 + 12 = 54 anchors.
+//
+// Centres extracted directly from `supporting-materials/Frame 02.png` and given
+// in image-pixel-edge units, where pixel index N occupies coordinates [N, N+1)
+// and the centre of pixel N is N + 0.5. To map to warp-space coordinates,
+// multiply by `scale`.
+
+/** Interior horizontal dash centres along top/bottom edges. */
+const DASH_INTERIOR_TOP_BOTTOM_X = [
+  12.5, 22.5, 32, 42, 51.5, 60.5, 70.5, 80, 90, 100.5, 110.5, 120, 130, 139.5, 148.5,
+] as const;
+/** Interior vertical dash centres along the left edge. */
+const DASH_INTERIOR_LEFT_Y = [
+  19.5, 29.5, 39.5, 48.5, 58, 68, 77.5, 87.5, 96.5, 106, 116, 125.5,
+] as const;
+/** Interior vertical dash centres along the right edge (asymmetric vs left). */
+const DASH_INTERIOR_RIGHT_Y = [
+  15, 24.5, 35, 45, 55, 64.5, 75, 85, 95, 104.5, 115, 125,
+] as const;
+/** Centre of horizontal dashes (rows 6–7, image-pixel-edge units). */
+const DASH_TOP_Y = 7;
+const DASH_BOTTOM_Y = 138;
+/** Centre of vertical dashes (cols 1–2 / 158, image-pixel-edge units). */
+const DASH_LEFT_X = 2;
+const DASH_RIGHT_X = 158;
+
+export interface DetectedDashes {
+  top: Array<{ expected: [number, number]; detected: [number, number] | null }>;
+  bottom: Array<{ expected: [number, number]; detected: [number, number] | null }>;
+  left: Array<{ expected: [number, number]; detected: [number, number] | null }>;
+  right: Array<{ expected: [number, number]; detected: [number, number] | null }>;
+}
+
+/**
+ * Detect interior dash centres on a warped image. Returns expected and detected
+ * positions in *warp-space coordinates* (GB pixel × scale).
+ *
+ * Detection: for each side, dashes are pure black (lowest grayscale value) on
+ * a frame strip that is otherwise white (#FFFFA5) or dark gray (#9494FF). We
+ * find the column- or row-argmin of grayscale within a small window centred
+ * on the expected position.
+ */
+export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
+  const cv = getCV();
+
+  const gray = new cv.Mat();
+  cv.cvtColor(warped, gray, cv.COLOR_BGR2GRAY);
+
+  // Dash centres are given in image-pixel-edge units; multiply by scale to
+  // map into warp-space coordinates.
+  const toImg = (p: number): number => p * scale;
+
+  const halfWindow = Math.max(2, Math.round(scale * 2)); // ±2 GB pixels
+  const stripHalf = Math.round(scale * 0.75); // ±0.75 GB pixel band orthogonal to scan
+
+  const topImgY = toImg(DASH_TOP_Y);
+  const bottomImgY = toImg(DASH_BOTTOM_Y);
+  const leftImgX = toImg(DASH_LEFT_X);
+  const rightImgX = toImg(DASH_RIGHT_X);
+
+  const rowsForTop: [number, number] = [
+    Math.max(0, Math.round(topImgY - stripHalf)),
+    Math.min(gray.rows, Math.round(topImgY + stripHalf) + 1),
+  ];
+  const rowsForBottom: [number, number] = [
+    Math.max(0, Math.round(bottomImgY - stripHalf)),
+    Math.min(gray.rows, Math.round(bottomImgY + stripHalf) + 1),
+  ];
+  const colsForLeft: [number, number] = [
+    Math.max(0, Math.round(leftImgX - stripHalf)),
+    Math.min(gray.cols, Math.round(leftImgX + stripHalf) + 1),
+  ];
+  const colsForRight: [number, number] = [
+    Math.max(0, Math.round(rightImgX - stripHalf)),
+    Math.min(gray.cols, Math.round(rightImgX + stripHalf) + 1),
+  ];
+
+  const top: DetectedDashes["top"] = [];
+  for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
+    const expectedX = toImg(gbx);
+    const detectedX = findArgminAlongCol(
+      gray, rowsForTop[0], rowsForTop[1], expectedX, halfWindow,
+    );
+    top.push({
+      expected: [expectedX, topImgY],
+      detected: detectedX === null ? null : [detectedX, topImgY],
+    });
+  }
+
+  const bottom: DetectedDashes["bottom"] = [];
+  for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
+    const expectedX = toImg(gbx);
+    const detectedX = findArgminAlongCol(
+      gray, rowsForBottom[0], rowsForBottom[1], expectedX, halfWindow,
+    );
+    bottom.push({
+      expected: [expectedX, bottomImgY],
+      detected: detectedX === null ? null : [detectedX, bottomImgY],
+    });
+  }
+
+  const left: DetectedDashes["left"] = [];
+  for (const gby of DASH_INTERIOR_LEFT_Y) {
+    const expectedY = toImg(gby);
+    const detectedY = findArgminAlongRow(
+      gray, colsForLeft[0], colsForLeft[1], expectedY, halfWindow,
+    );
+    left.push({
+      expected: [leftImgX, expectedY],
+      detected: detectedY === null ? null : [leftImgX, detectedY],
+    });
+  }
+
+  const right: DetectedDashes["right"] = [];
+  for (const gby of DASH_INTERIOR_RIGHT_Y) {
+    const expectedY = toImg(gby);
+    const detectedY = findArgminAlongRow(
+      gray, colsForRight[0], colsForRight[1], expectedY, halfWindow,
+    );
+    right.push({
+      expected: [rightImgX, expectedY],
+      detected: detectedY === null ? null : [rightImgX, detectedY],
+    });
+  }
+
+  gray.delete();
+  return { top, bottom, left, right };
+}
+
+/**
+ * Threshold (grayscale 0–255) below which a sample contributes weight to the
+ * dash centroid. Empirically: dash interiors are < 100, frame ≥ 150.
+ */
+const DASH_DARK_THRESHOLD = 130;
+
+/**
+ * Compute the dark-weighted centroid of a 1D profile, treating values below
+ * `threshold` as the "dark region" with weight = (threshold - value). This is
+ * robust to argmin instability when the dash interior is approximately flat.
+ * Returns the sub-pixel index in profile coordinates, or null if no sample
+ * falls below threshold.
+ */
+function darkCentroid(profile: number[], threshold: number): number | null {
+  let sumW = 0;
+  let sumWI = 0;
+  for (let i = 0; i < profile.length; i++) {
+    const w = Math.max(0, threshold - profile[i]);
+    sumW += w;
+    sumWI += w * i;
+  }
+  if (sumW < 1) return null;
+  return sumWI / sumW;
+}
+
+/**
+ * Search for the dash centre along a column-direction profile (vary x, mean
+ * over a row band). Returns sub-pixel x position, or null on failure.
+ */
+function findArgminAlongCol(
+  gray: any,
+  rowStart: number,
+  rowEnd: number,
+  expectedCol: number,
+  halfWindow: number,
+): number | null {
+  const colStart = Math.max(0, Math.floor(expectedCol - halfWindow));
+  const colEnd = Math.min(gray.cols, Math.ceil(expectedCol + halfWindow) + 1);
+  if (colStart >= colEnd || rowStart >= rowEnd) return null;
+  const profile: number[] = [];
+  for (let c = colStart; c < colEnd; c++) {
+    let sum = 0;
+    let n = 0;
+    for (let r = rowStart; r < rowEnd; r++) {
+      sum += gray.ucharAt(r, c);
+      n++;
+    }
+    profile.push(n > 0 ? sum / n : 0);
+  }
+  const idx = darkCentroid(profile, DASH_DARK_THRESHOLD);
+  return idx === null ? null : colStart + idx;
+}
+
+/**
+ * Search for the dash centre along a row-direction profile (vary y, mean over
+ * a column band). Returns sub-pixel y position, or null on failure.
+ */
+function findArgminAlongRow(
+  gray: any,
+  colStart: number,
+  colEnd: number,
+  expectedRow: number,
+  halfWindow: number,
+): number | null {
+  const rowStart = Math.max(0, Math.floor(expectedRow - halfWindow));
+  const rowEnd = Math.min(gray.rows, Math.ceil(expectedRow + halfWindow) + 1);
+  if (rowStart >= rowEnd || colStart >= colEnd) return null;
+  const profile: number[] = [];
+  for (let r = rowStart; r < rowEnd; r++) {
+    let sum = 0;
+    let n = 0;
+    for (let c = colStart; c < colEnd; c++) {
+      sum += gray.ucharAt(r, c);
+      n++;
+    }
+    profile.push(n > 0 ? sum / n : 0);
+  }
+  const idx = darkCentroid(profile, DASH_DARK_THRESHOLD);
+  return idx === null ? null : rowStart + idx;
+}
+
 // ─── Refinement metrics recorder ───
 
 interface RefineMetrics {
