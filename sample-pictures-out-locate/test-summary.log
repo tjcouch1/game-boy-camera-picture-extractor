@@ -1,0 +1,19 @@
+======================================================================
+CORPUS SUMMARY — sample-pictures (locate:true) [self-consistency]
+  inputDir:   sample-pictures
+  outputDir:  sample-pictures-out-locate
+  locate:     true
+  comparison: self  (referenceFromOutputDir: sample-pictures-out)
+======================================================================
+
+  Test              Matching            Different           Verdict
+  -----------------------------------------------------------------
+  20260313_213416   14336 (100.00%)       0 (  0.00%)   PASS
+  20260313_213430   14336 (100.00%)       0 (  0.00%)   PASS
+  20260313_213443   14336 (100.00%)       0 (  0.00%)   PASS
+  20260313_213457   14336 (100.00%)       0 (  0.00%)   PASS
+  20260313_213510   14336 (100.00%)       0 (  0.00%)   PASS
+  20260328_165926   14336 (100.00%)       0 (  0.00%)   PASS
+
+  6/6 passed
+

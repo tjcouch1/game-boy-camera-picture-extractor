@@ -1,0 +1,74 @@
+PIPELINE RUN
+  Input:      test-input-full\thing-1.jpg
+  Output dir: test-output-full\thing-1
+  locate:     true
+
+PIPELINE DIAGNOSTICS
+  [locate] working-res 1000×450 (scale=0.248 from 4032×1816)
+  [locate] found 3 candidate(s); top score=0.013
+  [locate] chose candidate 0: totalScore=0.985 (innerBorder=1.000, darkRing=0.991)
+  [locate] dash search: top@row=7 (expected 7, off 0), bottom@row=137 (expected 136, off 1), left@col=2 (expected 3, off 1), right@col=157 (expected 156, off 1)
+  [locate] output region: 1384×1247 (margin=6.0%, passThrough=false)
+  [warp] corner detection: area=1392300 aspect=1.109 (target 1.111) thresh=180 score=0.0224
+  [warp] detected source corners (TL TR BR BL): (76,58) (1311,60) (1310,1180) (69,1182)
+  [warp] pass 1 edge curvatures: top=-0.36 bot=0.49 left=-2.72 right=2.30
+  [warp] pass 1 corner errors: TL=(-3.2,-0.8) TR=(2.4,-0.4) BR=(2.5,1.0) BL=(-2.6,0.1)
+  [warp] pass 2 edge curvatures: top=0.19 bot=-0.05 left=2.51 right=0.87
+  [warp] pass 2 corner errors: TL=(-1.4,-0.1) TR=(0.9,0.1) BR=(1.1,0.2) BL=(-1.1,-0.2)
+  [correct] R: white samples kept=7249 (median 202.0, range 150–233)
+  [correct] G: white samples kept=7449 (median 214.2, range 159–252)
+  [correct] white surface R: 166–217; G: 177–237
+  [correct] dark surface  R: 77–129; G: 133–169
+  [correct] interior DG calibration: R=8225px G=9471px
+  [correct] frame post-correction p85: R=254 G=254 B=241 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=158.9 G=144.4 B=226.6
+  [crop] inner-border mean=186.6 white-frame mean=212.8 (ratio 0.877, WARN)
+  [sample] R: 36–255  G: 0–255  B: 94–255
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R92,G32)  DG=(R154,G147)  LG=(R234,G153)  WH=(R250,G239)
+  [quantize] after global kmeans: BK=1336  DG=8601  LG=2454  WH=1945
+  [quantize] strip ensemble: 7 strips, changed 96 px  now: BK=1336  DG=8615  LG=2358  WH=2027
+  [quantize] G-valley refinement: threshold=226.0 (LG center G=153.2, WH center G=239.0), changed 324 px
+  [quantize] final: BK=1336 (9.3%)  DG=8615 (60.1%)  LG=2682 (18.7%)  WH=1703 (11.9%)
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14306  (99.79%)
+  Different    : 30   (0.21%)
+
+----------------------------------------------------------------------
+COLOR DISTRIBUTION
+----------------------------------------------------------------------
+  Color                     Result   Reference      Diff
+  BK  #000000                 1336        1336  +0
+  DG  #9494FF                 8615        8626  -11
+  LG  #FF9494                 2682        2690  -8
+  WH  #FFFFA5                 1703        1684  +19
+
+----------------------------------------------------------------------
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+----------------------------------------------------------------------
+  Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
+  BK  #000000                    1336 v                0                  0                  0      1336
+  DG  #9494FF                       0               8615 v                0                  0      8615
+  LG  #FF9494                       0                 11 X             2671 v                0      2682
+  WH  #FFFFA5                       0                  0                 19 X             1684 v    1703
+
+----------------------------------------------------------------------
+ERROR BREAKDOWN  (result -> reference)
+----------------------------------------------------------------------
+  LG  #FF9494  ->  DG  #9494FF : 11 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 19 px
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14306  (99.79%)
+  Different    : 30   (0.21%)
+
+======================================================================
+RESULT: FAIL — see diagnostics above and in the output directory.
+======================================================================

@@ -1,7 +1,7 @@
-
 PIPELINE RUN
   Input:      test-input\zelda-poster-2.jpg
   Output dir: test-output\zelda-poster-2
+  locate:     false
 
 PIPELINE DIAGNOSTICS
   [warp] corner detection: area=1193644 aspect=1.134 (target 1.111) thresh=180 score=0.0307
