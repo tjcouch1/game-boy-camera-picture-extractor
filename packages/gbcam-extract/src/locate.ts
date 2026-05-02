@@ -54,7 +54,7 @@ const APPROX_EPSILON_FRAC = 0.04;
 const MARGIN_RATIO = 0.06;
 
 /** Minimum total validation score to accept a candidate (0–1). */
-const MIN_VALIDATION_SCORE = 0.35;
+const MIN_VALIDATION_SCORE = 0.25;
 
 /** Target screen aspect (160 / 144). */
 const TARGET_ASPECT = 160 / 144;
@@ -84,6 +84,28 @@ export interface LocateOptions {
  */
 export function locate(input: GBImageData, options?: LocateOptions): GBImageData {
   const dbg = options?.debug;
+
+  // Already-cropped fast path: if the input's aspect ratio is close to the
+  // GB Screen's 160:144 (within 10%), the input is most likely already
+  // cropped around the screen. Pass through unchanged — running detection
+  // on a tightly-cropped image typically picks up arbitrary fragments and
+  // produces a worse output than the input.
+  const inputAspect = input.width / input.height;
+  const inputAspectErr = Math.abs(inputAspect / TARGET_ASPECT - 1);
+  if (inputAspectErr < 0.1) {
+    if (dbg) {
+      dbg.log(
+        `[locate] input ${input.width}×${input.height} aspect=${inputAspect.toFixed(3)} ` +
+          `≈ target ${TARGET_ASPECT.toFixed(3)}; treating as already-cropped (passThrough)`,
+      );
+      dbg.setMetrics("locate", {
+        passThrough: true,
+        inputAspect,
+        outputSize: [input.width, input.height],
+      });
+    }
+    return cloneImage(input);
+  }
 
   const cv = getCV();
   const src = imageDataToMat(input);
@@ -229,15 +251,21 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
     // ── 2d. Map back, expand, rotate, crop ──
     const workToOrig = 1 / work.scale;
     const screenCornersOrig = scaleCorners(chosen.corners, workToOrig);
+
+    // Already-cropped detection: if the chosen candidate's bounding box
+    // covers most of the input image, the input is already cropped around
+    // the screen. Pass through the input unchanged so the rest of the
+    // pipeline gets the original full-resolution photo.
+    const screenBbox = boundingBoxOfCorners(screenCornersOrig, input.width, input.height);
+    const screenArea = (screenBbox.x1 - screenBbox.x0) * (screenBbox.y1 - screenBbox.y0);
+    const inputArea = input.width * input.height;
+    const screenFraction = screenArea / inputArea;
+    const passThrough = screenFraction > 0.7;
+
     const expanded = expandRotatedRect(screenCornersOrig, MARGIN_RATIO);
     const clamped = clampCorners(expanded, input.width, input.height);
 
-    // Detect pass-through: if every clamped corner equals its expanded
-    // counterpart, no clamping happened and the margin was applied freely.
-    // If they differ, the margin was clipped — likely an already-cropped input.
-    const passThrough = expanded.some((p, i) => p[0] !== clamped[i][0] || p[1] !== clamped[i][1]);
-
-    const output = extractRotatedRect(src, clamped);
+    const output = passThrough ? cloneImage(input) : extractRotatedRect(src, clamped);
 
     if (dbg) {
       dbg.addImage(
