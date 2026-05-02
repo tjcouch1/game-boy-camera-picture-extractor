@@ -52,6 +52,16 @@ export interface CorrectOptions {
   polyDegree?: number;
   darkSmooth?: number;
   refinePasses?: number;
+  /**
+   * When true, apply the same per-pixel affine correction to the B channel
+   * that is applied to R/G — but with role-swapped surfaces (frame B is the
+   * *low* target, inner-border B is the *high* target, since after white-
+   * balance the post-WB frame B = 165 and DG.B = 255). Falls back to
+   * passthrough on the inverted-affine pathology (frame B and border B
+   * surfaces overlap, indicating sensor B saturation). Only enable when
+   * raw B is recoverable (raw frame B median < 240).
+   */
+  correctB?: boolean;
   debug?: DebugCollector;
 }
 
@@ -69,6 +79,7 @@ export function correct(
   const polyDegree = options?.polyDegree ?? 2;
   const darkSmooth = options?.darkSmooth ?? 13;
   const refinePasses = options?.refinePasses ?? 1;
+  const correctB = options?.correctB ?? false;
   const dbg = options?.debug;
 
   const expectedW = SCREEN_W * scale;
@@ -155,9 +166,58 @@ export function correct(
   let darkSurfaceG = buildDarkSurface(leftG, rightG, topG, botG, H, W, scale, darkSmooth);
   let correctedG = applyCorrectionChannel(chG, whiteSurfaceG, darkSurfaceG, W, H, 255, 148);
 
-  // B channel: white=dark (no correction, both are close to ~200)
-  // For simplicity, keep B as-is or apply light correction
-  let correctedB = new Float32Array(chB);
+  // B channel: post-WB the frame's B sits at target 165, the inner-border's
+  // B sits at target 255 (DG palette). When `correctB` is enabled and the
+  // per-pixel surfaces aren't degenerate, apply the same affine correction
+  // mechanism as R/G — but with role-swapped roles ("white" = border B with
+  // high target 255, "dark" = frame B with low target 165). On the
+  // inverted-affine pathology (frame B and border B overlap, e.g. blue
+  // sensor clip), fall back to passthrough.
+  let correctedB: Float32Array = new Float32Array(chB);
+  let correctBApplied = false;
+  let correctBPathology = false;
+  if (correctB) {
+    const frameSamplesB = collectWhiteSamples(chB, W, H, scale);
+    const frameSurfaceB = fitSurface(
+      frameSamplesB.ys, frameSamplesB.xs, frameSamplesB.vs, H, W, polyDegree,
+    );
+    const { left: leftB, right: rightB, top: topB, bot: botB } = collectDarkSamples(
+      chB, W, H, scale,
+    );
+    const borderSurfaceB = buildDarkSurface(leftB, rightB, topB, botB, H, W, scale, darkSmooth);
+
+    // Per-pixel pathology check: at every pixel, borderSurface must exceed
+    // frameSurface by at least 5 units for the affine correction's gain to
+    // remain positive. (Comparing global min(border) vs max(frame) is over-
+    // conservative since different image regions can be tested independently.)
+    let minDiff = Infinity;
+    for (let i = 0; i < H * W; i++) {
+      const d = borderSurfaceB[i] - frameSurfaceB[i];
+      if (d < minDiff) minDiff = d;
+    }
+    if (minDiff < 5) {
+      correctBPathology = true;
+      if (dbg) {
+        dbg.log(
+          `[correct] B inverted-affine pathology: ` +
+            `min(border-frame)=${minDiff.toFixed(1)} < 5; ` +
+            `falling back to passthrough`,
+        );
+      }
+    } else {
+      correctedB = applyCorrectionChannel(
+        chB, borderSurfaceB, frameSurfaceB, W, H, 255, 165,
+      );
+      correctBApplied = true;
+      if (dbg) {
+        dbg.log(
+          `[correct] B: white(border) samples=${frameSamplesB.vs.length}, ` +
+            `border surface=${surfRange(borderSurfaceB)}, ` +
+            `frame surface=${surfRange(frameSurfaceB)} (corrected)`,
+        );
+      }
+    }
+  }
 
   if (dbg) {
     dbg.log(
@@ -335,6 +395,11 @@ export function correct(
         R: Math.round(framePost.R),
         G: Math.round(framePost.G),
         B: Math.round(framePost.B),
+      },
+      bChannel: {
+        requested: correctB,
+        applied: correctBApplied,
+        pathology: correctBPathology,
       },
     });
   }
