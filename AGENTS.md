@@ -100,10 +100,14 @@ TypeScript unit tests (vitest):
 cd packages/gbcam-extract && pnpm test
 ```
 
-TypeScript pipeline tests (accuracy comparison against reference images):
+TypeScript pipeline tests (accuracy comparison against reference images). Two modes; both work from the repo root or from the package:
 
 ```bash
-cd packages/gbcam-extract && pnpm test:pipeline
+# Quick (default): sample-pictures extraction smoke test + test-input-full (locate:true) primary accuracy run
+pnpm test:pipeline
+
+# Full: all six corpora (tier-1 reference comparisons + tier-2 self-consistency runs)
+pnpm test:pipeline:all
 ```
 
 Python test runner outputs to `test-output-py/`, TypeScript to `test-output/`. Both produce a `test-summary.log`. You can compare them side by side.

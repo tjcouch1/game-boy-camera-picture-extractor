@@ -19,7 +19,8 @@
     "preview:host": "pnpm build && pnpm --filter gbcam-extract-web preview:host",
     "typecheck": "pnpm -r run typecheck",
     "extract": "pnpm --filter gbcam-extract run extract",
-    "test:pipeline": "pnpm --filter gbcam-extract run test:pipeline"
+    "test:pipeline": "pnpm --filter gbcam-extract run test:pipeline",
+    "test:pipeline:all": "pnpm --filter gbcam-extract run test:pipeline:all"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

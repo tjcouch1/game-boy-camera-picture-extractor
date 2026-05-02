@@ -650,17 +650,43 @@ function writeCorpusSummary(corpus: CorpusConfig, results: TestResult[]): void {
   writeFileSync(join(corpus.outputDir, "test-summary.log"), text, "utf-8");
 }
 
-// ─── Main ───
+// ─── Corpus catalogs ───
+//
+// Two test-run modes are supported, each running a different subset of
+// corpora. Both share `runCorpus` etc. above.
+//
+// `quick` (default) — focused day-to-day validation: just sample-pictures
+// extraction (a smoke check that the pipeline produces output) and the
+// primary `locate` accuracy run against `test-input-full/`. Skips the
+// already-cropped baseline and the tier-2 self-consistency corpora.
+//
+// `full` — every corpus, in dependency order (sample-pictures locate:false
+// runs first because its outputs are referenced by the two locate:true
+// self-consistency corpora).
 
-async function main() {
-  console.log("Initializing OpenCV...");
-  await initOpenCV();
-  console.log("OpenCV ready.\n");
+/** Corpora used by `pnpm test:pipeline` (the quick day-to-day run). */
+function quickCorpora(): CorpusConfig[] {
+  return [
+    {
+      name: "sample-pictures (locate:false)",
+      inputDir: SAMPLE_PICTURES_DIR,
+      outputDir: SAMPLE_PICTURES_OUT,
+      locate: false,
+      comparison: "none",
+    },
+    {
+      name: "test-input-full (locate:true)",
+      inputDir: TEST_INPUT_FULL_DIR,
+      outputDir: TEST_OUTPUT_FULL_DIR,
+      locate: true,
+      comparison: "reference",
+    },
+  ];
+}
 
-  // Note: corpus order matters when later corpora set comparison: "self".
-  // sample-pictures + locate:false runs first because it produces the
-  // self-consistency reference for sample-pictures-out-locate / -full.
-  const corpora: CorpusConfig[] = [
+/** All corpora used by `pnpm test:pipeline:all`. */
+function allCorpora(): CorpusConfig[] {
+  return [
     {
       name: "sample-pictures (locate:false)",
       inputDir: SAMPLE_PICTURES_DIR,
@@ -706,6 +732,32 @@ async function main() {
       referenceFromOutputDir: SAMPLE_PICTURES_OUT,
     },
   ];
+}
+
+// ─── Main ───
+
+async function main() {
+  // Parse mode from CLI args (default: quick).
+  const argv = process.argv.slice(2);
+  let mode: "quick" | "all" = "quick";
+  for (const arg of argv) {
+    if (arg === "--mode=quick" || arg === "--quick") mode = "quick";
+    else if (arg === "--mode=all" || arg === "--all") mode = "all";
+    else if (arg === "--help" || arg === "-h") {
+      console.log(
+        "Usage: run-tests [--mode=quick|all]\n" +
+          "  --mode=quick  Run sample-pictures + test-input-full (default)\n" +
+          "  --mode=all    Run all six corpora (tier-1 + tier-2 self-consistency)",
+      );
+      return;
+    }
+  }
+
+  console.log("Initializing OpenCV...");
+  await initOpenCV();
+  console.log(`OpenCV ready. Running ${mode === "all" ? "ALL" : "QUICK"} corpora.\n`);
+
+  const corpora = mode === "all" ? allCorpora() : quickCorpora();
 
   const allResults: { corpus: CorpusConfig; results: TestResult[] }[] = [];
   let anyError = false;
