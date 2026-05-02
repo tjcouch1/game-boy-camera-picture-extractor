@@ -134,6 +134,7 @@ interface RefineMetrics {
     BR: [number, number];
     BL: [number, number];
   };
+  residual: { maxCornerErr: number; meanEdgeCurv: number };
   refined: boolean;
 }
 
@@ -157,9 +158,16 @@ function recordRefinementMetrics(
       `BR=(${ce.BR[0].toFixed(1)},${ce.BR[1].toFixed(1)}) ` +
       `BL=(${ce.BL[0].toFixed(1)},${ce.BL[1].toFixed(1)})`,
   );
+  const r = m.residual;
+  dbg.log(
+    `[warp] pass${passNum} residual: ` +
+      `maxCornerErr=${r.maxCornerErr.toFixed(2)} ` +
+      `meanEdgeCurv=${r.meanEdgeCurv.toFixed(2)}`,
+  );
   dbg.setMetric("warp", `pass${passNum}`, {
     edgeCurvatures: ec,
     cornerErrors: ce,
+    residual: r,
     refined: m.refined,
   });
 }
@@ -715,6 +723,20 @@ function refineWarpWithMetrics(
     BL: [corners.BL[0] - expLeft, corners.BL[1] - expBottom] as [number, number],
   };
 
+  const maxCornerErr = Math.max(
+    ...Object.values(cornerErrors).flat().map(Math.abs),
+  );
+  const meanEdgeCurv =
+    (Math.abs(edgeCurvatures.top) +
+      Math.abs(edgeCurvatures.bottom) +
+      Math.abs(edgeCurvatures.left) +
+      Math.abs(edgeCurvatures.right)) /
+    4;
+  const residual = {
+    maxCornerErr: Number(maxCornerErr.toFixed(3)),
+    meanEdgeCurv: Number(meanEdgeCurv.toFixed(3)),
+  };
+
   // Adjust corners for edge curvature
   const corrScale = 0.45;
   const adjusted = {
@@ -830,6 +852,7 @@ function refineWarpWithMetrics(
           BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
           BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
         },
+        residual,
         refined: true,
       },
     };
@@ -853,6 +876,7 @@ function refineWarpWithMetrics(
           BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
           BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
         },
+        residual,
         refined: false,
       },
     };
