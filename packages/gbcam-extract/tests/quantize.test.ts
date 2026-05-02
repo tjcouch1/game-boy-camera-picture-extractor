@@ -64,3 +64,68 @@ describe("gValleyThreshold safety clamp", () => {
     expect(t).toBeCloseTo(150, 1);
   });
 });
+
+describe("quantize useB (3D RGB path)", () => {
+  it("classifies 4 RGB bands correctly when DG.B is post-clip (not 255)", () => {
+    const input = createGBImageData(CAM_W, CAM_H);
+    const bandHeight = Math.floor(CAM_H / 4);
+    // BK, DG, LG, WH — DG B=200 to mimic post-WB clipped data on a yellow
+    // cast image (would be 255 in palette, but data is lower).
+    const bands: [number, number, number][] = [
+      [0, 0, 0],
+      [148, 148, 200],
+      [255, 148, 148],
+      [255, 255, 165],
+    ];
+    for (let y = 0; y < CAM_H; y++) {
+      const band = Math.min(Math.floor(y / bandHeight), 3);
+      const [r, g, b] = bands[band];
+      for (let x = 0; x < CAM_W; x++) {
+        const j = (y * CAM_W + x) * 4;
+        input.data[j] = r;
+        input.data[j + 1] = g;
+        input.data[j + 2] = b;
+        input.data[j + 3] = 255;
+      }
+    }
+
+    const result = quantize(input, { useB: true });
+
+    // Each band should classify to its expected palette value.
+    const expectedByBand = [GB_COLORS[0], GB_COLORS[1], GB_COLORS[2], GB_COLORS[3]];
+    for (let bi = 0; bi < 4; bi++) {
+      const yMid = bi * bandHeight + Math.floor(bandHeight / 2);
+      const j = (yMid * CAM_W + CAM_W / 2) * 4;
+      expect(result.data[j]).toBe(expectedByBand[bi]);
+    }
+  });
+
+  it("with useB=false, RGB and 2D-RG paths agree on a band image where B is uninformative", () => {
+    const input = createGBImageData(CAM_W, CAM_H);
+    const bandHeight = Math.floor(CAM_H / 4);
+    // B = 0 everywhere — the RG path should be byte-identical to its old
+    // behaviour and not depend on B at all.
+    const bands: [number, number, number][] = [
+      [0, 0, 0],
+      [148, 148, 0],
+      [255, 148, 0],
+      [255, 255, 0],
+    ];
+    for (let y = 0; y < CAM_H; y++) {
+      const band = Math.min(Math.floor(y / bandHeight), 3);
+      const [r, g, b] = bands[band];
+      for (let x = 0; x < CAM_W; x++) {
+        const j = (y * CAM_W + x) * 4;
+        input.data[j] = r;
+        input.data[j + 1] = g;
+        input.data[j + 2] = b;
+        input.data[j + 3] = 255;
+      }
+    }
+    const a = quantize(input, { useB: false });
+    const b = quantize(input);
+    for (let i = 0; i < a.data.length; i++) {
+      expect(a.data[i]).toBe(b.data[i]);
+    }
+  });
+});
