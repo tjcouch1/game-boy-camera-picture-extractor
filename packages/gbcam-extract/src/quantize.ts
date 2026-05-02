@@ -23,6 +23,13 @@ import {
 
 export interface QuantizeOptions {
   debug?: DebugCollector;
+  /**
+   * When true, run the global k-means in 3D RGB instead of 2D RG. Use only
+   * when raw B is informative for DG/non-DG separation (raw frame B median
+   * < 240). When false (default), behaviour is byte-identical to the 2D RG
+   * path for any input.
+   */
+  useB?: boolean;
 }
 
 // ─── RGB palette matching the Python COLOR_PALETTE_RGB ───
@@ -94,11 +101,13 @@ function permutations4(): number[][] {
 
 /**
  * Find the best permutation mapping clusters -> palette indices
- * that minimizes total RG Euclidean distance.
+ * that minimizes total Euclidean distance over `dim` dimensions (2 = RG,
+ * 3 = RGB).
  */
 function bestClusterToPalette(
-  centersRG: Float32Array,
-  targetsRG: [number, number][],
+  centers: Float32Array,
+  targets: number[][],
+  dim: 2 | 3 = 2,
 ): Int32Array {
   const perms = permutations4();
   let bestPerm: number[] = perms[0];
@@ -106,11 +115,13 @@ function bestClusterToPalette(
   for (const perm of perms) {
     let cost = 0;
     for (let i = 0; i < 4; i++) {
-      const cr = centersRG[i * 2];
-      const cg = centersRG[i * 2 + 1];
-      const tr = targetsRG[perm[i]][0];
-      const tg = targetsRG[perm[i]][1];
-      cost += Math.sqrt((cr - tr) ** 2 + (cg - tg) ** 2);
+      let d = 0;
+      for (let j = 0; j < dim; j++) {
+        const cv = centers[i * dim + j];
+        const tv = targets[perm[i]][j];
+        d += (cv - tv) ** 2;
+      }
+      cost += Math.sqrt(d);
     }
     if (cost < bestCost) {
       bestCost = cost;
@@ -121,57 +132,49 @@ function bestClusterToPalette(
 }
 
 /**
- * Run cv.kmeans on an Nx2 float32 sample set with warm initialisation.
- * Returns { labels: Int32Array(N), centers: Float32Array(4*2) }
+ * Run cv.kmeans on an Nx`dim` float32 sample set with warm initialisation.
+ * `dim` is 2 (RG) or 3 (RGB). Returns
+ * { labels: Int32Array(N), centers: Float32Array(4*dim) }.
  */
 function runKmeans(
-  samplesRG: Float32Array,
+  samples: Float32Array,
   n: number,
-  initCenters: [number, number][] | Float32Array,
+  initCenters: number[][] | Float32Array,
+  dim: 2 | 3 = 2,
 ): { labels: Int32Array; centers: Float32Array } {
   const cv = getCV();
   return withMats((track) => {
-    // Build Nx2 samples Mat
-    const samplesMat = track(new cv.Mat(n, 2, cv.CV_32F));
-    samplesMat.data32F.set(samplesRG);
+    const samplesMat = track(new cv.Mat(n, dim, cv.CV_32F));
+    samplesMat.data32F.set(samples);
 
-    // Build labels output
     const labelsMat = track(new cv.Mat(n, 1, cv.CV_32S));
+    const centersMat = track(new cv.Mat(4, dim, cv.CV_32F));
 
-    // Build centers output
-    const centersMat = track(new cv.Mat(4, 2, cv.CV_32F));
-
-    // Build initial centers for warm start
-    const initMat = track(new cv.Mat(4, 2, cv.CV_32F));
+    const initMat = track(new cv.Mat(4, dim, cv.CV_32F));
     if (initCenters instanceof Float32Array) {
       initMat.data32F.set(initCenters);
     } else {
       for (let i = 0; i < 4; i++) {
-        initMat.data32F[i * 2] = initCenters[i][0];
-        initMat.data32F[i * 2 + 1] = initCenters[i][1];
+        for (let j = 0; j < dim; j++) {
+          initMat.data32F[i * dim + j] = initCenters[i][j];
+        }
       }
     }
 
-    // Use warm start: set labels from initial centers via nearest assignment
-    // then use KMEANS_USE_INITIAL_LABELS
-    // Actually, opencv.js doesn't support initial centers directly.
-    // We assign initial labels based on nearest init center, then use KMEANS_USE_INITIAL_LABELS.
+    // Warm start via KMEANS_USE_INITIAL_LABELS: assign each sample to the
+    // nearest init centre, then let cv.kmeans iterate from there. (opencv.js
+    // doesn't expose KMEANS_USE_INITIAL_CENTERS directly.)
+    const ic = initCenters instanceof Float32Array ? initCenters : null;
     for (let i = 0; i < n; i++) {
-      const r = samplesRG[i * 2];
-      const g = samplesRG[i * 2 + 1];
       let bestK = 0;
       let bestD = Infinity;
-      const ic = initCenters instanceof Float32Array ? initCenters : null;
       for (let k = 0; k < 4; k++) {
-        let cr: number, cg: number;
-        if (ic) {
-          cr = ic[k * 2];
-          cg = ic[k * 2 + 1];
-        } else {
-          cr = (initCenters as [number, number][])[k][0];
-          cg = (initCenters as [number, number][])[k][1];
+        let d = 0;
+        for (let j = 0; j < dim; j++) {
+          const sv = samples[i * dim + j];
+          const cv = ic ? ic[k * dim + j] : (initCenters as number[][])[k][j];
+          d += (sv - cv) ** 2;
         }
-        const d = (r - cr) ** 2 + (g - cg) ** 2;
         if (d < bestD) {
           bestD = d;
           bestK = k;
@@ -191,12 +194,11 @@ function runKmeans(
       4,
       labelsMat,
       criteria,
-      1, // attempts=1 since we use initial labels
+      1,
       cv.KMEANS_USE_INITIAL_LABELS,
       centersMat,
     );
 
-    // Copy results out before mats are deleted
     const labels = new Int32Array(labelsMat.data32S);
     const centers = new Float32Array(centersMat.data32F);
     return { labels, centers };
@@ -282,6 +284,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
   const N = CAM_W * CAM_H;
   const targetsRG = PALETTE_RG;
   const dbg = options?.debug;
+  const useB = options?.useB ?? false;
 
   // Extract RG values (Nx2 float32) and full RGB (Nx3)
   const flatRG = new Float32Array(N * 2);
@@ -290,14 +293,121 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     flatRG[i * 2 + 1] = input.data[i * 4 + 1]; // G
   }
 
-  // ── 1. Global k-means ──
-  const global = runKmeans(flatRG, N, INIT_CENTERS_RG);
-  const clusterToPalette = bestClusterToPalette(global.centers, targetsRG);
+  // ── 1. Global k-means (2D RG) ──
+  const global = runKmeans(flatRG, N, INIT_CENTERS_RG, 2);
+  const clusterToPalette = bestClusterToPalette(global.centers, targetsRG, 2);
 
   // Map cluster labels to palette indices
   const labelsFlat = new Int32Array(N);
   for (let i = 0; i < N; i++) {
     labelsFlat[i] = clusterToPalette[global.labels[i]];
+  }
+
+  // ── 1b. Optional 3D RGB refinement ──
+  // When `useB` is set (raw frame B median was below the gating threshold,
+  // meaning raw B is not sensor-clipped and carries DG/non-DG information),
+  // re-run the global k-means in 3D RGB space with init centres derived
+  // from the data (B percentiles per 2D-pass label). This separates clusters
+  // that overlap heavily in RG but differ in B — most relevant for yellow-
+  // cast / neutral-cast images.
+  let bGlobalCenters: Float32Array | null = null;
+  if (useB) {
+    const flatRGB = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      flatRGB[i * 3] = input.data[i * 4];
+      flatRGB[i * 3 + 1] = input.data[i * 4 + 1];
+      flatRGB[i * 3 + 2] = input.data[i * 4 + 2];
+    }
+
+    // B values bucketed by 2D palette label.
+    const bByLabel: number[][] = [[], [], [], []];
+    for (let i = 0; i < N; i++) {
+      bByLabel[labelsFlat[i]].push(flatRGB[i * 3 + 2]);
+    }
+    for (const arr of bByLabel) arr.sort((a, b) => a - b);
+    const percentile = (arr: number[], p: number): number => {
+      if (arr.length === 0) return 128;
+      const idx = Math.min(arr.length - 1, Math.floor((arr.length * p) / 100));
+      return arr[idx];
+    };
+    const bInit = [
+      percentile(bByLabel[0], 10), // BK
+      percentile(bByLabel[1], 70), // DG
+      percentile(bByLabel[2], 30), // LG
+      percentile(bByLabel[3], 50), // WH
+    ];
+
+    // Palette-ordered 2D centres (RG) from the 2D pass, with B init from data.
+    const init3D: number[][] = [];
+    for (let pi = 0; pi < 4; pi++) {
+      let cr = targetsRG[pi][0];
+      let cg = targetsRG[pi][1];
+      for (let ci = 0; ci < 4; ci++) {
+        if (clusterToPalette[ci] === pi) {
+          cr = global.centers[ci * 2];
+          cg = global.centers[ci * 2 + 1];
+          break;
+        }
+      }
+      init3D.push([cr, cg, bInit[pi]]);
+    }
+
+    // Data-derived B target for DG: median raw B of pixels labelled DG by 2D.
+    const dgBTarget = percentile(bByLabel[1], 50);
+
+    const targets3D: number[][] = [
+      [0, 0, 0],
+      [148, 148, dgBTarget],
+      [255, 148, 148],
+      [255, 255, 165],
+    ];
+
+    const global3D = runKmeans(flatRGB, N, init3D, 3);
+    const c2p3D = bestClusterToPalette(global3D.centers, targets3D, 3);
+
+    let changed3D = 0;
+    for (let i = 0; i < N; i++) {
+      const newLabel = c2p3D[global3D.labels[i]];
+      if (newLabel !== labelsFlat[i]) changed3D++;
+      labelsFlat[i] = newLabel;
+    }
+
+    // Update the 2D centres slot used downstream so strip ensemble and
+    // metrics see the post-3D RG centres of each palette label.
+    const new2DCenters = new Float32Array(4 * 2);
+    for (let pi = 0; pi < 4; pi++) {
+      let cr = targetsRG[pi][0];
+      let cg = targetsRG[pi][1];
+      for (let ci = 0; ci < 4; ci++) {
+        if (c2p3D[ci] === pi) {
+          cr = global3D.centers[ci * 3];
+          cg = global3D.centers[ci * 3 + 1];
+          break;
+        }
+      }
+      new2DCenters[pi * 2] = cr;
+      new2DCenters[pi * 2 + 1] = cg;
+    }
+    // Overwrite global.centers in palette-ordered form for downstream code.
+    // Map back to cluster-ordered: index ci → palette pi via c2p3D[ci].
+    for (let ci = 0; ci < 4; ci++) {
+      const pi = c2p3D[ci];
+      global.centers[ci * 2] = new2DCenters[pi * 2];
+      global.centers[ci * 2 + 1] = new2DCenters[pi * 2 + 1];
+    }
+    // Replace clusterToPalette with the 3D mapping so paletteCenters logic
+    // below picks up the right cluster for each palette label.
+    for (let ci = 0; ci < 4; ci++) clusterToPalette[ci] = c2p3D[ci];
+
+    bGlobalCenters = new Float32Array(global3D.centers);
+    if (dbg) {
+      dbg.log(
+        `[quantize] 3D RGB refinement: dgBTarget=${dgBTarget.toFixed(0)} ` +
+          `bInit=[BK${bInit[0].toFixed(0)} DG${bInit[1].toFixed(0)} ` +
+          `LG${bInit[2].toFixed(0)} WH${bInit[3].toFixed(0)}] ` +
+          `changed=${changed3D}`,
+      );
+    }
   }
 
   // Capture global k-means metrics — palette-ordered cluster centers
@@ -552,10 +662,24 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     );
 
     dbg.setMetrics("quantize", {
+      useB,
       clusterCenters: paletteCenters.map(([r, g]) => [
         Number(r.toFixed(2)),
         Number(g.toFixed(2)),
       ]),
+      ...(bGlobalCenters
+        ? {
+            clusterCentersRGB: [0, 1, 2, 3].map((ci) => {
+              const pi = clusterToPalette[ci];
+              return {
+                palette: pi,
+                R: Number(bGlobalCenters[ci * 3].toFixed(2)),
+                G: Number(bGlobalCenters[ci * 3 + 1].toFixed(2)),
+                B: Number(bGlobalCenters[ci * 3 + 2].toFixed(2)),
+              };
+            }),
+          }
+        : {}),
       stripEnsemble: { strips: nStrips, changed: stripChanged },
       valleyRefinement: {
         threshold: valleyThreshold === null ? null : Number(valleyThreshold.toFixed(2)),

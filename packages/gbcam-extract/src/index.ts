@@ -32,11 +32,31 @@ export {
 import type { GBImageData, PipelineResult, PipelineOptions } from "./common.js";
 import { warp } from "./warp.js";
 import { whiteBalance } from "./white-balance.js";
-import { correct } from "./correct.js";
+import { correct, collectWhiteSamples } from "./correct.js";
 import { crop } from "./crop.js";
 import { sample } from "./sample.js";
 import { quantize } from "./quantize.js";
 import { createDebugCollector } from "./debug.js";
+
+/**
+ * Compute the raw B-channel median over the frame strip of a warped (but
+ * not-yet-balanced) image. Used to gate the conditional 3D RGB quantize
+ * path: B is sensor-clipped on blue-cast images (median ≳ 240) and is
+ * uninformative for DG/non-DG separation in those; on yellow/neutral cast
+ * images (median < 240) raw B is recoverable and worth using.
+ */
+function rawFrameMedianB(warped: GBImageData, scale: number): number {
+  const W = warped.width;
+  const H = warped.height;
+  const chB = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) chB[i] = warped.data[i * 4 + 2];
+  const { vs } = collectWhiteSamples(chB, W, H, scale);
+  if (vs.length === 0) return 255;
+  const sorted = vs.slice().sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+const USE_B_GATE_THRESHOLD = 240;
 
 export async function processPicture(
   input: GBImageData,
@@ -51,6 +71,17 @@ export async function processPicture(
   onProgress?.("warp", 0);
   const warped = warp(input, { scale, debug: collector });
   onProgress?.("warp", 100);
+
+  const bMedRaw = rawFrameMedianB(warped, scale);
+  const useB = bMedRaw < USE_B_GATE_THRESHOLD;
+  if (collector) {
+    collector.log(
+      `[pipeline] raw frame B median = ${bMedRaw.toFixed(0)}; ` +
+        `useB = ${useB} (gate < ${USE_B_GATE_THRESHOLD})`,
+    );
+    collector.setMetric("pipeline", "useB", useB);
+    collector.setMetric("pipeline", "rawFrameMedianB", Math.round(bMedRaw));
+  }
 
   const balanced = whiteBalance(warped, { scale, debug: collector });
 
@@ -67,7 +98,7 @@ export async function processPicture(
   onProgress?.("sample", 100);
 
   onProgress?.("quantize", 0);
-  const quantized = quantize(sampled, { debug: collector });
+  const quantized = quantize(sampled, { debug: collector, useB });
   onProgress?.("quantize", 100);
 
   const result: PipelineResult = { grayscale: quantized };
