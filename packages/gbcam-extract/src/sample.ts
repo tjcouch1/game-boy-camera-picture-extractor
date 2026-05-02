@@ -50,7 +50,7 @@ export function sample(
   options?: SampleOptions,
 ): GBImageData {
   const scale = options?.scale ?? 8;
-  const vMargin = options?.marginV ?? Math.max(1, Math.floor(scale / 5));
+  const vMargin = options?.marginV ?? Math.max(2, Math.floor(scale / 4));
   const dbg = options?.debug;
 
   const expectedW = CAM_W * scale;
