@@ -517,9 +517,11 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
 
       const cmp = compare(resultGray, referenceGray, perImageOutDir, stem, log);
 
-      await saveErrorMap(resultGray, referenceGray, perImageOutDir, stem);
-      await savePaletteImage(resultGray, perImageOutDir, `${stem}_diag_result.png`);
-      await savePaletteImage(referenceGray, perImageOutDir, `${stem}_diag_reference.png`);
+      const debugDir = join(perImageOutDir, "debug");
+      if (!existsSync(debugDir)) mkdirSync(debugDir, { recursive: true });
+      await saveErrorMap(resultGray, referenceGray, debugDir, stem);
+      await savePaletteImage(resultGray, debugDir, `${stem}_diag_result.png`);
+      await savePaletteImage(referenceGray, debugDir, `${stem}_diag_reference.png`);
 
       writeFileSync(logPath, logLines.join("\n") + "\n", "utf-8");
 

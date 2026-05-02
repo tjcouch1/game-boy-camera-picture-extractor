@@ -156,7 +156,12 @@ The pipeline test runner produces six output directories, organized into two tie
   - `sample-pictures-out-locate/<test-name>/` (`locate:true` on already-cropped sample-pictures).
   - `sample-pictures-out-full/<test-name>/` (`locate:true` on full sample-pictures-full photos).
 
-Each output directory has its own `test-summary.log` with accuracy numbers (matching/different pixel counts). Per-image artifacts (`<test-name>.log`, `*_diag_*.png`, `debug/`) live under `<output-dir>/<test-name>/`. The Python pipeline still writes to `test-output-py/`.
+Each output directory has its own `test-summary.log` with accuracy numbers (matching/different pixel counts). Per-image artifacts under `<output-dir>/<test-name>/`:
+
+- Final outputs at the top level: `<test-name>_gbcam.png`, `<test-name>_gbcam_rgb.png`, `<test-name>.log`.
+- Everything else lives in `<test-name>/debug/`: pipeline-step intermediates (`<test-name>_warp.png`, etc.), per-step debug images (`<test-name>_warp_a_corners.png`, etc.), reference-comparison diagnostics (`<test-name>_diag_error_map.png`, `<test-name>_diag_result.png`, `<test-name>_diag_reference.png`), and the structured `<test-name>_debug.json`.
+
+The Python pipeline still writes to `test-output-py/`.
 
 ### Pipeline debug output (`debug/` folder)
 
