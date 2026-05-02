@@ -149,8 +149,10 @@ function collectForStart(positionalArgs: string[], dir: string | undefined, star
 }
 
 async function loadImage(filePath: string): Promise<GBImageData> {
-  const img = sharp(filePath).removeAlpha().ensureAlpha();
-  const { width, height } = await sharp(filePath).metadata() as { width: number; height: number };
+  // Auto-orient: applies any EXIF rotation so loaded pixels match visual
+  // orientation. Phone photos may store landscape images with EXIF rotation.
+  const img = sharp(filePath).rotate().removeAlpha().ensureAlpha();
+  const { width, height } = await sharp(filePath).rotate().metadata() as { width: number; height: number };
   const { data, info } = await img
     .raw()
     .toBuffer({ resolveWithObject: true });

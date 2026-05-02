@@ -26,14 +26,29 @@ import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
 /** Target max dimension (px) of the working-resolution image. */
 const WORKING_MAX_DIM = 1000;
 
-/** Brightness threshold for candidate generation (0–255). */
-const BRIGHTNESS_THRESHOLD = 180;
+/**
+ * Morphological-closing kernel size, in working-res pixels. The Frame 02
+ * dashes (1 GB pixel ≈ 6 working-res pixels at WORKING_MAX_DIM=1000) fragment
+ * the white frame into a sparse bright region; closing bridges them so the
+ * frame appears as a solid filled rectangle to `findContours`.
+ */
+const CLOSING_KERNEL = 11;
 
 /** Minimum candidate area as a fraction of the working-resolution image area. */
 const MIN_CANDIDATE_AREA_FRAC = 0.02;
 
+/** Maximum candidate area as a fraction of the working-resolution image area. */
+const MAX_CANDIDATE_AREA_FRAC = 0.85;
+
 /** Number of top-ranked candidates to validate. */
-const TOP_N_CANDIDATES = 5;
+const TOP_N_CANDIDATES = 12;
+
+/**
+ * approxPolyDP epsilon as a fraction of contour perimeter. Loose enough to
+ * collapse a noisy bright frame to 4 vertices, tight enough to reject
+ * non-quad shapes.
+ */
+const APPROX_EPSILON_FRAC = 0.04;
 
 /** Margin to expand the chosen rectangle by, as a fraction of its longest side. */
 const MARGIN_RATIO = 0.06;
@@ -80,39 +95,70 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
     const work = downsampleToWorking(src, WORKING_MAX_DIM);
     track(work.mat);
 
-    // Threshold to binary at working resolution
+    // Convert to grayscale for thresholding and edge detection
     const gray = track(new cv.Mat());
     cv.cvtColor(work.mat, gray, cv.COLOR_RGBA2GRAY);
-    const binary = track(new cv.Mat());
-    cv.threshold(gray, binary, BRIGHTNESS_THRESHOLD, 255, cv.THRESH_BINARY);
-
-    if (dbg) {
-      const binaryRgba = track(new cv.Mat());
-      cv.cvtColor(binary, binaryRgba, cv.COLOR_GRAY2RGBA);
-      dbg.addImage("locate_a_thresholded", matToImageData(binaryRgba));
-      dbg.log(
-        `[locate] working-res ${work.mat.cols}×${work.mat.rows} ` +
-          `(scale=${work.scale.toFixed(3)} from ${input.width}×${input.height}); ` +
-          `threshold=${BRIGHTNESS_THRESHOLD}`,
-      );
-      dbg.setMetric("locate", "workingDim", [work.mat.cols, work.mat.rows]);
-      dbg.setMetric("locate", "threshold", BRIGHTNESS_THRESHOLD);
-    }
 
     // ── 2b. Generate candidate quads ──
-    const candidates = findCandidates(binary, TOP_N_CANDIDATES);
+    // Strategy: compute multiple binary masks and find candidate quads from
+    // each. Combining strategies makes detection robust to varying lighting
+    // — sometimes the screen is the brightest connected blob, sometimes
+    // it's a hole in a dark surround.
+    const candidatePool: Candidate[] = [];
+
+    // Strategy 1: Otsu-thresholded bright region with morphological closing.
+    // The closing bridges Frame 02 dashes so the white frame reads as solid.
+    const bright = track(new cv.Mat());
+    cv.threshold(gray, bright, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+    const kernel = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(CLOSING_KERNEL, CLOSING_KERNEL)));
+    const brightClosed = track(new cv.Mat());
+    cv.morphologyEx(bright, brightClosed, cv.MORPH_CLOSE, kernel);
+    candidatePool.push(...findCandidatesInMask(brightClosed, "bright"));
+
+    // Strategy 2: invert the dark LCD-black ring. The screen is a hole
+    // *inside* the dark blob — if we threshold dark, then close, then find
+    // contours on the *holes*, we get the screen rectangle.
+    const dark = track(new cv.Mat());
+    cv.threshold(gray, dark, 50, 255, cv.THRESH_BINARY_INV);
+    const darkClosed = track(new cv.Mat());
+    cv.morphologyEx(dark, darkClosed, cv.MORPH_CLOSE, kernel);
+    candidatePool.push(...findCandidateHolesInMask(darkClosed, "darkHole"));
+
+    // Strategy 3: Canny edges + approxPolyDP. Find contours that
+    // approximate to 4-sided polygons. This catches screens whose bright
+    // frame doesn't form a solid blob (e.g. very bright surrounding posters).
+    const blurred = track(new cv.Mat());
+    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+    const edges = track(new cv.Mat());
+    cv.Canny(blurred, edges, 50, 150);
+    const edgesClosed = track(new cv.Mat());
+    cv.morphologyEx(edges, edgesClosed, cv.MORPH_CLOSE, kernel);
+    candidatePool.push(...findQuadCandidates(edgesClosed, "canny"));
+
+    // Deduplicate and rank
+    const candidates = dedupeAndRank(candidatePool, TOP_N_CANDIDATES);
+
+    if (dbg) {
+      dbg.addImage("locate_a_thresholded", matToImageData(track(toRgba(brightClosed))));
+      dbg.log(
+        `[locate] working-res ${work.mat.cols}×${work.mat.rows} ` +
+          `(scale=${work.scale.toFixed(3)} from ${input.width}×${input.height})`,
+      );
+      dbg.setMetric("locate", "workingDim", [work.mat.cols, work.mat.rows]);
+      dbg.setMetric("locate", "candidatePoolSize", candidatePool.length);
+    }
 
     if (candidates.length === 0) {
       throw new Error(
-        `[locate] No candidate quadrilaterals found at threshold=${BRIGHTNESS_THRESHOLD}. ` +
+        `[locate] No candidate quadrilaterals found. ` +
           `The Game Boy Screen may be too dark or the photo too distant.`,
       );
     }
 
     if (dbg) {
       const workingRgba = matToImageData(work.mat);
-      // Chosen index is unknown until validation runs (Task 7). Draw all
-      // candidates as red here; Task 7 overwrites this debug image with
+      // Chosen index is unknown until validation runs. Draw all candidates
+      // as red here; we overwrite this debug image after validation with
       // the chosen candidate highlighted in green.
       dbg.addImage("locate_b_candidates", drawCandidates(workingRgba, candidates, -1));
       dbg.log(
@@ -235,6 +281,8 @@ interface Candidate {
   area: number;
   /** Composite score (lower = better fit to expected screen shape). */
   score: number;
+  /** Which detection strategy generated this candidate (for debugging). */
+  source: string;
 }
 
 /**
@@ -276,59 +324,172 @@ function orderCornersTLTRBRBL(pts: Point[]): Corners {
 }
 
 /**
- * Find candidate quads in a binary (already-thresholded) working-resolution
- * image. Returns up to `topN` candidates ranked by score (lower is better).
+ * Score a candidate from its size, aspect, and fill ratio. Lower is better.
+ * Used to rank candidates from any source.
  */
-function findCandidates(binary: any, topN: number): Candidate[] {
+function scoreCandidate(area: number, w: number, h: number, fillRatio: number): { score: number; longSide: number; shortSide: number } {
+  const longSide = Math.max(w, h);
+  const shortSide = Math.max(Math.min(w, h), 1);
+  const aspect = longSide / shortSide;
+  const aspectErr = Math.abs(aspect / TARGET_ASPECT - 1);
+  const quadnessErr = Math.max(0, 1 - fillRatio);
+  const score = aspectErr * 2.0 + quadnessErr * 1.0;
+  void area;
+  return { score, longSide, shortSide };
+}
+
+/**
+ * Find candidate quads from external contours of a binary mask
+ * (the bright-region or any thresholded mask). For each contour we fit a
+ * minAreaRect and use its 4 corners.
+ */
+function findCandidatesInMask(binary: any, source: string): Candidate[] {
   const cv = getCV();
   const imgArea = binary.cols * binary.rows;
   const minArea = imgArea * MIN_CANDIDATE_AREA_FRAC;
+  const maxArea = imgArea * MAX_CANDIDATE_AREA_FRAC;
 
   return withMats((track) => {
     const contours = track(new cv.MatVector());
     const hierarchy = track(new cv.Mat());
     cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    const candidates: Candidate[] = [];
+    const out: Candidate[] = [];
     for (let i = 0; i < contours.size(); i++) {
       const contour = contours.get(i);
       const area = cv.contourArea(contour);
-      if (area < minArea) continue;
+      if (area < minArea || area > maxArea) continue;
 
       const rect = cv.minAreaRect(contour);
-      // OpenCV.js doesn't expose cv.boxPoints as a free function — compute
-      // the four vertices of the rotated rectangle manually from its
-      // (center, size, angle) representation.
       const pts = rotatedRectPoints(rect);
       const corners = orderCornersTLTRBRBL(pts);
-
       const w = rect.size.width;
       const h = rect.size.height;
-      const longSide = Math.max(w, h);
-      const shortSide = Math.max(Math.min(w, h), 1);
-      const aspect = longSide / shortSide;
-      const aspectErr = Math.abs(aspect / TARGET_ASPECT - 1);
-
-      // Quad-ness: how close the contour's area is to the minAreaRect's area.
-      // Genuine rectangles fill their minAreaRect tightly.
       const rectArea = w * h;
       const fillRatio = rectArea > 0 ? area / rectArea : 0;
-      const quadnessErr = Math.max(0, 1 - fillRatio);
-
-      const score = aspectErr * 1.5 + quadnessErr * 1.0;
-
-      candidates.push({
-        corners,
-        width: longSide,
-        height: shortSide,
-        area,
-        score,
-      });
+      const { score, longSide, shortSide } = scoreCandidate(area, w, h, fillRatio);
+      out.push({ corners, width: longSide, height: shortSide, area, score, source });
     }
-
-    candidates.sort((a, b) => a.score - b.score);
-    return candidates.slice(0, topN);
+    return out;
   });
+}
+
+/**
+ * Find candidate quads from *holes* (inner contours) of a dark mask. The
+ * GB Screen is bright inside the dark LCD-black ring, so it forms a
+ * rectangular hole inside an outer dark contour.
+ */
+function findCandidateHolesInMask(darkBinary: any, source: string): Candidate[] {
+  const cv = getCV();
+  const imgArea = darkBinary.cols * darkBinary.rows;
+  const minArea = imgArea * MIN_CANDIDATE_AREA_FRAC;
+  const maxArea = imgArea * MAX_CANDIDATE_AREA_FRAC;
+
+  return withMats((track) => {
+    const contours = track(new cv.MatVector());
+    const hierarchy = track(new cv.Mat());
+    cv.findContours(darkBinary, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+
+    const out: Candidate[] = [];
+    // hierarchy.data32S layout: [next, prev, firstChild, parent] per contour.
+    for (let i = 0; i < contours.size(); i++) {
+      const parent = hierarchy.data32S[i * 4 + 3];
+      if (parent < 0) continue; // skip outer contours; we want holes
+      const contour = contours.get(i);
+      const area = cv.contourArea(contour);
+      if (area < minArea || area > maxArea) continue;
+
+      const rect = cv.minAreaRect(contour);
+      const pts = rotatedRectPoints(rect);
+      const corners = orderCornersTLTRBRBL(pts);
+      const w = rect.size.width;
+      const h = rect.size.height;
+      const rectArea = w * h;
+      const fillRatio = rectArea > 0 ? area / rectArea : 0;
+      const { score, longSide, shortSide } = scoreCandidate(area, w, h, fillRatio);
+      out.push({ corners, width: longSide, height: shortSide, area, score, source });
+    }
+    return out;
+  });
+}
+
+/**
+ * Find candidate quads via Canny edges + approxPolyDP. Keeps contours
+ * that approximate to a 4-vertex polygon (true rectangle outline).
+ */
+function findQuadCandidates(edgeBinary: any, source: string): Candidate[] {
+  const cv = getCV();
+  const imgArea = edgeBinary.cols * edgeBinary.rows;
+  const minArea = imgArea * MIN_CANDIDATE_AREA_FRAC;
+  const maxArea = imgArea * MAX_CANDIDATE_AREA_FRAC;
+
+  return withMats((track) => {
+    const contours = track(new cv.MatVector());
+    const hierarchy = track(new cv.Mat());
+    cv.findContours(edgeBinary, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+    const out: Candidate[] = [];
+    for (let i = 0; i < contours.size(); i++) {
+      const contour = contours.get(i);
+      const area = cv.contourArea(contour);
+      if (area < minArea || area > maxArea) continue;
+
+      const peri = cv.arcLength(contour, true);
+      const approx = track(new cv.Mat());
+      cv.approxPolyDP(contour, approx, peri * APPROX_EPSILON_FRAC, true);
+      if (approx.rows !== 4) continue;
+
+      const pts: Point[] = [];
+      for (let k = 0; k < 4; k++) {
+        pts.push([approx.data32S[k * 2], approx.data32S[k * 2 + 1]]);
+      }
+      const corners = orderCornersTLTRBRBL(pts);
+      // approximate w/h as the average of opposing sides
+      const topLen = Math.hypot(corners[1][0] - corners[0][0], corners[1][1] - corners[0][1]);
+      const botLen = Math.hypot(corners[2][0] - corners[3][0], corners[2][1] - corners[3][1]);
+      const leftLen = Math.hypot(corners[3][0] - corners[0][0], corners[3][1] - corners[0][1]);
+      const rightLen = Math.hypot(corners[2][0] - corners[1][0], corners[2][1] - corners[1][1]);
+      const w = (topLen + botLen) / 2;
+      const h = (leftLen + rightLen) / 2;
+      // For a quad approximation, the polygon area itself is the contour area.
+      const fillRatio = w * h > 0 ? area / (w * h) : 0;
+      const { score, longSide, shortSide } = scoreCandidate(area, w, h, fillRatio);
+      out.push({ corners, width: longSide, height: shortSide, area, score, source });
+    }
+    return out;
+  });
+}
+
+/**
+ * Deduplicate candidates whose centers and sizes are very similar (the
+ * three strategies often find the same screen) and return the top-N by
+ * score.
+ */
+function dedupeAndRank(pool: Candidate[], topN: number): Candidate[] {
+  pool.sort((a, b) => a.score - b.score);
+  const kept: Candidate[] = [];
+  for (const c of pool) {
+    const cx = (c.corners[0][0] + c.corners[2][0]) / 2;
+    const cy = (c.corners[0][1] + c.corners[2][1]) / 2;
+    const isDup = kept.some((k) => {
+      const kx = (k.corners[0][0] + k.corners[2][0]) / 2;
+      const ky = (k.corners[0][1] + k.corners[2][1]) / 2;
+      const centerDist = Math.hypot(cx - kx, cy - ky);
+      const sizeDiff = Math.abs(c.width - k.width) + Math.abs(c.height - k.height);
+      return centerDist < Math.max(c.width, k.width) * 0.1 && sizeDiff < (c.width + k.width) * 0.1;
+    });
+    if (!isDup) kept.push(c);
+    if (kept.length >= topN) break;
+  }
+  return kept;
+}
+
+/** Convert a single-channel binary Mat to RGBA so it can be saved as a PNG. */
+function toRgba(grayMat: any): any {
+  const cv = getCV();
+  const out = new cv.Mat();
+  cv.cvtColor(grayMat, out, cv.COLOR_GRAY2RGBA);
+  return out;
 }
 
 interface ValidationScore {
@@ -409,20 +570,34 @@ function validateCandidate(
     }
     meanFrame = frameCnt > 0 ? meanFrame / frameCnt : 0;
     meanRing = ringCnt > 0 ? meanRing / ringCnt : 0;
-    const innerBorderScore = clamp((meanFrame - meanRing) / 80, 0, 1);
+    // The 1-px-thick inner border averages out heavily under perspective
+    // warp + bilinear interpolation, so the available contrast is small.
+    // Normalize against an empirically-observed ~25-unit gap.
+    const innerBorderScore = clamp((meanFrame - meanRing) / 25, 0, 1);
 
     // ── Surrounding dark ring: in working-resolution coords ──
     // Sample a band of width = ringWidth pixels just outside each edge of
     // the candidate's bounding box and compute its mean. Compare to the
-    // candidate's overall interior mean.
+    // candidate's overall interior mean. This is the most reliable signal:
+    // the GBA SP LCD-black surrounds every screen photo consistently.
     const ringWidth = Math.max(4, Math.round(Math.min(candidate.width, candidate.height) * 0.05));
     const bbox = boundingBoxOfCorners(candidate.corners, workingRgba.cols, workingRgba.rows);
     const interiorMean = meanGrayInBox(workingRgba, bbox, 0);
     const outsideMean = meanGrayInRingAround(workingRgba, bbox, ringWidth);
-    // Expected: outsideMean << interiorMean. Score normalized to 0–1.
-    const darkRingScore = clamp((interiorMean - outsideMean) / 100, 0, 1);
+    const darkRingScore = clamp((interiorMean - outsideMean) / 80, 0, 1);
 
-    const totalScore = (innerBorderScore + darkRingScore) / 2;
+    // ── Aspect ratio signal: how close the candidate is to 160:144 ──
+    // (Already used in candidate scoring, but repeating here as a
+    // validation check rewards candidates that are near-perfect aspect.)
+    const longSide = Math.max(candidate.width, candidate.height);
+    const shortSide = Math.max(Math.min(candidate.width, candidate.height), 1);
+    const aspect = longSide / shortSide;
+    const aspectErr = Math.abs(aspect / TARGET_ASPECT - 1);
+    const aspectScore = clamp(1 - aspectErr * 5, 0, 1); // err of 0.2 → score 0
+
+    // Weighted average — darkRing is the dominant reliable signal.
+    const totalScore =
+      darkRingScore * 0.6 + aspectScore * 0.3 + innerBorderScore * 0.1;
     return { innerBorderScore, darkRingScore, totalScore };
   });
 }
