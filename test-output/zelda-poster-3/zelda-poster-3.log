@@ -10,6 +10,8 @@ PIPELINE DIAGNOSTICS
   [warp] pass 1 corner errors: TL=(-2.2,-1.0) TR=(4.1,-1.1) BR=(2.9,0.7) BL=(-1.7,-1.3)
   [warp] pass 2 edge curvatures: top=-0.55 bot=0.26 left=-0.68 right=1.99
   [warp] pass 2 corner errors: TL=(-0.9,-0.4) TR=(1.9,-0.5) BR=(1.3,0.6) BL=(-0.7,-0.5)
+  [correct] raw frame median: R=206 G=206 B=202 (target FFFFA5 = 255 255 165)
+  [correct] raw inner-border median: R=151 G=164 B=207 (target 9494FF = 148 148 255)
   [correct] R: white samples kept=7349 (median 227.0, range 168–255)
   [correct] G: white samples kept=7509 (median 225.6, range 166–254)
   [correct] white surface R: 191–250; G: 191–249
