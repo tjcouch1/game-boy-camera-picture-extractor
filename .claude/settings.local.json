@@ -68,7 +68,9 @@
       "Bash(pnpm --filter gbcam-extract-web dev *)",
       "Bash(pnpm --filter gbcam-extract-web extract *)",
       "Bash(pnpm --filter gbcam-extract-web vitest *)",
-      "Bash(pnpm exec *)"
+      "Bash(pnpm exec *)",
+      "Bash(git -C C:/Users/tj_co/source/repos-p/game-boy-camera-picture-extractor add -A)",
+      "Bash(git -C C:/Users/tj_co/source/repos-p/game-boy-camera-picture-extractor commit -m ' *)"
     ],
     "deny": [
       "Bash(rm -rf /)",
