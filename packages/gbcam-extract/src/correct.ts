@@ -166,54 +166,53 @@ export function correct(
   let darkSurfaceG = buildDarkSurface(leftG, rightG, topG, botG, H, W, scale, darkSmooth);
   let correctedG = applyCorrectionChannel(chG, whiteSurfaceG, darkSurfaceG, W, H, 255, 148);
 
-  // B channel: post-WB the frame's B sits at target 165, the inner-border's
-  // B sits at target 255 (DG palette). When `correctB` is enabled and the
-  // per-pixel surfaces aren't degenerate, apply the same affine correction
-  // mechanism as R/G — but with role-swapped roles ("white" = border B with
-  // high target 255, "dark" = frame B with low target 165). On the
-  // inverted-affine pathology (frame B and border B overlap, e.g. blue
-  // sensor clip), fall back to passthrough.
+  // B channel: post-WB frame B sits at target 165, inner-border B sits at
+  // target 255 (DG palette). Per-pixel affine surfaces overlap on every
+  // useB image we've tested (smoothed surfaces don't separate cleanly even
+  // when the median values do), so use a *global scale* model instead:
+  // map medianFrame → 165 and medianBorder → 255 uniformly across the image.
+  // This doesn't model the front-light's residual B gradient — but on
+  // post-WB images that gradient is small (< 20 units), and an unmodelled
+  // gradient is preferable to an inverted gain that destroys the channel.
   let correctedB: Float32Array = new Float32Array(chB);
   let correctBApplied = false;
   let correctBPathology = false;
+  let bScale = 1;
+  let bOffset = 0;
   if (correctB) {
     const frameSamplesB = collectWhiteSamples(chB, W, H, scale);
-    const frameSurfaceB = fitSurface(
-      frameSamplesB.ys, frameSamplesB.xs, frameSamplesB.vs, H, W, polyDegree,
-    );
     const { left: leftB, right: rightB, top: topB, bot: botB } = collectDarkSamples(
       chB, W, H, scale,
     );
-    const borderSurfaceB = buildDarkSurface(leftB, rightB, topB, botB, H, W, scale, darkSmooth);
+    const medianFrameB = median(frameSamplesB.vs);
+    const borderSamples = [...leftB, ...rightB, ...topB, ...botB];
+    const medianBorderB = median(borderSamples);
 
-    // Per-pixel pathology check: at every pixel, borderSurface must exceed
-    // frameSurface by at least 5 units for the affine correction's gain to
-    // remain positive. (Comparing global min(border) vs max(frame) is over-
-    // conservative since different image regions can be tested independently.)
-    let minDiff = Infinity;
-    for (let i = 0; i < H * W; i++) {
-      const d = borderSurfaceB[i] - frameSurfaceB[i];
-      if (d < minDiff) minDiff = d;
-    }
-    if (minDiff < 5) {
+    if (medianBorderB - medianFrameB < 5) {
       correctBPathology = true;
       if (dbg) {
         dbg.log(
-          `[correct] B inverted-affine pathology: ` +
-            `min(border-frame)=${minDiff.toFixed(1)} < 5; ` +
+          `[correct] B global-scale pathology: ` +
+            `median border B=${medianBorderB.toFixed(1)} ` +
+            `not ≥ 5 above median frame B=${medianFrameB.toFixed(1)}; ` +
             `falling back to passthrough`,
         );
       }
     } else {
-      correctedB = applyCorrectionChannel(
-        chB, borderSurfaceB, frameSurfaceB, W, H, 255, 165,
-      );
+      bScale = (255 - 165) / (medianBorderB - medianFrameB);
+      bOffset = 165 - bScale * medianFrameB;
+      correctedB = new Float32Array(H * W);
+      for (let i = 0; i < H * W; i++) {
+        const v = chB[i] * bScale + bOffset;
+        correctedB[i] = Math.max(0, Math.min(255, v));
+      }
       correctBApplied = true;
       if (dbg) {
         dbg.log(
-          `[correct] B: white(border) samples=${frameSamplesB.vs.length}, ` +
-            `border surface=${surfRange(borderSurfaceB)}, ` +
-            `frame surface=${surfRange(frameSurfaceB)} (corrected)`,
+          `[correct] B global scale: ` +
+            `medianFrame=${medianFrameB.toFixed(1)}→165, ` +
+            `medianBorder=${medianBorderB.toFixed(1)}→255, ` +
+            `scale=${bScale.toFixed(3)} offset=${bOffset.toFixed(1)}`,
         );
       }
     }
