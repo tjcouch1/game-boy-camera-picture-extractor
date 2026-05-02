@@ -86,7 +86,7 @@ export async function processPicture(
   const balanced = whiteBalance(warped, { scale, debug: collector });
 
   onProgress?.("correct", 0);
-  const corrected = correct(balanced, { scale, debug: collector });
+  const corrected = correct(balanced, { scale, debug: collector, correctB: useB });
   onProgress?.("correct", 100);
 
   onProgress?.("crop", 0);
