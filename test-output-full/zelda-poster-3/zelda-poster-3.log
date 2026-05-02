@@ -7,35 +7,35 @@ PIPELINE DIAGNOSTICS
   [locate] working-res 1000×450 (scale=0.248 from 4032×1816)
   [locate] found 3 candidate(s); top score=0.014
   [locate] chose candidate 0: totalScore=0.957 (innerBorder=0.673, darkRing=1.000)
-  [locate] output region: 1281×1161 (margin=6.0%, passThrough=false)
-  [warp] corner detection: area=1321110 aspect=1.135 (target 1.111) thresh=180 score=0.0245
-  [warp] detected source corners (TL TR BR BL): (37,37) (1241,37) (1242,1128) (38,1134)
-  [warp] pass 1 edge curvatures: top=-1.40 bot=-0.42 left=-1.77 right=2.51
-  [warp] pass 1 corner errors: TL=(-2.3,-1.4) TR=(3.4,-1.6) BR=(3.2,0.2) BL=(-2.0,-1.4)
-  [warp] pass 2 edge curvatures: top=-0.55 bot=0.06 left=3.23 right=0.28
-  [warp] pass 2 corner errors: TL=(-0.9,-0.6) TR=(1.1,-0.7) BR=(1.0,0.4) BL=(-0.8,-0.4)
-  [correct] R: white samples kept=7415 (median 228.0, range 168–255)
-  [correct] G: white samples kept=7569 (median 226.0, range 167–255)
+  [locate] output region: 1307×1184 (margin=6.0%, passThrough=false)
+  [warp] corner detection: area=1321938 aspect=1.145 (target 1.111) thresh=180 score=0.0245
+  [warp] detected source corners (TL TR BR BL): (50,48) (1254,49) (1255,1139) (50,1145)
+  [warp] pass 1 edge curvatures: top=-1.31 bot=-0.06 left=-1.88 right=2.37
+  [warp] pass 1 corner errors: TL=(-2.5,-1.1) TR=(3.3,-1.7) BR=(3.1,0.5) BL=(-1.8,-1.0)
+  [warp] pass 2 edge curvatures: top=-0.49 bot=-0.43 left=3.17 right=0.24
+  [warp] pass 2 corner errors: TL=(-1.0,-0.4) TR=(1.1,-0.7) BR=(0.9,0.4) BL=(-0.7,-0.4)
+  [correct] R: white samples kept=7417 (median 227.6, range 168–255)
+  [correct] G: white samples kept=7575 (median 225.6, range 167–255)
   [correct] white surface R: 192–250; G: 191–250
-  [correct] dark surface  R: 136–168; G: 154–182
-  [correct] interior DG calibration: R=5360px G=5733px
-  [correct] frame post-correction p85: R=255 G=255 B=212 (target #FFFFA5 = R255 G255 B165)
-  [correct] camera region mean: R=174.3 G=156.8 B=201.9
-  [crop] inner-border mean=180.4 white-frame mean=194.6 (ratio 0.927, WARN)
-  [sample] R: 1–255  G: 0–255  B: 80–253
+  [correct] dark surface  R: 135–169; G: 154–182
+  [correct] interior DG calibration: R=5202px G=5740px
+  [correct] frame post-correction p85: R=255 G=255 B=211 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=174.5 G=157.1 B=201.9
+  [crop] inner-border mean=180.6 white-frame mean=194.7 (ratio 0.928, WARN)
+  [sample] R: 1–255  G: 0–255  B: 79–252
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
-  [quantize] global k-means cluster centers (palette-ordered):  BK=(R53,G33)  DG=(R149,G152)  LG=(R231,G133)  WH=(R241,G228)
-  [quantize] after global kmeans: BK=1572  DG=3727  LG=4149  WH=4888
-  [quantize] strip ensemble: 7 strips, changed 669 px  now: BK=1572  DG=3525  LG=4310  WH=4929
-  [quantize] G-valley refinement: threshold=196.0 (LG center G=132.9, WH center G=228.5), changed 637 px
-  [quantize] final: BK=1572 (11.0%)  DG=3525 (24.6%)  LG=4817 (33.6%)  WH=4422 (30.8%)
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R53,G33)  DG=(R150,G153)  LG=(R231,G133)  WH=(R241,G228)
+  [quantize] after global kmeans: BK=1572  DG=3745  LG=3976  WH=5043
+  [quantize] strip ensemble: 7 strips, changed 588 px  now: BK=1572  DG=3525  LG=4310  WH=4929
+  [quantize] G-valley refinement: threshold=198.0 (LG center G=132.9, WH center G=228.3), changed 579 px
+  [quantize] final: BK=1572 (11.0%)  DG=3525 (24.6%)  LG=4777 (33.3%)  WH=4462 (31.1%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 13726  (95.74%)
-  Different    : 610   (4.26%)
+  Matching     : 13778  (96.11%)
+  Different    : 558   (3.89%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
@@ -43,8 +43,8 @@ COLOR DISTRIBUTION
   Color                     Result   Reference      Diff
   BK  #000000                 1572        1572  +0
   DG  #9494FF                 3525        3526  -1
-  LG  #FF9494                 4817        4255  +562
-  WH  #FFFFA5                 4422        4983  -561
+  LG  #FF9494                 4777        4255  +522
+  WH  #FFFFA5                 4462        4983  -521
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
@@ -52,22 +52,22 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1572 v                0                  0                  0      1572
   DG  #9494FF                       0               3525 v                0                  0      3525
-  LG  #FF9494                       0                  1 X             4231 v              585 X    4817
-  WH  #FFFFA5                       0                  0                 24 X             4398 v    4422
+  LG  #FF9494                       0                  1 X             4237 v              539 X    4777
+  WH  #FFFFA5                       0                  0                 18 X             4444 v    4462
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
   LG  #FF9494  ->  DG  #9494FF : 1 px
-  LG  #FF9494  ->  WH  #FFFFA5 : 585 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 24 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 539 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 18 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 13726  (95.74%)
-  Different    : 610   (4.26%)
+  Matching     : 13778  (96.11%)
+  Different    : 558   (3.89%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
