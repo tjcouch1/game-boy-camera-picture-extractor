@@ -14,6 +14,7 @@
 
 import { type GBImageData, SCREEN_W, SCREEN_H, INNER_TOP, INNER_BOT, INNER_LEFT, INNER_RIGHT } from "./common.js";
 import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
+import { makeCalibration, undistortBgr } from "./lens-distortion.js";
 import {
   type DebugCollector,
   cloneImage,
@@ -27,12 +28,18 @@ import {
 export interface WarpOptions {
   scale?: number;
   threshold?: number;
+  /**
+   * Estimate and apply per-image radial lens-distortion correction (k1)
+   * before perspective warping. Default true.
+   */
+  correctLens?: boolean;
   debug?: DebugCollector;
 }
 
 export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   const scale = options?.scale ?? 8;
   const threshVal = options?.threshold ?? 180;
+  const correctLens = options?.correctLens ?? true;
   const dbg = options?.debug;
 
   const cv = getCV();
@@ -40,9 +47,28 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   // Convert input to BGR Mat (opencv.js convention)
   // We manage Mat lifetimes manually here because of the iterative refinement loop
   const src = imageDataToMat(input);
-  const bgr = new cv.Mat();
+  let bgr = new cv.Mat();
   cv.cvtColor(src, bgr, cv.COLOR_RGBA2BGR);
   src.delete();
+
+  // pre-a — Lens-distortion correction (k1) search and apply.
+  if (correctLens) {
+    const lens = chooseAndApplyK1(bgr, scale, threshVal);
+    if (dbg) {
+      dbg.log(
+        `[warp] lens-distortion: k1=${lens.k1.toFixed(4)} ` +
+          `score=${lens.score.toFixed(2)} ` +
+          `(searched ${lens.evaluated} candidates)`,
+      );
+      dbg.setMetric("warp", "lensDistortion", {
+        k1: Number(lens.k1.toFixed(4)),
+        score: Number(lens.score.toFixed(3)),
+        evaluated: lens.evaluated,
+      });
+    }
+    bgr.delete();
+    bgr = lens.bgrOut;
+  }
 
   // a — Detect screen corners
   const detection = findScreenCornersWithMetrics(bgr, threshVal);
@@ -102,9 +128,10 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
     currentWarped = result.refined;
   }
 
-  // c — Refine (pass 2)
+  // c — Refine (pass 2: multi-anchor homography over corners + dashes
+  //                + inner-border points; corners weighted higher)
   {
-    const result = refineWarpWithMetrics(bgr, currentM, currentWarped, scale);
+    const result = refineWarpMultiAnchor(bgr, currentM, currentWarped, scale, corners);
     if (dbg) recordRefinementMetrics(dbg, 2, result.metrics);
     currentM.delete();
     currentWarped.delete();
@@ -1161,5 +1188,366 @@ function refineWarpWithMetrics(
       },
     };
   }
+}
+
+// ─── Lens distortion search ───
+
+const LENS_K1_RANGE: [number, number] = [-0.20, 0.05];
+const LENS_COARSE_STEP = 0.025;
+const LENS_FINE_STEP = 0.005;
+const LENS_FINE_HALF_RANGE = 0.025;
+
+interface LensResult {
+  bgrOut: any;
+  k1: number;
+  score: number;
+  evaluated: number;
+}
+
+function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResult {
+  const W = bgr.cols;
+  const H = bgr.rows;
+  const { K } = makeCalibration(W, H);
+
+  let evaluated = 0;
+  let bestK1 = 0;
+  let bestScore = Infinity;
+
+  const evalAt = (k1: number): number | null => {
+    evaluated++;
+    let undistorted: any = null;
+    try {
+      undistorted = undistortBgr(bgr, K, k1);
+      const score = scoreUndistortedFrame(undistorted, scale, threshVal);
+      undistorted.delete();
+      return score;
+    } catch {
+      if (undistorted) undistorted.delete();
+      return null;
+    }
+  };
+
+  for (let k1 = LENS_K1_RANGE[0]; k1 <= LENS_K1_RANGE[1] + 1e-9; k1 += LENS_COARSE_STEP) {
+    const s = evalAt(k1);
+    if (s !== null && s < bestScore) {
+      bestScore = s;
+      bestK1 = k1;
+    }
+  }
+
+  const fineLo = Math.max(LENS_K1_RANGE[0], bestK1 - LENS_FINE_HALF_RANGE);
+  const fineHi = Math.min(LENS_K1_RANGE[1], bestK1 + LENS_FINE_HALF_RANGE);
+  for (let k1 = fineLo; k1 <= fineHi + 1e-9; k1 += LENS_FINE_STEP) {
+    const s = evalAt(k1);
+    if (s !== null && s < bestScore) {
+      bestScore = s;
+      bestK1 = k1;
+    }
+  }
+
+  const bgrOut = Number.isFinite(bestScore) ? undistortBgr(bgr, K, bestK1) : bgr.clone();
+  K.delete();
+  return { bgrOut, k1: bestK1, score: bestScore, evaluated };
+}
+
+function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): number | null {
+  const cv = getCV();
+
+  let detection: CornerDetection;
+  try {
+    detection = findScreenCornersWithMetrics(bgr, threshVal);
+  } catch {
+    return null;
+  }
+
+  const initial = initialWarp(bgr, detection.ordered, scale);
+  let score: number | null = null;
+  try {
+    const rb = withMats((track, untrack) => {
+      const rgb = track(new cv.Mat());
+      cv.cvtColor(initial.warped, rgb, cv.COLOR_BGR2RGB);
+      const out = new cv.Mat(initial.warped.rows, initial.warped.cols, cv.CV_8UC1);
+      const rgbData = rgb.data;
+      const outData = out.data;
+      for (let i = 0; i < initial.warped.rows * initial.warped.cols; i++) {
+        const r = rgbData[i * 3];
+        const b = rgbData[i * 3 + 2];
+        outData[i] = Math.max(0, Math.min(255, r - b + 128));
+      }
+      return untrack(out);
+    });
+    const points = findBorderPoints(rb, scale);
+    rb.delete();
+
+    const expTop = INNER_TOP * scale;
+    const expBot = INNER_BOT * scale;
+    const expLeft = INNER_LEFT * scale;
+    const expRight = INNER_RIGHT * scale;
+    const meanDev = (
+      pts: Array<[number, number]>,
+      idx: 0 | 1,
+      target: number,
+    ): number => {
+      if (pts.length === 0) return 0;
+      let sum = 0;
+      for (const p of pts) sum += p[idx] - target;
+      return sum / pts.length;
+    };
+    const cTop = meanDev(points.top, 1, expTop);
+    const cBot = meanDev(points.bottom, 1, expBot);
+    const cLeft = meanDev(points.left, 0, expLeft);
+    const cRight = meanDev(points.right, 0, expRight);
+    score = Math.abs(cTop) + Math.abs(cBot) + Math.abs(cLeft) + Math.abs(cRight);
+  } finally {
+    initial.warped.delete();
+    initial.M.delete();
+  }
+  return score;
+}
+
+// ─── Pass 2: multi-anchor homography refinement ───
+//
+// Builds (src, dst) anchor pairs from:
+//   - 4 source corners → canvas corners (weighted 5×)
+//   - 36 inner-border points → expected positions (weighted 2×)
+//   - 54 detected dashes → expected positions (weighted 1×)
+// Weights are implemented by point-repetition in the input matrices, since
+// cv.findHomography doesn't expose a weight parameter. Uses cv.RANSAC with a
+// 3-image-pixel reprojection threshold to reject mis-detections.
+//
+// All anchors except corners are detected on the warp-space output of pass 1
+// (where residuals are < 1 GB pixel) and back-mapped to source via M_pass1^-1.
+
+const MULTI_ANCHOR_RANSAC_THRESHOLD = 3.0;
+const CORNER_WEIGHT = 5;
+const BORDER_POINT_WEIGHT = 2;
+const DASH_WEIGHT = 1;
+
+function refineWarpMultiAnchor(
+  img: any,
+  currentM: any,
+  warped: any,
+  scale: number,
+  sourceCorners: Corners,
+): RefineResultWithMetrics {
+  const cv = getCV();
+  const Wc = warped.cols;
+  const Hc = warped.rows;
+
+  // 1. Detect dashes on the pass-1 warped output.
+  const dashes = detectDashesOnWarp(warped, scale);
+
+  // 2. Detect inner-border points on the pass-1 warped output.
+  const rb = withMats((track, untrack) => {
+    const rgb = track(new cv.Mat());
+    cv.cvtColor(warped, rgb, cv.COLOR_BGR2RGB);
+    const out = new cv.Mat(Hc, Wc, cv.CV_8UC1);
+    const rgbData = rgb.data;
+    const outData = out.data;
+    for (let i = 0; i < Hc * Wc; i++) {
+      const r = rgbData[i * 3];
+      const b = rgbData[i * 3 + 2];
+      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+    }
+    return untrack(out);
+  });
+  const borderPoints = findBorderPoints(rb, scale);
+  rb.delete();
+
+  const expTop = INNER_TOP * scale;
+  const expBot = INNER_BOT * scale;
+  const expLeft = INNER_LEFT * scale;
+  const expRight = INNER_RIGHT * scale;
+
+  // 3. Build (warpDetected, warpExpected) pairs for dashes + inner-border.
+  const detectedXY: number[] = [];
+  const expectedXY: number[] = [];
+
+  for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
+    for (const d of arr) {
+      if (d.detected !== null) {
+        detectedXY.push(d.detected[0], d.detected[1]);
+        expectedXY.push(d.expected[0], d.expected[1]);
+      }
+    }
+  }
+  const dashCount = detectedXY.length / 2;
+
+  for (const [x, y] of borderPoints.top) {
+    detectedXY.push(x, y);
+    expectedXY.push(x, expTop);
+  }
+  for (const [x, y] of borderPoints.bottom) {
+    detectedXY.push(x, y);
+    expectedXY.push(x, expBot);
+  }
+  for (const [x, y] of borderPoints.left) {
+    detectedXY.push(x, y);
+    expectedXY.push(expLeft, y);
+  }
+  for (const [x, y] of borderPoints.right) {
+    detectedXY.push(x, y);
+    expectedXY.push(expRight, y);
+  }
+  const borderCount = detectedXY.length / 2 - dashCount;
+
+  // 4. Map detected warp positions back to source coords.
+  const totalNonCorner = detectedXY.length / 2;
+  let sourceXY: number[] = [];
+  if (totalNonCorner > 0) {
+    const MInv = new cv.Mat();
+    cv.invert(currentM, MInv);
+    const detMat = cv.matFromArray(totalNonCorner, 1, cv.CV_32FC2, detectedXY);
+    const srcMat = new cv.Mat();
+    cv.perspectiveTransform(detMat, srcMat, MInv);
+    sourceXY = Array.from(srcMat.data32F as Float32Array).slice(0, totalNonCorner * 2);
+    detMat.delete();
+    srcMat.delete();
+    MInv.delete();
+  }
+
+  // 5. Build weighted anchor pairs by point repetition.
+  const srcPts: number[] = [];
+  const dstPts: number[] = [];
+  // Corners (×CORNER_WEIGHT)
+  const cornerSrc: [number, number][] = sourceCorners;
+  const cornerDst: [number, number][] = [
+    [0, 0], [Wc - 1, 0], [Wc - 1, Hc - 1], [0, Hc - 1],
+  ];
+  for (let i = 0; i < 4; i++) {
+    for (let r = 0; r < CORNER_WEIGHT; r++) {
+      srcPts.push(cornerSrc[i][0], cornerSrc[i][1]);
+      dstPts.push(cornerDst[i][0], cornerDst[i][1]);
+    }
+  }
+  // Dashes (×DASH_WEIGHT) — first dashCount entries
+  for (let i = 0; i < dashCount; i++) {
+    for (let r = 0; r < DASH_WEIGHT; r++) {
+      srcPts.push(sourceXY[i * 2], sourceXY[i * 2 + 1]);
+      dstPts.push(expectedXY[i * 2], expectedXY[i * 2 + 1]);
+    }
+  }
+  // Inner-border points (×BORDER_POINT_WEIGHT)
+  for (let i = 0; i < borderCount; i++) {
+    const j = dashCount + i;
+    for (let r = 0; r < BORDER_POINT_WEIGHT; r++) {
+      srcPts.push(sourceXY[j * 2], sourceXY[j * 2 + 1]);
+      dstPts.push(expectedXY[j * 2], expectedXY[j * 2 + 1]);
+    }
+  }
+  const totalPairs = srcPts.length / 2;
+
+  // 6. RANSAC homography fit.
+  const srcMat = cv.matFromArray(totalPairs, 1, cv.CV_32FC2, srcPts);
+  const dstMat = cv.matFromArray(totalPairs, 1, cv.CV_32FC2, dstPts);
+  const inliersMask = new cv.Mat();
+  let Hnew: any = null;
+  let inlierCount = 0;
+  let refinedOk = false;
+  try {
+    Hnew = cv.findHomography(
+      srcMat, dstMat, cv.RANSAC, MULTI_ANCHOR_RANSAC_THRESHOLD, inliersMask,
+    );
+    if (Hnew && Hnew.rows === 3 && Hnew.cols === 3) {
+      for (let i = 0; i < inliersMask.rows; i++) {
+        if (inliersMask.ucharAt(i, 0) > 0) inlierCount++;
+      }
+      refinedOk = true;
+    }
+  } catch {
+    refinedOk = false;
+  }
+  srcMat.delete();
+  dstMat.delete();
+  inliersMask.delete();
+
+  let refined: any;
+  let MOut: any;
+  if (refinedOk) {
+    refined = new cv.Mat();
+    cv.warpPerspective(img, refined, Hnew, new cv.Size(Wc, Hc), cv.INTER_LANCZOS4);
+    MOut = Hnew;
+  } else {
+    if (Hnew) Hnew.delete();
+    refined = warped.clone();
+    MOut = currentM.clone();
+  }
+
+  // 7. Compute final metrics on refined output.
+  const metrics = computeBorderMetrics(refined, scale, refinedOk);
+
+  return { refined, M: MOut, metrics };
+}
+
+function computeBorderMetrics(
+  warpedBgr: any,
+  scale: number,
+  refinedOk: boolean,
+): RefineMetrics {
+  const cv = getCV();
+  const H = warpedBgr.rows;
+  const W = warpedBgr.cols;
+
+  const rb = withMats((track, untrack) => {
+    const rgb = track(new cv.Mat());
+    cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
+    const out = new cv.Mat(H, W, cv.CV_8UC1);
+    const rgbData = rgb.data;
+    const outData = out.data;
+    for (let i = 0; i < H * W; i++) {
+      const r = rgbData[i * 3];
+      const b = rgbData[i * 3 + 2];
+      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+    }
+    return untrack(out);
+  });
+  const borderPoints = findBorderPoints(rb, scale);
+  const corners = findBorderCorners(rb, scale);
+  rb.delete();
+
+  const expTop = INNER_TOP * scale;
+  const expBot = INNER_BOT * scale;
+  const expLeft = INNER_LEFT * scale;
+  const expRight = INNER_RIGHT * scale;
+
+  const edgeCurvatures = {
+    top: borderPoints.top.length > 0
+      ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) / borderPoints.top.length : 0,
+    bottom: borderPoints.bottom.length > 0
+      ? borderPoints.bottom.reduce((s, [, y]) => s + (y - expBot), 0) / borderPoints.bottom.length : 0,
+    left: borderPoints.left.length > 0
+      ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) / borderPoints.left.length : 0,
+    right: borderPoints.right.length > 0
+      ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length : 0,
+  };
+  const cornerErrors = {
+    TL: [corners.TL[0] - expLeft, corners.TL[1] - expTop] as [number, number],
+    TR: [corners.TR[0] - expRight, corners.TR[1] - expTop] as [number, number],
+    BR: [corners.BR[0] - expRight, corners.BR[1] - expBot] as [number, number],
+    BL: [corners.BL[0] - expLeft, corners.BL[1] - expBot] as [number, number],
+  };
+  const maxCornerErr = Math.max(...Object.values(cornerErrors).flat().map(Math.abs));
+  const meanEdgeCurv = (Math.abs(edgeCurvatures.top) + Math.abs(edgeCurvatures.bottom) +
+    Math.abs(edgeCurvatures.left) + Math.abs(edgeCurvatures.right)) / 4;
+
+  return {
+    edgeCurvatures: {
+      top: Number(edgeCurvatures.top.toFixed(3)),
+      bottom: Number(edgeCurvatures.bottom.toFixed(3)),
+      left: Number(edgeCurvatures.left.toFixed(3)),
+      right: Number(edgeCurvatures.right.toFixed(3)),
+    },
+    cornerErrors: {
+      TL: [Number(cornerErrors.TL[0].toFixed(2)), Number(cornerErrors.TL[1].toFixed(2))],
+      TR: [Number(cornerErrors.TR[0].toFixed(2)), Number(cornerErrors.TR[1].toFixed(2))],
+      BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
+      BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
+    },
+    residual: {
+      maxCornerErr: Number(maxCornerErr.toFixed(3)),
+      meanEdgeCurv: Number(meanEdgeCurv.toFixed(3)),
+    },
+    refined: refinedOk,
+  };
 }
 
