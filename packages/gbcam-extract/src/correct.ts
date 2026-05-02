@@ -95,6 +95,32 @@ export function correct(
     chB[i] = input.data[idx + 2];
   }
 
+  // ── Diagnostic: raw frame and inner-border medians (pre-correction) ──
+  if (dbg) {
+    const frameMed = rawFrameMedian(chR, chG, chB, W, H, scale);
+    const borderMed = rawInnerBorderMedian(chR, chG, chB, W, scale);
+    dbg.log(
+      `[correct] raw frame median: R=${frameMed.R.toFixed(0)} G=${frameMed.G.toFixed(0)} B=${frameMed.B.toFixed(0)}` +
+        ` (target FFFFA5 = 255 255 165)`,
+    );
+    dbg.log(
+      `[correct] raw inner-border median: R=${borderMed.R.toFixed(0)} G=${borderMed.G.toFixed(0)} B=${borderMed.B.toFixed(0)}` +
+        ` (target 9494FF = 148 148 255)`,
+    );
+    dbg.setMetrics("correct", {
+      rawFrameMedian: {
+        R: Math.round(frameMed.R),
+        G: Math.round(frameMed.G),
+        B: Math.round(frameMed.B),
+      },
+      rawInnerBorderMedian: {
+        R: Math.round(borderMed.R),
+        G: Math.round(borderMed.G),
+        B: Math.round(borderMed.B),
+      },
+    });
+  }
+
   // ── Perform per-channel correction ──
 
   // R channel: white=255, dark=148 (DG.R)
@@ -369,6 +395,78 @@ function max(arr: Float32Array): number {
 
 function surfRange(arr: Float32Array): string {
   return `${min(arr).toFixed(0)}–${max(arr).toFixed(0)}`;
+}
+
+/**
+ * Median raw colour of frame-strip blocks across all 4 strips, per channel.
+ * Uses the same block geometry as collectWhiteSamples but takes per-block
+ * 50th-percentile values instead of 85th, then medians across all blocks
+ * (after dropping blocks below 75% of median per channel — the same
+ * dropouts/dashes filter collectWhiteSamples uses). Pre-correction.
+ */
+function rawFrameMedian(
+  chR: Float32Array,
+  chG: Float32Array,
+  chB: Float32Array,
+  W: number,
+  _H: number,
+  scale: number,
+): { R: number; G: number; B: number } {
+  const blocks: Array<[number, number]> = [];
+  // Top strip
+  for (let gy = 0; gy < INNER_TOP; gy++) {
+    for (let gx = 10; gx < SCREEN_W - 10; gx++) blocks.push([gy, gx]);
+  }
+  // Bottom strip
+  for (let gy = INNER_BOT + 1; gy < SCREEN_H; gy++) {
+    for (let gx = 10; gx < SCREEN_W - 10; gx++) blocks.push([gy, gx]);
+  }
+  // Left strip
+  for (let gy = 10; gy < SCREEN_H - 10; gy++) {
+    for (let gx = 0; gx < INNER_LEFT; gx++) blocks.push([gy, gx]);
+  }
+  // Right strip
+  for (let gy = 10; gy < SCREEN_H - 10; gy++) {
+    for (let gx = INNER_RIGHT + 1; gx < SCREEN_W; gx++) blocks.push([gy, gx]);
+  }
+
+  const sample = (ch: Float32Array): number => {
+    const vals: number[] = [];
+    for (const [gy, gx] of blocks) {
+      vals.push(gbBlockSample(ch, W, gy, gx, scale, 50));
+    }
+    if (vals.length === 0) return 0;
+    const med = computePercentile(vals, 50);
+    const filtered = vals.filter((v) => v > 0.75 * med);
+    return filtered.length > 0 ? computePercentile(filtered, 50) : med;
+  };
+
+  return { R: sample(chR), G: sample(chG), B: sample(chB) };
+}
+
+/**
+ * Median raw colour of the inner-border (one-pixel-thick #9494FF strip) per
+ * channel, taken across the 4 sides via collectDarkSamples (which already
+ * uses 50th-percentile per block).
+ */
+function rawInnerBorderMedian(
+  chR: Float32Array,
+  chG: Float32Array,
+  chB: Float32Array,
+  W: number,
+  scale: number,
+): { R: number; G: number; B: number } {
+  const sample = (ch: Float32Array): number => {
+    const { left, right, top, bot } = collectDarkSamples(ch, W, 0, scale);
+    const vals: number[] = [
+      ...Array.from(left),
+      ...Array.from(right),
+      ...Array.from(top),
+      ...Array.from(bot),
+    ];
+    return vals.length > 0 ? computePercentile(vals, 50) : 0;
+  };
+  return { R: sample(chR), G: sample(chG), B: sample(chB) };
 }
 
 /** Compute p85 of each RGB channel across the top filmstrip strip blocks. */
