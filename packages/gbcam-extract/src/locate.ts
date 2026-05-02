@@ -57,10 +57,12 @@ const MARGIN_RATIO = 0.06;
  * Extra outward expansion applied to Canny-derived candidates to compensate
  * for Canny's intrinsic edge-inset bias: edges land at the brightness
  * gradient peak, which is slightly *inside* the white frame's outer edge.
- * Without this, the detected screen corners are systematically narrower
- * than the actual frame.
+ * Empirically tuned on `corners.json`: detected screens were systematically
+ * 3-5% narrower than the hand-marked frame outer edges; ~4% compensation
+ * brings the detection close enough that warp's frame-corner detection
+ * has the white frame fully visible inside its search area.
  */
-const CANNY_INSET_COMPENSATION = 0.02;
+const CANNY_INSET_COMPENSATION = 0.04;
 
 /** Minimum total validation score to accept a candidate (0–1). */
 const MIN_VALIDATION_SCORE = 0.25;
@@ -263,7 +265,7 @@ export function locate(input: GBImageData, options?: LocateOptions): GBImageData
 
     // Compensate for Canny's edge-inset bias before the main margin step.
     // The bias is intrinsic to gradient-based edge detection; without this,
-    // the detected screen is consistently ~3% narrower than the actual frame.
+    // the detected screen is consistently ~3-5% narrower than the actual frame.
     if (chosen.source === "canny") {
       screenCornersOrig = expandRotatedRect(screenCornersOrig, CANNY_INSET_COMPENSATION);
     }
