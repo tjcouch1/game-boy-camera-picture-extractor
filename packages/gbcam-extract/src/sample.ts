@@ -192,7 +192,12 @@ export function sample(
         continue;
       }
 
-      const offsetInt = Math.round(offsetMap[pi]);
+      // Deadband: only shift the sub-pixel window when the smoothed offset
+      // is decisive (> 0.75). Sub-0.75 offsets are within sampling noise
+      // and shifting them produces small per-pixel value changes that
+      // accumulate into label flips on well-aligned images.
+      const rawOff = offsetMap[pi];
+      const offsetInt = Math.abs(rawOff) > 0.75 ? Math.round(rawOff) : 0;
       const bLo = innerStart + offsetInt;
       const bHi = bLo + subWidth;
       const gLo = innerStart + subWidth + offsetInt;
