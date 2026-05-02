@@ -79,7 +79,16 @@ const CANNY_INSET_COMPENSATION = 0.04;
 // uniformly dark; frame interior → low variance, uniformly bright). Offset
 // from these expected positions tells us how the candidate is mis-aligned.
 
-/** Expected dash row for top edge (center of dash body, in the 160×144 template). */
+// Expected dash positions (in normalized 160×144). Tuned empirically
+// against the corners.json fixtures and full-photo accuracy: the values
+// here are intentionally offset by ~1 from the template's strict main-
+// dash row to bias the dash refinement toward a slightly outward
+// expansion that matches the dark-LCD-ring margin the downstream warp
+// step prefers. Reference template (from frame_ascii.txt) has main top
+// dashes at rows 6-7, bottom at 137-138, left at cols 1-5, right at
+// cols ~154-158.
+
+/** Expected dash row for top edge. */
 const EXPECTED_TOP_DASH_ROW = 7;
 /** Expected dash row for bottom edge. */
 const EXPECTED_BOTTOM_DASH_ROW = 136;
