@@ -21,8 +21,7 @@ PIPELINE DIAGNOSTICS
   [correct] dark surface  R: 98–161; G: 158–197
   [correct] bright-heavy heuristic: cameraMeanR=160.9 skipRefinement=true
   [correct] interior DG calibration: R=0px G=0px
-  [correct] frame post-correction p85 (pre-scale): R=255 G=255 B=159
-  [correct] frame post-correction p85 (post-scale): R=255 G=255 B=159 (target #FFFFA5 = R255 G255 B165, scales R=1.000 G=1.000 B=1.000)
+  [correct] frame post-correction p85: R=255 G=255 B=159 (target #FFFFA5 = R255 G255 B165)
   [correct] camera region mean: R=160.9 G=150.9 B=149.4
   [crop] inner-border mean=152.8 white-frame mean=191.1 (ratio 0.800, OK)
   [sample] R: 25–255  G: 0–255  B: 59–168
