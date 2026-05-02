@@ -21,11 +21,10 @@ PIPELINE DIAGNOSTICS
   [correct] dark surface  R: 145–183; G: 172–197
   [correct] bright-heavy heuristic: cameraMeanR=163.5 skipRefinement=true
   [correct] interior DG calibration: R=0px G=0px
-  [correct] frame post-correction p85 (pre-scale): R=254 G=255 B=154
-  [correct] frame post-correction p85 (post-scale): R=254 G=255 B=165 (target #FFFFA5 = R255 G255 B165, scales R=1.000 G=1.000 B=1.071)
-  [correct] camera region mean: R=163.5 G=153.7 B=175.6
-  [crop] inner-border mean=169.1 white-frame mean=202.9 (ratio 0.833, OK)
-  [sample] R: 35–255  G: 0–255  B: 86–209
+  [correct] frame post-correction p85: R=254 G=255 B=154 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=163.5 G=153.7 B=163.8
+  [crop] inner-border mean=165.0 white-frame mean=199.6 (ratio 0.826, OK)
+  [sample] R: 35–255  G: 0–255  B: 81–195
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=2
   [quantize] global k-means cluster centers (palette-ordered):  BK=(R88,G36)  DG=(R146,G154)  LG=(R217,G179)  WH=(R238,G251)
   [quantize] after global kmeans: BK=1336  DG=8644  LG=2662  WH=1694
