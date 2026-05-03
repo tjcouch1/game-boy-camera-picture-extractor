@@ -220,30 +220,38 @@ function addInnerBorderResidualImage(
 
 /**
  * Comprehensive detection debug overlay. Renders every data point the
- * detector uses on top of the warp output:
+ * detector uses on top of the warp output. Most markers are 1×1 image-px
+ * so they obscure the underlying pixels minimally.
  *
- * • GREEN  (1px lines)       — expected inner-border rectangle.
- * • GREEN  (1px crosshairs)  — expected dash positions (BK-only centroid
- *                              from `Frame 02.png`).
- * • RED    (1px filled dots) — multi-point inner-border R-B detections
- *                              (9 points per side; the line they trace
- *                              should match the green rectangle if the
- *                              warp is correctly aligned).
- * • YELLOW (3px filled dots) — inner-border corners detected via 1D
- *                              gradient on R-B channel.
- * • MAGENTA (3px hollow rings) — detected dash dark-mass centroids
- *                              (2D centroid in a ±2 GB-px search box).
- * • CYAN   (1px rectangles)  — dash search boxes (the area each dash's
- *                              centroid is computed over). If a dash is
- *                              outside its search box, the detector will
- *                              report a clamped/biased centroid.
- * • YELLOW lines             — residual vector from each detected dash
- *                              centroid to its expected position. Drawn
- *                              only when |residual| > 1 px to avoid clutter.
+ * Inner-border (the DG line just inside the WH frame):
+ *   • GREEN dashed rectangle — expected inner-border *outer* edge. Drawn
+ *     1 image-px wide as a 4-on-4-off dashed line so the actual transition
+ *     pixels stay visible underneath. Drawn at (left=120, top=120,
+ *     right=1159, bottom=1031) at scale=8 — i.e., the right and bottom
+ *     edges include the full DG pixel width.
+ *   • RED 1×1 dots — multi-point inner-border R-B detections (9 points
+ *     per side). They should sit on the green dashed rectangle if the
+ *     warp is correctly aligned.
+ *   • Inner-border corners are marked by **the four corners of the 8×8
+ *     GB pixel that contains the detected sub-pixel position**:
+ *       — MAGENTA 1×1 dot at the GB-pixel TL.
+ *       — ORANGE 1×1 dots at the GB-pixel TR/BR/BL.
+ *     This lets you see which 8×8 area the detector identified as the
+ *     corner. The TL marker establishes orientation.
  *
- * The image is saved as `warp_c_detection_debug.png`. Read it together
- * with `warp_b_inner_border_residual.png` (which shows just the inner-
- * border-only signals).
+ * Dash markers:
+ *   • CYAN 1×1 rectangles — dash search boxes (the region each dash's
+ *     2D dark-mass centroid is computed over). Sized ±4 GB-px on the
+ *     dash's long axis (along which dash positions vary) and ±2 GB-px
+ *     on the short axis. If the dash isn't entirely inside its box,
+ *     the centroid is biased toward the box centre.
+ *   • GREEN 1×1 crosshair — expected dash centre (BK-only centroid
+ *     from `Frame 02.png`).
+ *   • MAGENTA 1×1 hollow square (5×5) — detected dash dark-mass
+ *     centroid (2D, weighted by `max(0, 130 − gray)`). 1×1 corners +
+ *     center to mark exact sub-pixel position.
+ *   • YELLOW line — residual from detected → expected (only when
+ *     |residual| > 1 image-px).
  */
 function addDetectionDebugImage(
   dbg: DebugCollector,
@@ -278,62 +286,111 @@ function addDetectionDebugImage(
   const overlay = cloneImage(warpedRgba);
 
   const green: [number, number, number] = [0, 255, 0];
-  const red: [number, number, number] = [255, 64, 64];
-  const yellow: [number, number, number] = [255, 255, 0];
+  const red: [number, number, number] = [255, 32, 32];
+  const orange: [number, number, number] = [255, 160, 0];
   const magenta: [number, number, number] = [255, 0, 220];
+  const yellow: [number, number, number] = [255, 255, 0];
   const cyan: [number, number, number] = [0, 200, 255];
 
-  // ── Inner-border expected rectangle (green) ──
-  const expTop = INNER_TOP * scale;
-  const expBottom = INNER_BOT * scale;
-  const expLeft = INNER_LEFT * scale;
-  const expRight = INNER_RIGHT * scale;
-  drawLine(overlay, expLeft, expTop, expRight, expTop, green, 1);
-  drawLine(overlay, expLeft, expBottom, expRight, expBottom, green, 1);
-  drawLine(overlay, expLeft, expTop, expLeft, expBottom, green, 1);
-  drawLine(overlay, expRight, expTop, expRight, expBottom, green, 1);
+  // ── 1×1 pixel setter (no anti-aliasing, no thickening) ──
+  const setPx = (x: number, y: number, c: [number, number, number]) => {
+    const xi = Math.round(x);
+    const yi = Math.round(y);
+    if (xi < 0 || xi >= overlay.width || yi < 0 || yi >= overlay.height) return;
+    const idx = (yi * overlay.width + xi) * 4;
+    overlay.data[idx] = c[0];
+    overlay.data[idx + 1] = c[1];
+    overlay.data[idx + 2] = c[2];
+    overlay.data[idx + 3] = 255;
+  };
 
-  // ── Inner-border multi-point detections (red dots) ──
+  // ── Dashed line drawer (4-on, 4-off pattern) ──
+  const dashLine = (
+    x0: number, y0: number, x1: number, y1: number,
+    c: [number, number, number], onLen = 4, offLen = 4,
+  ) => {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.max(Math.abs(dx), Math.abs(dy));
+    if (len === 0) return;
+    const stepX = dx / len;
+    const stepY = dy / len;
+    const period = onLen + offLen;
+    for (let i = 0; i <= len; i++) {
+      const phase = i % period;
+      if (phase < onLen) setPx(x0 + stepX * i, y0 + stepY * i, c);
+    }
+  };
+
+  // ── Inner-border expected rectangle (green dashed, outer edges) ──
+  // Top-left at (120, 120). Right and bottom edges include the full
+  // inner-border DG pixel width (+7 image-px to hit the outer edge).
+  const expTop = INNER_TOP * scale;                       // 120
+  const expBottom = (INNER_BOT + 1) * scale - 1;          // 1031
+  const expLeft = INNER_LEFT * scale;                     // 120
+  const expRight = (INNER_RIGHT + 1) * scale - 1;         // 1159
+  dashLine(expLeft, expTop, expRight, expTop, green);
+  dashLine(expLeft, expBottom, expRight, expBottom, green);
+  dashLine(expLeft, expTop, expLeft, expBottom, green);
+  dashLine(expRight, expTop, expRight, expBottom, green);
+
+  // ── Inner-border multi-point detections (red 1×1 dots) ──
   for (const [x, y] of [
     ...borderPoints.top,
     ...borderPoints.bottom,
     ...borderPoints.left,
     ...borderPoints.right,
   ]) {
-    fillCircle(overlay, x, y, 1, red);
+    setPx(x, y, red);
   }
 
-  // ── Inner-border corner detections (large yellow dots) ──
-  for (const [x, y] of [corners.TL, corners.TR, corners.BR, corners.BL]) {
-    fillCircle(overlay, x, y, 3, yellow);
-  }
+  // ── Inner-border corner detections — marker = 4 corners of the 8×8
+  //    GB pixel that contains the detected sub-pixel position.
+  //    TL of the GB pixel = magenta; TR/BR/BL = orange.
+  const cornerMarkerForGBPixel = (sub: [number, number]) => {
+    const gbCol = Math.floor(sub[0] / scale);
+    const gbRow = Math.floor(sub[1] / scale);
+    const x0 = gbCol * scale;       // image col of GB-pixel TL
+    const y0 = gbRow * scale;       // image row of GB-pixel TL
+    const x1 = x0 + scale - 1;
+    const y1 = y0 + scale - 1;
+    setPx(x0, y0, magenta);          // TL of the 8×8 area
+    setPx(x1, y0, orange);           // TR
+    setPx(x1, y1, orange);           // BR
+    setPx(x0, y1, orange);           // BL
+  };
+  cornerMarkerForGBPixel(corners.TL);
+  cornerMarkerForGBPixel(corners.TR);
+  cornerMarkerForGBPixel(corners.BR);
+  cornerMarkerForGBPixel(corners.BL);
 
   // ── Dash search boxes + expected + detected ──
-  // Long axis half-window for dash variation along its side; short axis
-  // for the perpendicular search width. Must match `detectDashesOnWarp`.
-  const longHalf = Math.max(2, Math.round(scale * 2));
+  // Long axis ±4 GB-px (32 image-px) — fat dashes' BK body is up to 5
+  // source-px = 40 image-px wide along the long axis, so the box must
+  // be wider than that to include some bright frame on either side
+  // (otherwise the centroid is biased toward the box centre).
+  // Short axis ±2 GB-px (16 image-px) — BK body is 2 source-px = 16
+  // image-px in the short direction; box covers it plus ~8 px of
+  // bright frame on each side.
+  const longHalf = Math.max(2, Math.round(scale * 4));
   const shortHalf = Math.max(2, Math.round(scale * 2));
 
-  const drawCrosshair = (x: number, y: number, size: number, c: [number, number, number]) => {
-    drawLine(overlay, x - size, y, x + size, y, c, 1);
-    drawLine(overlay, x, y - size, x, y + size, c, 1);
-  };
-  const drawHollowCircle = (cx: number, cy: number, r: number, c: [number, number, number]) => {
-    // Approx via 4 short arc segments by sampling angles.
-    const N = Math.max(8, Math.round(r * 6));
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * 2 * Math.PI;
-      const px = cx + Math.cos(a) * r;
-      const py = cy + Math.sin(a) * r;
-      const pxi = Math.round(px);
-      const pyi = Math.round(py);
-      if (pxi >= 0 && pxi < overlay.width && pyi >= 0 && pyi < overlay.height) {
-        const idx = (pyi * overlay.width + pxi) * 4;
-        overlay.data[idx] = c[0];
-        overlay.data[idx + 1] = c[1];
-        overlay.data[idx + 2] = c[2];
-      }
+  const drawCrosshair1 = (x: number, y: number, size: number, c: [number, number, number]) => {
+    const xi = Math.round(x);
+    const yi = Math.round(y);
+    for (let k = -size; k <= size; k++) {
+      setPx(xi + k, yi, c);
+      setPx(xi, yi + k, c);
     }
+  };
+  const drawSquareMarker = (cx: number, cy: number, half: number, c: [number, number, number]) => {
+    const x = Math.round(cx);
+    const y = Math.round(cy);
+    setPx(x, y, c);
+    setPx(x - half, y - half, c);
+    setPx(x + half, y - half, c);
+    setPx(x - half, y + half, c);
+    setPx(x + half, y + half, c);
   };
 
   type DashEntry = { expected: [number, number]; detected: [number, number] | null };
@@ -343,7 +400,6 @@ function addDetectionDebugImage(
   ) => {
     for (const d of arr) {
       const [ex, ey] = d.expected;
-      // Search box: ±shortHalf on the dash's short axis, ±longHalf on the long axis.
       const isHoriz = side === "top" || side === "bottom";
       const xHalf = isHoriz ? longHalf : shortHalf;
       const yHalf = isHoriz ? shortHalf : longHalf;
@@ -352,12 +408,10 @@ function addDetectionDebugImage(
       const w = Math.ceil(2 * xHalf) + 1;
       const h = Math.ceil(2 * yHalf) + 1;
       strokeRect(overlay, x0, y0, w, h, cyan, 1);
-      // Expected (green crosshair).
-      drawCrosshair(Math.round(ex), Math.round(ey), 4, green);
-      // Detected (magenta hollow ring) and residual line if displaced.
+      drawCrosshair1(ex, ey, 3, green);
       if (d.detected) {
         const [dx, dy] = d.detected;
-        drawHollowCircle(dx, dy, 3, magenta);
+        drawSquareMarker(dx, dy, 2, magenta);
         const err = Math.hypot(dx - ex, dy - ey);
         if (err > 1) {
           drawLine(overlay, dx, dy, ex, ey, yellow, 1);
@@ -446,17 +500,24 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   // map into warp-space coordinates.
   const toImg = (p: number): number => p * scale;
 
-  // Search box: ±2 GB pixels along the dash's "long" axis (the axis the
+  // Search box: ±4 GB pixels along the dash's "long" axis (the axis the
   // dash position varies along on each side), and ±2 GB pixels along the
-  // "short" axis. The "fat" body of each dash spans up to 3 source pixels
-  // (= 24 image-px at scale=8) per `Frame 02.png`, so a box smaller than
-  // ~3 GB pixels wide can't include any bright frame on either side of the
-  // dash, biasing the centroid toward the search-box centre. ±2 GB pixels
-  // includes ~5 image-px of bright frame on each side, plenty to anchor
-  // the centroid at the dash's actual centre.
-  // The DG inner border (grayscale ~160) is at GB col 15/144 on left/right
-  // and GB row 15/128 on top/bottom — well outside the ±2 GB search box.
-  const longHalf = Math.max(2, Math.round(scale * 2)); // ±2 GB pixels
+  // "short" axis.
+  //
+  // The BK body of a "fat" interior dash is up to 5 source-px on its long
+  // axis (= 40 image-px at scale=8) per `Frame 02.png`. The box must be
+  // *wider* than the BK body so it includes some bright frame on either
+  // side; otherwise the centroid is pinned to the box centre rather than
+  // the dash's actual centre. ±4 GB-px gives a 65-px box on the long
+  // axis = 40 BK + 12 frame on each side. Adjacent dash centres are
+  // 9-10 GB-px apart, so ±4 GB-px boxes don't overlap their neighbours.
+  //
+  // On the short axis (perpendicular), the BK body is 2 source-px wide
+  // (= 16 image-px). ±2 GB-px = 33-px box covers it plus 8 px of bright
+  // frame on each side. The DG inner border (grayscale ~160 in the warp,
+  // above the 130 detector threshold) is 13+ GB-px away from any dash so
+  // doesn't enter the box.
+  const longHalf = Math.max(2, Math.round(scale * 4));  // ±4 GB pixels
   const shortHalf = Math.max(2, Math.round(scale * 2)); // ±2 GB pixels
 
   const topImgY = toImg(DASH_TOP_Y);
