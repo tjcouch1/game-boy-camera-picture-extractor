@@ -240,12 +240,23 @@ const DASH_INTERIOR_LEFT_Y = [
 const DASH_INTERIOR_RIGHT_Y = [
   15, 24.5, 35, 45, 55, 64.5, 75, 85, 95, 104.5, 115, 125,
 ] as const;
-/** Centre of horizontal dashes (rows 6–7, image-pixel-edge units). */
-const DASH_TOP_Y = 7;
-const DASH_BOTTOM_Y = 138;
-/** Centre of vertical dashes (cols 1–2 / 158, image-pixel-edge units). */
-const DASH_LEFT_X = 2;
-const DASH_RIGHT_X = 158;
+// Dash centroid positions extracted from `supporting-materials/Frame 02.png`
+// by computing the centre-of-mass of dark-pixel components per dash. Units
+// are image-pixel-edge (pixel N occupies [N, N+1), centre of pixel N at
+// N+0.5). Multiply by `scale` to map into warp-space coordinates.
+//
+// The previous values (7, 138, 2, 158) were the *boundaries* of the dash
+// rows/cols rather than the dark-mass centroids — they were off by ~0.5
+// source pixel (= 4 image-px at scale=8) from truth. This biased pass-2
+// RANSAC anchors and caused the warp to mis-place the screen content by
+// up to half a GB pixel on each edge.
+
+/** Centroid Y (in pixel-edge units) of horizontal dash dark-masses. */
+const DASH_TOP_Y = 6.5;
+const DASH_BOTTOM_Y = 137.5;
+/** Centroid X (in pixel-edge units) of vertical dash dark-masses. */
+const DASH_LEFT_X = 2.5;
+const DASH_RIGHT_X = 157.5;
 
 export interface DetectedDashes {
   top: Array<{ expected: [number, number]; detected: [number, number] | null }>;
@@ -259,9 +270,12 @@ export interface DetectedDashes {
  * positions in *warp-space coordinates* (GB pixel × scale).
  *
  * Detection: for each side, dashes are pure black (lowest grayscale value) on
- * a frame strip that is otherwise white (#FFFFA5) or dark gray (#9494FF). We
- * find the column- or row-argmin of grayscale within a small window centred
- * on the expected position.
+ * a frame strip that is otherwise white (#FFFFA5) or dark gray (#9494FF).
+ * Each dash is detected as a 2D dark-weighted centroid in a small box
+ * centred on the expected position. The 2D centroid is unbiased w.r.t. BGR
+ * sub-pixel layout (dashes are pure-black with no DG/WH involvement) and
+ * therefore gives a clean residual signal in *both* dimensions of the
+ * dash's position.
  */
 export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   const cv = getCV();
@@ -273,81 +287,96 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   // map into warp-space coordinates.
   const toImg = (p: number): number => p * scale;
 
-  const halfWindow = Math.max(2, Math.round(scale * 2)); // ±2 GB pixels
-  const stripHalf = Math.round(scale * 0.75); // ±0.75 GB pixel band orthogonal to scan
+  // Search box: ±2 GB pixels along the dash's "long" axis (the axis the
+  // dash position varies along on each side), and ±2 GB pixels along the
+  // "short" axis. The "fat" body of each dash spans up to 3 source pixels
+  // (= 24 image-px at scale=8) per `Frame 02.png`, so a box smaller than
+  // ~3 GB pixels wide can't include any bright frame on either side of the
+  // dash, biasing the centroid toward the search-box centre. ±2 GB pixels
+  // includes ~5 image-px of bright frame on each side, plenty to anchor
+  // the centroid at the dash's actual centre.
+  // The DG inner border (grayscale ~160) is at GB col 15/144 on left/right
+  // and GB row 15/128 on top/bottom — well outside the ±2 GB search box.
+  const longHalf = Math.max(2, Math.round(scale * 2)); // ±2 GB pixels
+  const shortHalf = Math.max(2, Math.round(scale * 2)); // ±2 GB pixels
 
   const topImgY = toImg(DASH_TOP_Y);
   const bottomImgY = toImg(DASH_BOTTOM_Y);
   const leftImgX = toImg(DASH_LEFT_X);
   const rightImgX = toImg(DASH_RIGHT_X);
 
-  const rowsForTop: [number, number] = [
-    Math.max(0, Math.round(topImgY - stripHalf)),
-    Math.min(gray.rows, Math.round(topImgY + stripHalf) + 1),
-  ];
-  const rowsForBottom: [number, number] = [
-    Math.max(0, Math.round(bottomImgY - stripHalf)),
-    Math.min(gray.rows, Math.round(bottomImgY + stripHalf) + 1),
-  ];
-  const colsForLeft: [number, number] = [
-    Math.max(0, Math.round(leftImgX - stripHalf)),
-    Math.min(gray.cols, Math.round(leftImgX + stripHalf) + 1),
-  ];
-  const colsForRight: [number, number] = [
-    Math.max(0, Math.round(rightImgX - stripHalf)),
-    Math.min(gray.cols, Math.round(rightImgX + stripHalf) + 1),
-  ];
-
   const top: DetectedDashes["top"] = [];
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
-    const detectedX = findArgminAlongCol(
-      gray, rowsForTop[0], rowsForTop[1], expectedX, halfWindow,
+    const detected = findDarkCentroid2D(
+      gray, expectedX, topImgY, longHalf, shortHalf,
     );
-    top.push({
-      expected: [expectedX, topImgY],
-      detected: detectedX === null ? null : [detectedX, topImgY],
-    });
+    top.push({ expected: [expectedX, topImgY], detected });
   }
 
   const bottom: DetectedDashes["bottom"] = [];
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
-    const detectedX = findArgminAlongCol(
-      gray, rowsForBottom[0], rowsForBottom[1], expectedX, halfWindow,
+    const detected = findDarkCentroid2D(
+      gray, expectedX, bottomImgY, longHalf, shortHalf,
     );
-    bottom.push({
-      expected: [expectedX, bottomImgY],
-      detected: detectedX === null ? null : [detectedX, bottomImgY],
-    });
+    bottom.push({ expected: [expectedX, bottomImgY], detected });
   }
 
   const left: DetectedDashes["left"] = [];
   for (const gby of DASH_INTERIOR_LEFT_Y) {
     const expectedY = toImg(gby);
-    const detectedY = findArgminAlongRow(
-      gray, colsForLeft[0], colsForLeft[1], expectedY, halfWindow,
+    // For vertical-axis dashes, swap: long axis is Y, short axis is X.
+    const detected = findDarkCentroid2D(
+      gray, leftImgX, expectedY, shortHalf, longHalf,
     );
-    left.push({
-      expected: [leftImgX, expectedY],
-      detected: detectedY === null ? null : [leftImgX, detectedY],
-    });
+    left.push({ expected: [leftImgX, expectedY], detected });
   }
 
   const right: DetectedDashes["right"] = [];
   for (const gby of DASH_INTERIOR_RIGHT_Y) {
     const expectedY = toImg(gby);
-    const detectedY = findArgminAlongRow(
-      gray, colsForRight[0], colsForRight[1], expectedY, halfWindow,
+    const detected = findDarkCentroid2D(
+      gray, rightImgX, expectedY, shortHalf, longHalf,
     );
-    right.push({
-      expected: [rightImgX, expectedY],
-      detected: detectedY === null ? null : [rightImgX, detectedY],
-    });
+    right.push({ expected: [rightImgX, expectedY], detected });
   }
 
   gray.delete();
   return { top, bottom, left, right };
+}
+
+/**
+ * 2D dark-weighted centroid in a (2*xHalf+1) × (2*yHalf+1) box around the
+ * expected position. Returns null if no pixel in the box falls below the
+ * dark threshold.
+ */
+function findDarkCentroid2D(
+  gray: any,
+  expectedX: number,
+  expectedY: number,
+  xHalf: number,
+  yHalf: number,
+): [number, number] | null {
+  const xLo = Math.max(0, Math.floor(expectedX - xHalf));
+  const xHi = Math.min(gray.cols, Math.ceil(expectedX + xHalf) + 1);
+  const yLo = Math.max(0, Math.floor(expectedY - yHalf));
+  const yHi = Math.min(gray.rows, Math.ceil(expectedY + yHalf) + 1);
+  if (xLo >= xHi || yLo >= yHi) return null;
+  let sumW = 0;
+  let sumWX = 0;
+  let sumWY = 0;
+  for (let y = yLo; y < yHi; y++) {
+    for (let x = xLo; x < xHi; x++) {
+      const v = gray.ucharAt(y, x);
+      const w = Math.max(0, DASH_DARK_THRESHOLD - v);
+      sumW += w;
+      sumWX += w * (x + 0.5); // Use pixel-centre coords (+0.5)
+      sumWY += w * (y + 0.5);
+    }
+  }
+  if (sumW < 1) return null;
+  return [sumWX / sumW, sumWY / sumW];
 }
 
 /**
@@ -443,6 +472,23 @@ interface RefineMetrics {
   };
   residual: { maxCornerErr: number; meanEdgeCurv: number };
   refined: boolean;
+  /**
+   * Per-edge mean dash residuals (image-pixels in warp space). For
+   * top/bottom edges this is mean(detectedY - expectedY); for left/right
+   * it is mean(detectedX - expectedX). `count` is how many of the
+   * expected dashes were detected (out of 15/15/12/12 for top/bot/L/R).
+   * Dashes are pure black on the white frame and thus immune to BGR
+   * sub-pixel bias, so these residuals are an unbiased ground-truth
+   * signal for warp alignment quality.
+   */
+  dashResiduals?: {
+    top: { mean: number; count: number };
+    bottom: { mean: number; count: number };
+    left: { mean: number; count: number };
+    right: { mean: number; count: number };
+    /** All per-dash position errors (detected - expected), flattened. */
+    all: Array<{ side: "top" | "bottom" | "left" | "right"; expected: [number, number]; detected: [number, number]; err: [number, number] }>;
+  };
 }
 
 function recordRefinementMetrics(
@@ -471,11 +517,22 @@ function recordRefinementMetrics(
       `maxCornerErr=${r.maxCornerErr.toFixed(2)} ` +
       `meanEdgeCurv=${r.meanEdgeCurv.toFixed(2)}`,
   );
+  if (m.dashResiduals) {
+    const d = m.dashResiduals;
+    dbg.log(
+      `[warp] pass${passNum} dash residuals (image-px, det-exp): ` +
+        `top=${d.top.mean.toFixed(2)}(${d.top.count}/15) ` +
+        `bot=${d.bottom.mean.toFixed(2)}(${d.bottom.count}/15) ` +
+        `left=${d.left.mean.toFixed(2)}(${d.left.count}/12) ` +
+        `right=${d.right.mean.toFixed(2)}(${d.right.count}/12)`,
+    );
+  }
   dbg.setMetric("warp", `pass${passNum}`, {
     edgeCurvatures: ec,
     cornerErrors: ce,
     residual: r,
     refined: m.refined,
+    dashResiduals: m.dashResiduals,
   });
 }
 
@@ -1574,7 +1631,45 @@ function computeBorderMetrics(
   const meanEdgeCurv = (Math.abs(edgeCurvatures.top) + Math.abs(edgeCurvatures.bottom) +
     Math.abs(edgeCurvatures.left) + Math.abs(edgeCurvatures.right)) / 4;
 
+  // Dash residuals on the final refined warp.
+  const dashes = detectDashesOnWarp(warpedBgr, scale);
+  const aggregateDash = (
+    arr: DetectedDashes["top"],
+    axis: 0 | 1,
+  ): { mean: number; count: number } => {
+    let s = 0;
+    let n = 0;
+    for (const d of arr) {
+      if (d.detected !== null) {
+        s += d.detected[axis] - d.expected[axis];
+        n++;
+      }
+    }
+    return { mean: n > 0 ? Number((s / n).toFixed(3)) : 0, count: n };
+  };
+  const allDashResid: NonNullable<RefineMetrics["dashResiduals"]>["all"] = [];
+  for (const [side, arr] of [["top", dashes.top], ["bottom", dashes.bottom], ["left", dashes.left], ["right", dashes.right]] as const) {
+    for (const d of arr) {
+      if (d.detected !== null) {
+        allDashResid.push({
+          side,
+          expected: [Number(d.expected[0].toFixed(2)), Number(d.expected[1].toFixed(2))],
+          detected: [Number(d.detected[0].toFixed(2)), Number(d.detected[1].toFixed(2))],
+          err: [Number((d.detected[0] - d.expected[0]).toFixed(3)), Number((d.detected[1] - d.expected[1]).toFixed(3))],
+        });
+      }
+    }
+  }
+  const dashResiduals = {
+    top: aggregateDash(dashes.top, 1),
+    bottom: aggregateDash(dashes.bottom, 1),
+    left: aggregateDash(dashes.left, 0),
+    right: aggregateDash(dashes.right, 0),
+    all: allDashResid,
+  };
+
   return {
+    dashResiduals,
     edgeCurvatures: {
       top: Number(edgeCurvatures.top.toFixed(3)),
       bottom: Number(edgeCurvatures.bottom.toFixed(3)),
