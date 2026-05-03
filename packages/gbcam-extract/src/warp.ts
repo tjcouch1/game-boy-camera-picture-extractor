@@ -256,7 +256,7 @@ const DASH_TOP_Y = 6.5;
 const DASH_BOTTOM_Y = 137.5;
 /** Centroid X (in pixel-edge units) of vertical dash dark-masses. */
 const DASH_LEFT_X = 2.5;
-const DASH_RIGHT_X = 157.5;
+const DASH_RIGHT_X = 157.625;
 
 export interface DetectedDashes {
   top: Array<{ expected: [number, number]; detected: [number, number] | null }>;
@@ -1419,10 +1419,22 @@ function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): numb
 // All anchors except corners are detected on the warp-space output of pass 1
 // (where residuals are < 1 GB pixel) and back-mapped to source via M_pass1^-1.
 
-const MULTI_ANCHOR_RANSAC_THRESHOLD = 3.0;
-const CORNER_WEIGHT = 5;
-const BORDER_POINT_WEIGHT = 2;
-const DASH_WEIGHT = 1;
+// Pass-2 RANSAC weights — re-balanced toward dashes.
+//
+// Dashes are pure-black on white frame: their detected positions are
+// immune to the BGR sub-pixel layout that biases the source-corner
+// contour detection (leftmost bright sub-pixel of WH frame is the G
+// sub-pixel, biasing the detected left corner ~3 phone-pixels rightward
+// of the true screen edge). The previous weighting (corner 5×, border 2×,
+// dash 1×) let those biased corners dominate the homography fit, with
+// dashes treated as outliers when their residual exceeded the 3-px RANSAC
+// threshold. The new weighting and threshold flip this: 54 dashes × 5 =
+// 270 anchor instances dominate the 4 corners × 1 = 4 + 36 border × 1 =
+// 36 = 310 total, with dashes 87% of the weight.
+const MULTI_ANCHOR_RANSAC_THRESHOLD = 5.0;
+const CORNER_WEIGHT = 1;
+const BORDER_POINT_WEIGHT = 1;
+const DASH_WEIGHT = 5;
 
 function refineWarpMultiAnchor(
   img: any,
