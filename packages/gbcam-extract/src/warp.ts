@@ -508,6 +508,38 @@ function gaussianFilter1d(input: number[], sigma: number): number[] {
   return output;
 }
 
+/**
+ * Box-filter a 1D signal with kernel width `width`. A box of width=scale
+ * (= one LCD-pixel period at the warp output's `scale`) cancels the
+ * sub-pixel BGR oscillation in the R-B+128 channel: within a single LCD
+ * pixel, R-B varies as B-bright-on-left → R-bright-on-right, but averaging
+ * over a full pixel period yields a single per-LCD-pixel value. This makes
+ * inter-LCD-pixel transitions (the actual frame/border edges) the only
+ * surviving signal in the smoothed profile. Reflects at boundaries to match
+ * `gaussianFilter1d`.
+ */
+function boxSmooth(input: number[], width: number): number[] {
+  if (width <= 1) return input.slice();
+  // Use an odd-width window centred on each index. Even widths would bias by
+  // half a sample; round up to the next odd width to keep the centre exact.
+  const w = width % 2 === 0 ? width + 1 : width;
+  const half = Math.floor(w / 2);
+  const n = input.length;
+  const output: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let k = -half; k <= half; k++) {
+      let j = i + k;
+      if (j < 0) j = -j;
+      if (j >= n) j = 2 * n - 2 - j;
+      j = Math.max(0, Math.min(n - 1, j));
+      sum += input[j];
+    }
+    output[i] = sum / w;
+  }
+  return output;
+}
+
 // ─── Corner detection ───
 
 type Point = [number, number];
@@ -701,8 +733,20 @@ function initialWarp(bgr: any, corners: Corners, scale: number): WarpResult {
 
 // ─── Sub-pixel inner-border edge detection ───
 
-function firstDarkFromFrame(profile: number[], smoothSigma = 1.5): number {
-  const p = gaussianFilter1d(profile, smoothSigma);
+function firstDarkFromFrame(
+  profile: number[],
+  smoothSigma = 1.5,
+  /**
+   * Width (in samples) of a box pre-smoothing pass that removes
+   * sub-pixel BGR oscillation from the R-B+128 channel. Pass `scale` (the
+   * image-pixels-per-LCD-pixel factor used for the warp output) so a full
+   * BGR period is averaged before the gaussian + argmin gradient detection.
+   * Default 0 disables the box pre-pass for backwards compat.
+   */
+  periodSmooth = 0,
+): number {
+  const prepped = periodSmooth > 1 ? boxSmooth(profile, periodSmooth) : profile;
+  const p = gaussianFilter1d(prepped, smoothSigma);
   // Compute diff
   const d: number[] = [];
   for (let i = 0; i < p.length - 1; i++) {
@@ -790,7 +834,7 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const r1 = Math.max(0, exp - srch);
     const r2 = Math.min(H, exp + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
-    return r1 + firstDarkFromFrame(profile);
+    return r1 + firstDarkFromFrame(profile, 1.5, scale);
   }
 
   function botY(c0: number, c1: number): number {
@@ -799,7 +843,7 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const r2 = Math.min(H, expFrame + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
     const reversed = [...profile].reverse();
-    const idx = firstDarkFromFrame(reversed);
+    const idx = firstDarkFromFrame(reversed, 1.5, scale);
     return (r2 - 1) - idx - (scale - 1);
   }
 
@@ -808,7 +852,7 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const c1 = Math.max(0, exp - srch);
     const c2 = Math.min(W, exp + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
-    return c1 + firstDarkFromFrame(profile);
+    return c1 + firstDarkFromFrame(profile, 1.5, scale);
   }
 
   function rightX(r0: number, r1_: number): number {
@@ -817,7 +861,7 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const c2 = Math.min(W, expFrame + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
     const reversed = [...profile].reverse();
-    const idx = firstDarkFromFrame(reversed);
+    const idx = firstDarkFromFrame(reversed, 1.5, scale);
     return (c2 - 1) - idx - (scale - 1);
   }
 
@@ -880,7 +924,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
       for (let r = r1; r < r2; r++) {
         profile.push(channel.ucharAt(r, col));
       }
-      const yPos = r1 + firstDarkFromFrame(profile);
+      const yPos = r1 + firstDarkFromFrame(profile, 1.5, scale);
       points.top.push([col, yPos]);
     }
   }
@@ -897,7 +941,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
         profile.push(channel.ucharAt(r, col));
       }
       const reversed = [...profile].reverse();
-      const idx = firstDarkFromFrame(reversed);
+      const idx = firstDarkFromFrame(reversed, 1.5, scale);
       const yPos = (r2 - 1) - idx - (scale - 1);
       points.bottom.push([col, yPos]);
     }
@@ -914,7 +958,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
       for (let c = c1; c < c2; c++) {
         profile.push(channel.ucharAt(row, c));
       }
-      const xPos = c1 + firstDarkFromFrame(profile);
+      const xPos = c1 + firstDarkFromFrame(profile, 1.5, scale);
       points.left.push([xPos, row]);
     }
   }
@@ -931,7 +975,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
         profile.push(channel.ucharAt(row, c));
       }
       const reversed = [...profile].reverse();
-      const idx = firstDarkFromFrame(reversed);
+      const idx = firstDarkFromFrame(reversed, 1.5, scale);
       const xPos = (c2 - 1) - idx - (scale - 1);
       points.right.push([xPos, row]);
     }
