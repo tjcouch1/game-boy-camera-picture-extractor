@@ -1421,22 +1421,25 @@ function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): numb
 // All anchors except corners are detected on the warp-space output of pass 1
 // (where residuals are < 1 GB pixel) and back-mapped to source via M_pass1^-1.
 
-// Pass-2 RANSAC weights — re-balanced toward dashes.
+// Pass-2 anchors: dashes only (corners and inner-border are biased).
 //
-// Dashes are pure-black on white frame: their detected positions are
-// immune to the BGR sub-pixel layout that biases the source-corner
-// contour detection (leftmost bright sub-pixel of WH frame is the G
-// sub-pixel, biasing the detected left corner ~3 phone-pixels rightward
-// of the true screen edge). The previous weighting (corner 5×, border 2×,
-// dash 1×) let those biased corners dominate the homography fit, with
-// dashes treated as outliers when their residual exceeded the 3-px RANSAC
-// threshold. The new weighting and threshold flip this: 54 dashes × 5 =
-// 270 anchor instances dominate the 4 corners × 1 = 4 + 36 border × 1 =
-// 36 = 310 total, with dashes 87% of the weight.
-const MULTI_ANCHOR_RANSAC_THRESHOLD = 5.0;
-const CORNER_WEIGHT = 1;
-const BORDER_POINT_WEIGHT = 1;
-const DASH_WEIGHT = 5;
+// The source-corner contour detection is biased by ~3 phone-px on the
+// LEFT screen edge because the leftmost bright sub-pixel of WH frame is
+// the G sub-pixel (B sub-pixel of WH is dim because WH.B=165 vs G/R=255),
+// placing the detected contour ~3 phone-px rightward of the true screen
+// edge. The inner-border R-B detection is also biased by within-LCD-pixel
+// BGR sub-pixel structure on the right edge (DG inner border has a
+// bright B sub-pixel on the LEFT side of the pixel).
+//
+// Dashes, by contrast, are pure-black squares on the WH frame and have
+// no DG/WH sub-pixel asymmetry; their detected positions are unbiased
+// truth. So pass-2 uses ONLY dashes, with corners as a low-weight
+// fallback to keep the homography from degenerating in case of bad dash
+// detection on a heavily distorted image.
+const MULTI_ANCHOR_RANSAC_THRESHOLD = 15.0;
+const CORNER_WEIGHT = 0;
+const BORDER_POINT_WEIGHT = 0;
+const DASH_WEIGHT = 1;
 
 function refineWarpMultiAnchor(
   img: any,
