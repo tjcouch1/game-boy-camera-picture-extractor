@@ -240,23 +240,25 @@ const DASH_INTERIOR_LEFT_Y = [
 const DASH_INTERIOR_RIGHT_Y = [
   15, 24.5, 35, 45, 55, 64.5, 75, 85, 95, 104.5, 115, 125,
 ] as const;
-// Dash centroid positions extracted from `supporting-materials/Frame 02.png`
-// by computing the centre-of-mass of dark-pixel components per dash. Units
-// are image-pixel-edge (pixel N occupies [N, N+1), centre of pixel N at
-// N+0.5). Multiply by `scale` to map into warp-space coordinates.
+// Dash centroid positions extracted from `supporting-materials/Frame 02.png`,
+// computed as the dark-mass centroid of pure-BK pixels (gray < 30) only.
+// Each top dash has a DG cap (gray ~82 in source, ~160 in warp) that is
+// brighter than the warp detector's threshold (130) and so contributes
+// weight 0 to the in-pipeline detector. To keep the EXPECTED positions
+// consistent with what the DETECTOR finds, we use BK-only centroids here.
 //
-// The previous values (7, 138, 2, 158) were the *boundaries* of the dash
-// rows/cols rather than the dark-mass centroids — they were off by ~0.5
-// source pixel (= 4 image-px at scale=8) from truth. This biased pass-2
-// RANSAC anchors and caused the warp to mis-place the screen content by
-// up to half a GB pixel on each edge.
+// BK body of:
+//   - Top dashes: rows 6-7 → centroid Y = 7.0
+//   - Bottom dashes: rows 137-138 → centroid Y = 138.0
+//   - Left dashes: cols 1-2 → centroid X = 2.0
+//   - Right dashes: cols 157-158 → centroid X = 158.0
 
-/** Centroid Y (in pixel-edge units) of horizontal dash dark-masses. */
-const DASH_TOP_Y = 6.5;
-const DASH_BOTTOM_Y = 137.5;
-/** Centroid X (in pixel-edge units) of vertical dash dark-masses. */
-const DASH_LEFT_X = 2.5;
-const DASH_RIGHT_X = 157.625;
+/** Centroid Y (in pixel-edge units) of horizontal dash BK bodies. */
+const DASH_TOP_Y = 7;
+const DASH_BOTTOM_Y = 138;
+/** Centroid X (in pixel-edge units) of vertical dash BK bodies. */
+const DASH_LEFT_X = 2;
+const DASH_RIGHT_X = 158;
 
 export interface DetectedDashes {
   top: Array<{ expected: [number, number]; detected: [number, number] | null }>;
