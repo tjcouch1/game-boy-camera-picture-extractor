@@ -21,6 +21,7 @@ import {
   drawLine,
   drawPolyline,
   fillCircle,
+  strokeRect,
 } from "./debug.js";
 
 // ─── Public interface ───
@@ -150,6 +151,7 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
 
   if (dbg) {
     addInnerBorderResidualImage(dbg, currentWarped, result, scale);
+    addDetectionDebugImage(dbg, currentWarped, result, scale);
   }
 
   currentWarped.delete();
@@ -214,6 +216,161 @@ function addInnerBorderResidualImage(
   }
 
   dbg.addImage("warp_b_inner_border_residual", overlay);
+}
+
+/**
+ * Comprehensive detection debug overlay. Renders every data point the
+ * detector uses on top of the warp output:
+ *
+ * • GREEN  (1px lines)       — expected inner-border rectangle.
+ * • GREEN  (1px crosshairs)  — expected dash positions (BK-only centroid
+ *                              from `Frame 02.png`).
+ * • RED    (1px filled dots) — multi-point inner-border R-B detections
+ *                              (9 points per side; the line they trace
+ *                              should match the green rectangle if the
+ *                              warp is correctly aligned).
+ * • YELLOW (3px filled dots) — inner-border corners detected via 1D
+ *                              gradient on R-B channel.
+ * • MAGENTA (3px hollow rings) — detected dash dark-mass centroids
+ *                              (2D centroid in a ±2 GB-px search box).
+ * • CYAN   (1px rectangles)  — dash search boxes (the area each dash's
+ *                              centroid is computed over). If a dash is
+ *                              outside its search box, the detector will
+ *                              report a clamped/biased centroid.
+ * • YELLOW lines             — residual vector from each detected dash
+ *                              centroid to its expected position. Drawn
+ *                              only when |residual| > 1 px to avoid clutter.
+ *
+ * The image is saved as `warp_c_detection_debug.png`. Read it together
+ * with `warp_b_inner_border_residual.png` (which shows just the inner-
+ * border-only signals).
+ */
+function addDetectionDebugImage(
+  dbg: DebugCollector,
+  warpedBgr: any,
+  warpedRgba: GBImageData,
+  scale: number,
+): void {
+  const cv = getCV();
+  const H = warpedBgr.rows;
+  const W = warpedBgr.cols;
+
+  // R-B channel for inner-border points/corners.
+  const rbCh = withMats((track, untrack) => {
+    const rgb = track(new cv.Mat());
+    cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
+    const out = new cv.Mat(H, W, cv.CV_8UC1);
+    const rgbData = rgb.data;
+    const outData = out.data;
+    for (let i = 0; i < H * W; i++) {
+      const r = rgbData[i * 3];
+      const b = rgbData[i * 3 + 2];
+      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+    }
+    return untrack(out);
+  });
+  const borderPoints = findBorderPoints(rbCh, scale);
+  const corners = findBorderCorners(rbCh, scale);
+  rbCh.delete();
+
+  const dashes = detectDashesOnWarp(warpedBgr, scale);
+
+  const overlay = cloneImage(warpedRgba);
+
+  const green: [number, number, number] = [0, 255, 0];
+  const red: [number, number, number] = [255, 64, 64];
+  const yellow: [number, number, number] = [255, 255, 0];
+  const magenta: [number, number, number] = [255, 0, 220];
+  const cyan: [number, number, number] = [0, 200, 255];
+
+  // ── Inner-border expected rectangle (green) ──
+  const expTop = INNER_TOP * scale;
+  const expBottom = INNER_BOT * scale;
+  const expLeft = INNER_LEFT * scale;
+  const expRight = INNER_RIGHT * scale;
+  drawLine(overlay, expLeft, expTop, expRight, expTop, green, 1);
+  drawLine(overlay, expLeft, expBottom, expRight, expBottom, green, 1);
+  drawLine(overlay, expLeft, expTop, expLeft, expBottom, green, 1);
+  drawLine(overlay, expRight, expTop, expRight, expBottom, green, 1);
+
+  // ── Inner-border multi-point detections (red dots) ──
+  for (const [x, y] of [
+    ...borderPoints.top,
+    ...borderPoints.bottom,
+    ...borderPoints.left,
+    ...borderPoints.right,
+  ]) {
+    fillCircle(overlay, x, y, 1, red);
+  }
+
+  // ── Inner-border corner detections (large yellow dots) ──
+  for (const [x, y] of [corners.TL, corners.TR, corners.BR, corners.BL]) {
+    fillCircle(overlay, x, y, 3, yellow);
+  }
+
+  // ── Dash search boxes + expected + detected ──
+  // Long axis half-window for dash variation along its side; short axis
+  // for the perpendicular search width. Must match `detectDashesOnWarp`.
+  const longHalf = Math.max(2, Math.round(scale * 2));
+  const shortHalf = Math.max(2, Math.round(scale * 2));
+
+  const drawCrosshair = (x: number, y: number, size: number, c: [number, number, number]) => {
+    drawLine(overlay, x - size, y, x + size, y, c, 1);
+    drawLine(overlay, x, y - size, x, y + size, c, 1);
+  };
+  const drawHollowCircle = (cx: number, cy: number, r: number, c: [number, number, number]) => {
+    // Approx via 4 short arc segments by sampling angles.
+    const N = Math.max(8, Math.round(r * 6));
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * 2 * Math.PI;
+      const px = cx + Math.cos(a) * r;
+      const py = cy + Math.sin(a) * r;
+      const pxi = Math.round(px);
+      const pyi = Math.round(py);
+      if (pxi >= 0 && pxi < overlay.width && pyi >= 0 && pyi < overlay.height) {
+        const idx = (pyi * overlay.width + pxi) * 4;
+        overlay.data[idx] = c[0];
+        overlay.data[idx + 1] = c[1];
+        overlay.data[idx + 2] = c[2];
+      }
+    }
+  };
+
+  type DashEntry = { expected: [number, number]; detected: [number, number] | null };
+  const drawDashSet = (
+    arr: ReadonlyArray<DashEntry>,
+    side: "top" | "bottom" | "left" | "right",
+  ) => {
+    for (const d of arr) {
+      const [ex, ey] = d.expected;
+      // Search box: ±shortHalf on the dash's short axis, ±longHalf on the long axis.
+      const isHoriz = side === "top" || side === "bottom";
+      const xHalf = isHoriz ? longHalf : shortHalf;
+      const yHalf = isHoriz ? shortHalf : longHalf;
+      const x0 = Math.floor(ex - xHalf);
+      const y0 = Math.floor(ey - yHalf);
+      const w = Math.ceil(2 * xHalf) + 1;
+      const h = Math.ceil(2 * yHalf) + 1;
+      strokeRect(overlay, x0, y0, w, h, cyan, 1);
+      // Expected (green crosshair).
+      drawCrosshair(Math.round(ex), Math.round(ey), 4, green);
+      // Detected (magenta hollow ring) and residual line if displaced.
+      if (d.detected) {
+        const [dx, dy] = d.detected;
+        drawHollowCircle(dx, dy, 3, magenta);
+        const err = Math.hypot(dx - ex, dy - ey);
+        if (err > 1) {
+          drawLine(overlay, dx, dy, ex, ey, yellow, 1);
+        }
+      }
+    }
+  };
+  drawDashSet(dashes.top, "top");
+  drawDashSet(dashes.bottom, "bottom");
+  drawDashSet(dashes.left, "left");
+  drawDashSet(dashes.right, "right");
+
+  dbg.addImage("warp_c_detection_debug", overlay);
 }
 
 // ─── Dash positions ───
