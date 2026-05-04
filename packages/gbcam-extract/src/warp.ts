@@ -499,6 +499,38 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   const gray = new cv.Mat();
   cv.cvtColor(warped, gray, cv.COLOR_BGR2GRAY);
 
+  // Flat-field the gray channel: subtract a wide-gaussian-blurred version
+  // (the slow brightness "background") and re-centre at 128. This cancels
+  // the GBA SP front-light banding (which can shift a "BK" pixel from
+  // gray ~10 at the top of the screen to gray ~150 at the bottom in the
+  // same image) so the dash detector sees uniformly dark BK regardless
+  // of its location. σ = 4 GB-px (32 image-px at scale=8) is wide enough
+  // to average out individual dashes (16-40 px wide) but narrow enough
+  // to track the per-region front-light gradient.
+  //
+  // We work on a dedicated buffer; the original `gray` is preserved for
+  // later code paths that need the raw warp.
+  const gaussSigma = scale * 4;
+  const ksize = 2 * Math.ceil(gaussSigma * 2) + 1;
+  const flat = new cv.Mat();
+  withMats((track, _untrack) => {
+    const bg = track(new cv.Mat());
+    cv.GaussianBlur(gray, bg, new cv.Size(ksize, ksize), gaussSigma, gaussSigma);
+    // out = gray - bg + 128, clamped to [0, 255].
+    const grayData = gray.data;
+    const bgData = bg.data;
+    const outData = new Uint8Array(grayData.length);
+    for (let i = 0; i < grayData.length; i++) {
+      const v = grayData[i] - bgData[i] + 128;
+      outData[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    flat.create(gray.rows, gray.cols, cv.CV_8UC1);
+    flat.data.set(outData);
+  });
+  gray.delete();
+  // Use the flat-fielded gray for the rest of the function.
+  const gray2 = flat;
+
   // Dash centres are given in image-pixel-edge units; multiply by scale to
   // map into warp-space coordinates.
   const toImg = (p: number): number => p * scale;
@@ -532,7 +564,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
     const detected = findDarkCentroid2D(
-      gray, expectedX, topImgY, longHalf, shortHalf,
+      gray2, expectedX, topImgY, longHalf, shortHalf, scale,
     );
     top.push({ expected: [expectedX, topImgY], detected });
   }
@@ -541,7 +573,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
     const detected = findDarkCentroid2D(
-      gray, expectedX, bottomImgY, longHalf, shortHalf,
+      gray2, expectedX, bottomImgY, longHalf, shortHalf, scale,
     );
     bottom.push({ expected: [expectedX, bottomImgY], detected });
   }
@@ -551,7 +583,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
     const expectedY = toImg(gby);
     // For vertical-axis dashes, swap: long axis is Y, short axis is X.
     const detected = findDarkCentroid2D(
-      gray, leftImgX, expectedY, shortHalf, longHalf,
+      gray2, leftImgX, expectedY, shortHalf, longHalf, scale,
     );
     left.push({ expected: [leftImgX, expectedY], detected });
   }
@@ -560,12 +592,12 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   for (const gby of DASH_INTERIOR_RIGHT_Y) {
     const expectedY = toImg(gby);
     const detected = findDarkCentroid2D(
-      gray, rightImgX, expectedY, shortHalf, longHalf,
+      gray2, rightImgX, expectedY, shortHalf, longHalf, scale,
     );
     right.push({ expected: [rightImgX, expectedY], detected });
   }
 
-  gray.delete();
+  gray2.delete();
   return { top, bottom, left, right };
 }
 
@@ -604,6 +636,7 @@ function findDarkCentroid2D(
   expectedY: number,
   xHalf: number,
   yHalf: number,
+  scale: number,
 ): [number, number] | null {
   const xLo = Math.max(0, Math.floor(expectedX - xHalf));
   const xHi = Math.min(gray.cols, Math.ceil(expectedX + xHalf) + 1);
@@ -633,6 +666,40 @@ function findDarkCentroid2D(
   for (let i = 0; i < H; i++) rowMean[i] = rowSum[i] / W;
   const colMean = new Float64Array(W);
   for (let i = 0; i < W; i++) colMean[i] = colSum[i] / H;
+
+  // Smooth the 1D profile along the dash's *long* axis by one LCD-pixel
+  // period (`scale` image-px). Without this, a long dash (40 image-px)
+  // shows internal periodic bright/dark sub-bands (LCD inter-row gaps +
+  // sub-pixel bleed) that the largest-contiguous-run logic locks onto,
+  // picking a sub-band instead of the whole dash. Smoothing bridges the
+  // sub-bands so the dash becomes one contiguous below-threshold run.
+  //
+  // Don't smooth the *short* axis — the dash is uniformly dark across
+  // its 16-px width with no periodic sub-bands. Smoothing here would
+  // just blur the dash's edges and bias the centroid by a few px.
+  const boxSmoothInPlace = (arr: Float64Array, w: number) => {
+    if (w <= 1) return;
+    const odd = w % 2 === 0 ? w + 1 : w;
+    const half = Math.floor(odd / 2);
+    const tmp = arr.slice();
+    for (let i = 0; i < arr.length; i++) {
+      let s = 0;
+      for (let k = -half; k <= half; k++) {
+        let j = i + k;
+        if (j < 0) j = -j;
+        if (j >= arr.length) j = 2 * arr.length - 2 - j;
+        if (j < 0) j = 0;
+        if (j >= arr.length) j = arr.length - 1;
+        s += tmp[j];
+      }
+      arr[i] = s / odd;
+    }
+  };
+  if (yHalf >= xHalf) {
+    boxSmoothInPlace(rowMean, scale); // long axis is Y
+  } else {
+    boxSmoothInPlace(colMean, scale); // long axis is X
+  }
 
   // Helper: largest-contiguous run of indices where profile[i] < threshold.
   // Returns [first, last] inclusive, or null if no such run.
