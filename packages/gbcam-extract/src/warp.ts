@@ -1089,7 +1089,13 @@ function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetect
 
     let best: { score: number; ordered: Corners; thresh: number; area: number; aspect: number } | null = null;
 
-    for (let thresh = threshVal; thresh > 114; thresh -= 5) {
+    // Try thresholds from very high (220) down to 114. The screen frame is
+    // typically the brightest contiguous region in the photo (gray ~200-245),
+    // but on overexposed photos a low threshold like 180 can include both the
+    // WH frame AND the WH camera content, which fuses into one giant contour
+    // that spans most of the image. Start higher to isolate just the frame
+    // when those low thresholds give a poor quad fit.
+    for (let thresh = 220; thresh > 114; thresh -= 5) {
       const binary = track(new cv.Mat());
       cv.threshold(gray, binary, thresh, 255, cv.THRESH_BINARY);
 
@@ -1814,15 +1820,28 @@ function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResul
   let evaluated = 0;
   let bestK1 = 0;
   let bestScore = Infinity;
+  let bestQuadScore = Infinity;
 
-  const evalAt = (k1: number): number | null => {
+  // Track the quadScore at the best k1 so we can fall back to no lens
+  // correction when source-corner detection fails on every k1.
+  const evalAt = (k1: number): { score: number; quadScore: number } | null => {
     evaluated++;
     let undistorted: any = null;
     try {
       undistorted = undistortBgr(bgr, K, k1);
+      // Get raw scores (border deviation + quad-detection score) so we
+      // can decide later whether to trust the result at all.
+      let detection: CornerDetection;
+      try {
+        detection = findScreenCornersWithMetrics(undistorted, threshVal);
+      } catch {
+        undistorted.delete();
+        return null;
+      }
       const score = scoreUndistortedFrame(undistorted, scale, threshVal);
       undistorted.delete();
-      return score;
+      if (score === null) return null;
+      return { score, quadScore: detection.score };
     } catch {
       if (undistorted) undistorted.delete();
       return null;
@@ -1830,9 +1849,10 @@ function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResul
   };
 
   for (let k1 = LENS_K1_RANGE[0]; k1 <= LENS_K1_RANGE[1] + 1e-9; k1 += LENS_COARSE_STEP) {
-    const s = evalAt(k1);
-    if (s !== null && s < bestScore) {
-      bestScore = s;
+    const r = evalAt(k1);
+    if (r !== null && r.score < bestScore) {
+      bestScore = r.score;
+      bestQuadScore = r.quadScore;
       bestK1 = k1;
     }
   }
@@ -1840,11 +1860,26 @@ function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResul
   const fineLo = Math.max(LENS_K1_RANGE[0], bestK1 - LENS_FINE_HALF_RANGE);
   const fineHi = Math.min(LENS_K1_RANGE[1], bestK1 + LENS_FINE_HALF_RANGE);
   for (let k1 = fineLo; k1 <= fineHi + 1e-9; k1 += LENS_FINE_STEP) {
-    const s = evalAt(k1);
-    if (s !== null && s < bestScore) {
-      bestScore = s;
+    const r = evalAt(k1);
+    if (r !== null && r.score < bestScore) {
+      bestScore = r.score;
+      bestQuadScore = r.quadScore;
       bestK1 = k1;
     }
+  }
+
+  // If even the best k1 leaves the source-corner detection unreliable
+  // (quadScore > 0.3 — well above the 0.15 "low quality" warning), the
+  // lens-correction search is converging on noise. Falling back to k1=0
+  // at least avoids the *extra* distortion from an arbitrary chosen k1
+  // (often the range boundary, e.g., -0.2 = max barrel correction) when
+  // the underlying corner detection is fundamentally broken for this
+  // photo. The downstream pipeline still produces a recognisable warp
+  // even if the corners are slightly off, rather than the heavily-bowed
+  // output that an extreme k1 produces.
+  const QUAD_FALLBACK_THRESH = 0.3;
+  if (bestQuadScore > QUAD_FALLBACK_THRESH) {
+    bestK1 = 0;
   }
 
   const bgrOut = Number.isFinite(bestScore) ? undistortBgr(bgr, K, bestK1) : bgr.clone();
@@ -1861,6 +1896,17 @@ function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): numb
   } catch {
     return null;
   }
+
+  // If the quad detection itself is poor (e.g., contour fell back to the
+  // image bounding box because the source photo's frame couldn't be
+  // separated by brightness threshold), no value of k1 will produce a
+  // meaningful inner-border curvature. Penalise the score heavily so a
+  // less-distorted k1 (closer to 0) is preferred — over-correcting lens
+  // distortion on a fundamentally bad detection only makes the warp
+  // worse. quadScore > 0.15 is the existing "low quality" warning
+  // threshold; we add 100 × that to the score so a bad detection at
+  // any k1 dominates over the inner-border deviation term.
+  const quadPenalty = 100 * detection.score;
 
   const initial = initialWarp(bgr, detection.ordered, scale);
   let score: number | null = null;
@@ -1899,7 +1945,8 @@ function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): numb
     const cBot = meanDev(points.bottom, 1, expBot);
     const cLeft = meanDev(points.left, 0, expLeft);
     const cRight = meanDev(points.right, 0, expRight);
-    score = Math.abs(cTop) + Math.abs(cBot) + Math.abs(cLeft) + Math.abs(cRight);
+    const borderScore = Math.abs(cTop) + Math.abs(cBot) + Math.abs(cLeft) + Math.abs(cRight);
+    score = borderScore + quadPenalty;
   } finally {
     initial.warped.delete();
     initial.M.delete();
