@@ -345,22 +345,28 @@ function addDetectionDebugImage(
   for (const [x, y] of borderPoints.left) setPx(x, y, red);
   for (const [x, y] of borderPoints.right) setPx(x + scale - 1, y, red);
 
-  // ── Inner-border corner detections — 4 image-pixel corners of an 8×8
-  //    box whose TL is the detected sub-pixel position rounded to the
-  //    nearest image pixel. NO snapping to GB-pixel grid: the magenta
-  //    dot lands exactly where the detector thinks the corner is, to
-  //    image-pixel precision (which is much sharper than half-a-GB-pixel
-  //    precision when judging alignment by eye).
-  //    TL of the 8×8 box = magenta; TR/BR/BL = orange.
+  // ── Inner-border corner detections.
+  //   Each detected sub-pixel position is the *centroid* of the GB pixel
+  //   that the detector identifies as the inner-border corner. Mark:
+  //     - The 4 image-pixel corners of that 8×8 GB pixel — magenta at
+  //       its TL, orange at TR/BR/BL. The GB pixel is the one containing
+  //       the centroid (floor(centroid / scale)).
+  //     - A small white dot at the actual sub-pixel centroid position
+  //       (rounded to nearest image pixel) — for sub-pixel precision
+  //       feedback once the GB-pixel-corner alignment is settled.
+  const white: [number, number, number] = [255, 255, 255];
   const cornerMarkerForDetection = (sub: [number, number]) => {
-    const x0 = Math.round(sub[0]);   // detected image col, no GB snap
-    const y0 = Math.round(sub[1]);
+    const gbCol = Math.floor(sub[0] / scale);
+    const gbRow = Math.floor(sub[1] / scale);
+    const x0 = gbCol * scale;       // image col of GB-pixel TL
+    const y0 = gbRow * scale;
     const x1 = x0 + scale - 1;
     const y1 = y0 + scale - 1;
-    setPx(x0, y0, magenta);          // detection point
-    setPx(x1, y0, orange);
-    setPx(x1, y1, orange);
-    setPx(x0, y1, orange);
+    setPx(x0, y0, magenta);          // GB-pixel TL
+    setPx(x1, y0, orange);           // GB-pixel TR
+    setPx(x1, y1, orange);           // GB-pixel BR
+    setPx(x0, y1, orange);           // GB-pixel BL
+    setPx(sub[0], sub[1], white);    // centroid (sub-pixel)
   };
   cornerMarkerForDetection(corners.TL);
   cornerMarkerForDetection(corners.TR);
