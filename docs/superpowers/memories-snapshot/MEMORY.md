@@ -1,0 +1,6 @@
+- [feedback_no_cd_git_compound.md](feedback_no_cd_git_compound.md) — Avoid `cd && git` compound commands; use `git -C` instead
+- [feedback_no_compound_commands.md](feedback_no_compound_commands.md) — Don't use working directory paths in commands; cd first then run separately to avoid approval prompts
+- [project_pipeline_accuracy_experiments.md](project_pipeline_accuracy_experiments.md) — Why B-channel bundle and target-anchored boundaries failed; what to try next when redesigning
+- [feedback_quad_metric_and_warp_first.md](feedback_quad_metric_and_warp_first.md) — New-image quad isn't pure WH; fix warp before tuning colour areas; specific area expectations for 20260328_165926
+- [project_warp_bgr_subpixel_bias.md](project_warp_bgr_subpixel_bias.md) — GBA SP BGR sub-pixel ordering pulls warp's right edge inward 3-4 image-px; visible as dashes appearing 10-12 SP-px from edge instead of 8
+- [feedback_warp_alignment_target.md](feedback_warp_alignment_target.md) — Warp spikes target alignment quality, not aggregate; expect to co-tune correct/sample/quantize after warp changes
