@@ -1185,26 +1185,143 @@ function initialWarp(bgr: any, corners: Corners, scale: number): WarpResult {
 
 // ─── Sub-pixel inner-border edge detection ───
 
+/**
+ * Find the inner-border edge as a sub-pixel-precise threshold crossing.
+ *
+ * The profile is sampled going from frame-WH (HIGH in R-B+128) towards
+ * the inner-border DG (LOW in R-B+128). The edge is where the profile
+ * crosses below an adaptive threshold = midpoint(min, max) of the
+ * smoothed profile.
+ *
+ * Why the change from gradient-argmin: argmin-of-derivative locks onto
+ * the *steepest* descent point, which inside a single LCD pixel can be
+ * the BGR sub-pixel transition (e.g., DG's bright-B sub-pixel → DG's
+ * mid-G sub-pixel: a sharp ~120-unit drop in R-B+128 over 3 image-px),
+ * not the actual frame-WH → DG-inner-border boundary (a ~25-unit drop
+ * over 8 image-px between adjacent LCD pixels). Pre-smoothing by a full
+ * LCD-pixel period (`scale` image-px) reduces this within-pixel ringing,
+ * but the argmin can still latch onto an off-by-1-LCD-pixel position
+ * when the profile is asymmetric.
+ *
+ * Threshold crossing is more robust because it integrates the entire
+ * descent rather than just the steepest point. The smoothed profile
+ * crosses the midpoint exactly once between the frame-WH plateau and
+ * the DG plateau, and the sub-pixel position of that crossing is
+ * linearly interpolated between adjacent samples.
+ */
 function firstDarkFromFrame(
   profile: number[],
   smoothSigma = 1.5,
-  /**
-   * Width (in samples) of a box pre-smoothing pass that removes
-   * sub-pixel BGR oscillation from the R-B+128 channel. Pass `scale` (the
-   * image-pixels-per-LCD-pixel factor used for the warp output) so a full
-   * BGR period is averaged before the gaussian + argmin gradient detection.
-   * Default 0 disables the box pre-pass for backwards compat.
-   */
+  /** Width (in samples) of a box pre-smoothing pass — pass `scale`. */
   periodSmooth = 0,
 ): number {
   const prepped = periodSmooth > 1 ? boxSmooth(profile, periodSmooth) : profile;
   const p = gaussianFilter1d(prepped, smoothSigma);
-  // Compute diff
-  const d: number[] = [];
-  for (let i = 0; i < p.length - 1; i++) {
-    d.push(p[i + 1] - p[i]);
+  if (p.length < 2) return 0;
+  let pMin = Infinity;
+  let pMax = -Infinity;
+  for (const v of p) {
+    if (v < pMin) pMin = v;
+    if (v > pMax) pMax = v;
   }
-  // Find argmin
+  // Fall back to gradient-argmin when contrast is too low (e.g., on a
+  // search band where there's no real edge — typically returned as
+  // garbage anyway, but at least argmin is the historical behaviour).
+  if (pMax - pMin < 20) {
+    return argminOfDerivative(p);
+  }
+  const threshold = pMin + (pMax - pMin) * 0.5;
+  // Walk left-to-right; find the first index where p drops below threshold.
+  // Sub-pixel: linear interpolation between p[i-1] (above) and p[i] (below).
+  for (let i = 1; i < p.length; i++) {
+    if (p[i] < threshold && p[i - 1] >= threshold) {
+      const num = p[i - 1] - threshold;
+      const den = p[i - 1] - p[i];
+      const t = den > 1e-9 ? num / den : 0.5;
+      return (i - 1) + t;
+    }
+  }
+  // No crossing found: fall back to argmin-of-derivative.
+  return argminOfDerivative(p);
+}
+
+/**
+ * Find the *centroid* (geometric centre) of the inner-border DG strip in
+ * a 1D profile of the R-B+128 channel.
+ *
+ * The inner-border DG line is 1 LCD pixel = `scale` image-px wide, with
+ * R-B+128 averaging to a low value (~70-100) compared to the surrounding
+ * WH frame (~150-200). After smoothing the profile by `scale` to remove
+ * within-LCD-pixel BGR oscillation, the DG strip shows up as a single
+ * narrow dip in the profile.
+ *
+ * Algorithm:
+ *  1. Smooth profile by `scale` (one LCD-pixel period).
+ *  2. Threshold = midpoint of (smoothed_min, smoothed_max).
+ *  3. Find the contiguous below-threshold run *closest* to the expected
+ *     edge index. (Closest-to-expected, not largest, because in the
+ *     search band there may be other dark regions like camera content
+ *     or other features that incidentally cross the threshold.)
+ *  4. Return the geometric centre of that run.
+ *
+ * The user perceives the inner-border corner at the centroid of the DG
+ * pixel — about 4 image-px (= scale/2) inside the WH→DG outer edge.
+ * Returning the centroid (rather than the outer edge or argmin of the
+ * gradient) lets the magenta corner-marker land where the user expects.
+ */
+function innerBorderCentroid1D(
+  profile: number[],
+  scale: number,
+  expectedIdx: number,
+): number {
+  if (profile.length < 2) return expectedIdx;
+  const smoothed = boxSmooth(profile, scale);
+  const p = gaussianFilter1d(smoothed, 1.0);
+  let pMin = Infinity;
+  let pMax = -Infinity;
+  for (const v of p) {
+    if (v < pMin) pMin = v;
+    if (v > pMax) pMax = v;
+  }
+  if (pMax - pMin < 20) return expectedIdx;
+  const threshold = pMin + (pMax - pMin) * 0.5;
+
+  // Build runs of below-threshold samples.
+  const runs: Array<[number, number]> = [];
+  let curStart = -1;
+  for (let i = 0; i < p.length; i++) {
+    if (p[i] < threshold) {
+      if (curStart < 0) curStart = i;
+    } else {
+      if (curStart >= 0) {
+        runs.push([curStart, i - 1]);
+        curStart = -1;
+      }
+    }
+  }
+  if (curStart >= 0) runs.push([curStart, p.length - 1]);
+  if (runs.length === 0) return expectedIdx;
+
+  // Pick the run whose centre is closest to expectedIdx.
+  let best = runs[0];
+  let bestDist = Math.abs((best[0] + best[1]) / 2 - expectedIdx);
+  for (let i = 1; i < runs.length; i++) {
+    const c = (runs[i][0] + runs[i][1]) / 2;
+    const d = Math.abs(c - expectedIdx);
+    if (d < bestDist) {
+      bestDist = d;
+      best = runs[i];
+    }
+  }
+  // Centre of the run (in image-pixel-edge coords): pixels [a, b] inclusive
+  // span coordinates [a, b+1), centre at (a + b + 1) / 2.
+  return (best[0] + best[1] + 1) / 2;
+}
+
+function argminOfDerivative(p: number[]): number {
+  if (p.length < 2) return 0;
+  const d: number[] = [];
+  for (let i = 0; i < p.length - 1; i++) d.push(p[i + 1] - p[i]);
   let k = 0;
   let minVal = d[0];
   for (let i = 1; i < d.length; i++) {
@@ -1213,7 +1330,6 @@ function firstDarkFromFrame(
       k = i;
     }
   }
-  // Quadratic interpolation
   let delta = 0.0;
   if (k > 0 && k < d.length - 1) {
     const d0 = d[k - 1];
@@ -1281,22 +1397,27 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
   const rTop: [number, number] = [Math.max(0, 10 * scale), midRow];
   const rBot: [number, number] = [midRow, Math.min(H, (SCREEN_H - 10) * scale)];
 
+  // The detector returns the *centroid* of the inner-border DG pixel
+  // (not its outer edge). For a correctly aligned warp where the outer
+  // edge of the DG row is at INNER_*  * scale, the centroid is at
+  // INNER_* * scale + scale/2. We pass the expected-centroid position
+  // (in profile-relative coords) so the run-pick logic preferentially
+  // selects the correct dark band over any spurious dark patches.
+  const halfDg = scale / 2;
   function topY(c0: number, c1: number): number {
     const exp = INNER_TOP * scale;
     const r1 = Math.max(0, exp - srch);
     const r2 = Math.min(H, exp + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
-    return r1 + firstDarkFromFrame(profile, 1.5, scale);
+    return r1 + innerBorderCentroid1D(profile, scale, exp + halfDg - r1);
   }
 
   function botY(c0: number, c1: number): number {
-    const expFrame = (INNER_BOT + 1) * scale;
-    const r1 = Math.max(0, expFrame - srch);
-    const r2 = Math.min(H, expFrame + srch);
+    const exp = INNER_BOT * scale;
+    const r1 = Math.max(0, exp - srch);
+    const r2 = Math.min(H, exp + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
-    const reversed = [...profile].reverse();
-    const idx = firstDarkFromFrame(reversed, 1.5, scale);
-    return (r2 - 1) - idx - (scale - 1);
+    return r1 + innerBorderCentroid1D(profile, scale, exp + halfDg - r1);
   }
 
   function leftX(r0: number, r1_: number): number {
@@ -1304,17 +1425,15 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const c1 = Math.max(0, exp - srch);
     const c2 = Math.min(W, exp + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
-    return c1 + firstDarkFromFrame(profile, 1.5, scale);
+    return c1 + innerBorderCentroid1D(profile, scale, exp + halfDg - c1);
   }
 
   function rightX(r0: number, r1_: number): number {
-    const expFrame = (INNER_RIGHT + 1) * scale;
-    const c1 = Math.max(0, expFrame - srch);
-    const c2 = Math.min(W, expFrame + srch);
+    const exp = INNER_RIGHT * scale;
+    const c1 = Math.max(0, exp - srch);
+    const c2 = Math.min(W, exp + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
-    const reversed = [...profile].reverse();
-    const idx = firstDarkFromFrame(reversed, 1.5, scale);
-    return (c2 - 1) - idx - (scale - 1);
+    return c1 + innerBorderCentroid1D(profile, scale, exp + halfDg - c1);
   }
 
   const tlY = topY(cLft[0], cLft[1]);
