@@ -695,15 +695,38 @@ function findDarkCentroid2D(
       arr[i] = s / odd;
     }
   };
+  // Smooth the *long*-axis profile only. The long axis (40 image-px)
+  // can have multiple periodic dark/bright sub-bands from LCD inter-
+  // pixel gaps + sub-pixel bleed; smoothing by `scale` bridges them.
+  // Don't smooth the short axis — the dash is only 16-px wide there
+  // and smoothing biases the centroid by 3-4 px when the dash's outer
+  // transitions are asymmetric (which they often are, due to AA).
   if (yHalf >= xHalf) {
-    boxSmoothInPlace(rowMean, scale); // long axis is Y
+    boxSmoothInPlace(rowMean, scale);
   } else {
-    boxSmoothInPlace(colMean, scale); // long axis is X
+    boxSmoothInPlace(colMean, scale);
   }
 
-  // Helper: largest-contiguous run of indices where profile[i] < threshold.
-  // Returns [first, last] inclusive, or null if no such run.
-  const largestRun = (profile: Float64Array): [number, number] | null => {
+  // Helper: largest "gap-bridged" run of indices where profile[i] is
+  // mostly < threshold. Allow up to gapTol consecutive above-threshold
+  // samples within a run; this stitches across the small bright inter-
+  // LCD-pixel gap between two LCD-rows of a dash (a dash is 16-px tall
+  // = 2 LCD rows, with a ~2-3-px brighter strip between them on the
+  // GBA SP, which would otherwise split the dash into two separate runs
+  // with neither being the full dash).
+  //
+  // Use gap-bridging *only on the Y axis*. On Y, the gap is a real LCD-
+  // row separator within the dash. On X, there's no analogous "intra-
+  // dash gap" — what looks like a gap on X is actually the DG cap of
+  // the adjacent dash, which the bridging would erroneously include
+  // and pull the X centroid toward the cap. (Empirically: bridging X
+  // adds ~+3 image-px bias on LEFT/RIGHT dashes by extending the run
+  // through DG into the next-out-frame structure.)
+  const Y_GAP_TOL = Math.max(1, Math.floor(scale / 2));
+  const largestRun = (
+    profile: Float64Array,
+    gapTol: number,
+  ): [number, number] | null => {
     let pMin = Infinity;
     let pMax = -Infinity;
     for (const v of profile) {
@@ -715,23 +738,32 @@ function findDarkCentroid2D(
     let bestLen = 0;
     let bestRun: [number, number] | null = null;
     let curStart = -1;
+    let curEnd = -1;
+    let aboveCount = 0;
     for (let i = 0; i < profile.length; i++) {
       if (profile[i] < threshold) {
         if (curStart < 0) curStart = i;
-        const len = i - curStart + 1;
+        curEnd = i;
+        aboveCount = 0;
+        const len = curEnd - curStart + 1;
         if (len > bestLen) {
           bestLen = len;
-          bestRun = [curStart, i];
+          bestRun = [curStart, curEnd];
         }
       } else {
-        curStart = -1;
+        aboveCount++;
+        if (aboveCount > gapTol) {
+          curStart = -1;
+          curEnd = -1;
+          aboveCount = 0;
+        }
       }
     }
     return bestRun;
   };
 
-  const rowRun = largestRun(rowMean);
-  const colRun = largestRun(colMean);
+  const rowRun = largestRun(rowMean, Y_GAP_TOL);
+  const colRun = largestRun(colMean, 0);
   if (!rowRun || !colRun) return null;
 
   // Centre of the contiguous run, in image-pixel-edge coords (centre of
