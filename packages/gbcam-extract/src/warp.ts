@@ -345,29 +345,27 @@ function addDetectionDebugImage(
   for (const [x, y] of borderPoints.left) setPx(x, y, red);
   for (const [x, y] of borderPoints.right) setPx(x + scale - 1, y, red);
 
-  // ── Inner-border corner detections — marker = 4 image-pixel corners
-  //    of the 8×8 GB pixel that contains the detected sub-pixel position.
-  //    TL of the GB pixel = magenta; TR/BR/BL = orange.
-  // Use Math.round (not floor) so a sub-pixel detection like 119.91 maps
-  // to GB row 15 (the row whose top edge is at y=120) rather than to
-  // GB row 14. Floor was producing markers a full GB pixel off when the
-  // detected sub-pixel landed just inside the wrong neighbour.
-  const cornerMarkerForGBPixel = (sub: [number, number]) => {
-    const gbCol = Math.round(sub[0] / scale);
-    const gbRow = Math.round(sub[1] / scale);
-    const x0 = gbCol * scale;       // image col of GB-pixel TL
-    const y0 = gbRow * scale;       // image row of GB-pixel TL
+  // ── Inner-border corner detections — 4 image-pixel corners of an 8×8
+  //    box whose TL is the detected sub-pixel position rounded to the
+  //    nearest image pixel. NO snapping to GB-pixel grid: the magenta
+  //    dot lands exactly where the detector thinks the corner is, to
+  //    image-pixel precision (which is much sharper than half-a-GB-pixel
+  //    precision when judging alignment by eye).
+  //    TL of the 8×8 box = magenta; TR/BR/BL = orange.
+  const cornerMarkerForDetection = (sub: [number, number]) => {
+    const x0 = Math.round(sub[0]);   // detected image col, no GB snap
+    const y0 = Math.round(sub[1]);
     const x1 = x0 + scale - 1;
     const y1 = y0 + scale - 1;
-    setPx(x0, y0, magenta);          // TL of the 8×8 area
-    setPx(x1, y0, orange);           // TR
-    setPx(x1, y1, orange);           // BR
-    setPx(x0, y1, orange);           // BL
+    setPx(x0, y0, magenta);          // detection point
+    setPx(x1, y0, orange);
+    setPx(x1, y1, orange);
+    setPx(x0, y1, orange);
   };
-  cornerMarkerForGBPixel(corners.TL);
-  cornerMarkerForGBPixel(corners.TR);
-  cornerMarkerForGBPixel(corners.BR);
-  cornerMarkerForGBPixel(corners.BL);
+  cornerMarkerForDetection(corners.TL);
+  cornerMarkerForDetection(corners.TR);
+  cornerMarkerForDetection(corners.BR);
+  cornerMarkerForDetection(corners.BL);
 
   // ── Dash search boxes + expected + detected ──
   // Long axis ±4 GB-px (32 image-px) — fat dashes' BK body is up to 5
