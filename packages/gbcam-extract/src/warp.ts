@@ -335,21 +335,26 @@ function addDetectionDebugImage(
   dashLine(expRight, expTop, expRight, expBottom, green);
 
   // ── Inner-border multi-point detections (red 1×1 dots) ──
-  for (const [x, y] of [
-    ...borderPoints.top,
-    ...borderPoints.bottom,
-    ...borderPoints.left,
-    ...borderPoints.right,
-  ]) {
-    setPx(x, y, red);
-  }
+  // findBorderPoints returns positions at the *inner* edge of the DG
+  // pixel for top/left and at the *outer* edge for bottom/right. To make
+  // the visualization consistent with the green outer-edge rectangle, we
+  // shift the bottom/right detections by `scale - 1` image-px so they
+  // also land on the outer edge of their inner-border pixel.
+  for (const [x, y] of borderPoints.top) setPx(x, y, red);
+  for (const [x, y] of borderPoints.bottom) setPx(x, y + scale - 1, red);
+  for (const [x, y] of borderPoints.left) setPx(x, y, red);
+  for (const [x, y] of borderPoints.right) setPx(x + scale - 1, y, red);
 
-  // ── Inner-border corner detections — marker = 4 corners of the 8×8
-  //    GB pixel that contains the detected sub-pixel position.
+  // ── Inner-border corner detections — marker = 4 image-pixel corners
+  //    of the 8×8 GB pixel that contains the detected sub-pixel position.
   //    TL of the GB pixel = magenta; TR/BR/BL = orange.
+  // Use Math.round (not floor) so a sub-pixel detection like 119.91 maps
+  // to GB row 15 (the row whose top edge is at y=120) rather than to
+  // GB row 14. Floor was producing markers a full GB pixel off when the
+  // detected sub-pixel landed just inside the wrong neighbour.
   const cornerMarkerForGBPixel = (sub: [number, number]) => {
-    const gbCol = Math.floor(sub[0] / scale);
-    const gbRow = Math.floor(sub[1] / scale);
+    const gbCol = Math.round(sub[0] / scale);
+    const gbRow = Math.round(sub[1] / scale);
     const x0 = gbCol * scale;       // image col of GB-pixel TL
     const y0 = gbRow * scale;       // image row of GB-pixel TL
     const x1 = x0 + scale - 1;
@@ -567,10 +572,34 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
 }
 
 /**
- * 2D dark-weighted centroid in a (2*xHalf+1) × (2*yHalf+1) box around the
- * expected position. Returns null if no pixel in the box falls below the
- * dark threshold.
+ * 2D dash centre detection using a *bbox-of-row-means / col-means* approach.
+ *
+ * Why not a darkness-weighted 2D centroid: BK pixels in a real warp are
+ * not uniformly dark. On `zelda-poster-3` the bottom-left dash's BK body
+ * has gray ~110-130 with a vertical gradient — the upper rows are AA-
+ * brighter (gray ~140-160), the middle is ~120, the lower rows are dark
+ * (~110). A weighted centroid biases ~3-4 px toward the dark end.
+ *
+ * The bbox approach is unbiased w.r.t. internal gradients: for each row in
+ * the search box compute the row-mean gray; for each col compute col-mean
+ * gray; threshold both at the local dynamic-range midpoint; the geometric
+ * centre of the contiguous below-threshold rows/cols is the dash centre.
+ *
+ * Algorithm:
+ *  1. Find local min/max in box. Abort if contrast < 30.
+ *  2. Compute row-mean gray (1D along Y) and col-mean gray (1D along X).
+ *  3. Threshold each 1D profile at its own midpoint:
+ *       rowThresh = rowMin + 0.5 × (rowMax − rowMin)
+ *  4. Find the largest contiguous run of below-threshold rows. The dash's
+ *     vertical extent is from the first to the last row in that run.
+ *     (Largest-contiguous handles cases where DG caps create separate
+ *     dark bands above/below the BK body — we want the BK body.)
+ *  5. Same for cols.
+ *  6. Centre = midpoint of the row run, midpoint of the col run.
  */
+const DASH_BK_MIN_CONTRAST = 30;
+const DASH_BK_PROFILE_THRESH_FRAC = 0.5;
+
 function findDarkCentroid2D(
   gray: any,
   expectedX: number,
@@ -583,20 +612,69 @@ function findDarkCentroid2D(
   const yLo = Math.max(0, Math.floor(expectedY - yHalf));
   const yHi = Math.min(gray.rows, Math.ceil(expectedY + yHalf) + 1);
   if (xLo >= xHi || yLo >= yHi) return null;
-  let sumW = 0;
-  let sumWX = 0;
-  let sumWY = 0;
+  const W = xHi - xLo;
+  const H = yHi - yLo;
+
+  // Pass 1: row means, col means, overall min/max.
+  const rowSum = new Float64Array(H);
+  const colSum = new Float64Array(W);
+  let minVal = 255;
+  let maxVal = 0;
   for (let y = yLo; y < yHi; y++) {
+    const ry = y - yLo;
     for (let x = xLo; x < xHi; x++) {
       const v = gray.ucharAt(y, x);
-      const w = Math.max(0, DASH_DARK_THRESHOLD - v);
-      sumW += w;
-      sumWX += w * (x + 0.5); // Use pixel-centre coords (+0.5)
-      sumWY += w * (y + 0.5);
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+      rowSum[ry] += v;
+      colSum[x - xLo] += v;
     }
   }
-  if (sumW < 1) return null;
-  return [sumWX / sumW, sumWY / sumW];
+  if (maxVal - minVal < DASH_BK_MIN_CONTRAST) return null;
+  const rowMean = new Float64Array(H);
+  for (let i = 0; i < H; i++) rowMean[i] = rowSum[i] / W;
+  const colMean = new Float64Array(W);
+  for (let i = 0; i < W; i++) colMean[i] = colSum[i] / H;
+
+  // Helper: largest-contiguous run of indices where profile[i] < threshold.
+  // Returns [first, last] inclusive, or null if no such run.
+  const largestRun = (profile: Float64Array): [number, number] | null => {
+    let pMin = Infinity;
+    let pMax = -Infinity;
+    for (const v of profile) {
+      if (v < pMin) pMin = v;
+      if (v > pMax) pMax = v;
+    }
+    if (pMax - pMin < DASH_BK_MIN_CONTRAST) return null;
+    const threshold = pMin + (pMax - pMin) * DASH_BK_PROFILE_THRESH_FRAC;
+    let bestLen = 0;
+    let bestRun: [number, number] | null = null;
+    let curStart = -1;
+    for (let i = 0; i < profile.length; i++) {
+      if (profile[i] < threshold) {
+        if (curStart < 0) curStart = i;
+        const len = i - curStart + 1;
+        if (len > bestLen) {
+          bestLen = len;
+          bestRun = [curStart, i];
+        }
+      } else {
+        curStart = -1;
+      }
+    }
+    return bestRun;
+  };
+
+  const rowRun = largestRun(rowMean);
+  const colRun = largestRun(colMean);
+  if (!rowRun || !colRun) return null;
+
+  // Centre of the contiguous run, in image-pixel-edge coords (centre of
+  // pixel N is at N + 0.5; bbox spanning pixels [a, b] inclusive has
+  // centre at (a + b + 1) / 2).
+  const cx = xLo + (colRun[0] + colRun[1] + 1) / 2;
+  const cy = yLo + (rowRun[0] + rowRun[1] + 1) / 2;
+  return [cx, cy];
 }
 
 /**
