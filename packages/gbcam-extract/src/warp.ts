@@ -1981,8 +1981,6 @@ function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResul
 }
 
 function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): number | null {
-  const cv = getCV();
-
   let detection: CornerDetection;
   try {
     detection = findScreenCornersWithMetrics(bgr, threshVal);
@@ -1993,53 +1991,50 @@ function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): numb
   // If the quad detection itself is poor (e.g., contour fell back to the
   // image bounding box because the source photo's frame couldn't be
   // separated by brightness threshold), no value of k1 will produce a
-  // meaningful inner-border curvature. Penalise the score heavily so a
-  // less-distorted k1 (closer to 0) is preferred — over-correcting lens
-  // distortion on a fundamentally bad detection only makes the warp
-  // worse. quadScore > 0.15 is the existing "low quality" warning
-  // threshold; we add 100 × that to the score so a bad detection at
-  // any k1 dominates over the inner-border deviation term.
+  // meaningful warp. Penalise the score heavily so a less-distorted k1
+  // (closer to 0) is preferred — over-correcting lens distortion on a
+  // fundamentally bad detection only makes the warp worse. quadScore
+  // > 0.15 is the existing "low quality" warning threshold; we add
+  // 100 × that to the score so a bad detection at any k1 dominates
+  // over the dash-residual term.
   const quadPenalty = 100 * detection.score;
 
   const initial = initialWarp(bgr, detection.ordered, scale);
   let score: number | null = null;
   try {
-    const rb = withMats((track, untrack) => {
-      const rgb = track(new cv.Mat());
-      cv.cvtColor(initial.warped, rgb, cv.COLOR_BGR2RGB);
-      const out = new cv.Mat(initial.warped.rows, initial.warped.cols, cv.CV_8UC1);
-      const rgbData = rgb.data;
-      const outData = out.data;
-      for (let i = 0; i < initial.warped.rows * initial.warped.cols; i++) {
-        const r = rgbData[i * 3];
-        const b = rgbData[i * 3 + 2];
-        outData[i] = Math.max(0, Math.min(255, r - b + 128));
+    // Score the lens-corrected warp by the sum of dash residual magnitudes.
+    //
+    // Why dashes (vs the inner-border curvature this used to score):
+    //  • The 17 horizontal × 14 vertical interior dashes are pure-black
+    //    BK on the WH/DG frame, with no BGR sub-pixel asymmetry — their
+    //    detected centroids are unbiased ground truth in both axes.
+    //  • The inner-border R-B+128 detector has a documented ~2-3-px bias
+    //    (per the corner-detector work in the previous commit) that
+    //    propagated into the lens score, biasing k1 toward values that
+    //    cancelled that bias rather than the true lens distortion.
+    //  • Dashes are 54 sample points distributed around the perimeter,
+    //    far better-conditioned than 4 averaged side-deviation numbers
+    //    when fitting a single radial-distortion parameter.
+    //
+    // Missing dashes (detector returned null) are penalised by a large
+    // fixed cost so a k1 that loses dash detection is always worse than
+    // one that keeps all 54 dashes detected even with several-px residuals.
+    const dashes = detectDashesOnWarp(initial.warped, scale);
+    let residualSum = 0;
+    let missing = 0;
+    for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
+      for (const d of arr) {
+        if (d.detected === null) {
+          missing++;
+        } else {
+          const dx = d.detected[0] - d.expected[0];
+          const dy = d.detected[1] - d.expected[1];
+          residualSum += Math.hypot(dx, dy);
+        }
       }
-      return untrack(out);
-    });
-    const points = findBorderPoints(rb, scale);
-    rb.delete();
-
-    const expTop = INNER_TOP * scale;
-    const expBot = INNER_BOT * scale;
-    const expLeft = INNER_LEFT * scale;
-    const expRight = INNER_RIGHT * scale;
-    const meanDev = (
-      pts: Array<[number, number]>,
-      idx: 0 | 1,
-      target: number,
-    ): number => {
-      if (pts.length === 0) return 0;
-      let sum = 0;
-      for (const p of pts) sum += p[idx] - target;
-      return sum / pts.length;
-    };
-    const cTop = meanDev(points.top, 1, expTop);
-    const cBot = meanDev(points.bottom, 1, expBot);
-    const cLeft = meanDev(points.left, 0, expLeft);
-    const cRight = meanDev(points.right, 0, expRight);
-    const borderScore = Math.abs(cTop) + Math.abs(cBot) + Math.abs(cLeft) + Math.abs(cRight);
-    score = borderScore + quadPenalty;
+    }
+    const MISSING_DASH_PENALTY = 30; // image-px equivalent per missing dash
+    score = residualSum + missing * MISSING_DASH_PENALTY + quadPenalty;
   } finally {
     initial.warped.delete();
     initial.M.delete();

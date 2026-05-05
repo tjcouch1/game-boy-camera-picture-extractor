@@ -4,7 +4,7 @@ PIPELINE RUN
   Output dir: test-output\thing-1
 
 PIPELINE DIAGNOSTICS
-  [warp] lens-distortion: k1=-0.0100 score=7.23 (searched 22 candidates)
+  [warp] lens-distortion: k1=-0.0100 score=94.96 (searched 22 candidates)
   [warp] corner detection: area=1396907 aspect=1.110 (target 1.111) thresh=190 score=0.0351
   [warp] detected source corners (TL TR BR BL): (23,19) (1271,36) (1252,1155) (15,1152)
   [warp] pass 1 edge curvatures: top=-0.21 bot=-0.29 left=-0.66 right=2.56
