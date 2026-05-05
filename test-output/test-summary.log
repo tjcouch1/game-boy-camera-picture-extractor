@@ -6,12 +6,12 @@ TEST SUMMARY
 
   Test             Matching            Different           Verdict
   ----------------------------------------------------------------
-  thing-1          14195 ( 99.02%)     141 (  0.98%)   FAIL
-  thing-2          14326 ( 99.93%)      10 (  0.07%)   FAIL
-  thing-3          14326 ( 99.93%)      10 (  0.07%)   FAIL
-  zelda-poster-1   14181 ( 98.92%)     155 (  1.08%)   FAIL
-  zelda-poster-2   14156 ( 98.74%)     180 (  1.26%)   FAIL
-  zelda-poster-3   11838 ( 82.58%)    2498 ( 17.42%)   FAIL
+  thing-1          14194 ( 99.01%)     142 (  0.99%)   FAIL
+  thing-2          14274 ( 99.57%)      62 (  0.43%)   FAIL
+  thing-3          14325 ( 99.92%)      11 (  0.08%)   FAIL
+  zelda-poster-1   14144 ( 98.66%)     192 (  1.34%)   FAIL
+  zelda-poster-2   14141 ( 98.64%)     195 (  1.36%)   FAIL
+  zelda-poster-3   12081 ( 84.27%)    2255 ( 15.73%)   FAIL
 
   0/8 passed
 

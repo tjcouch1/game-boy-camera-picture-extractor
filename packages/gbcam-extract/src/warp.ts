@@ -144,8 +144,8 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   currentM.delete();
 
   // d — Polynomial post-correction. Pass-2's homography (8 DOF) cannot fully
-  // fit non-homographic residuals in the dashes. Fit a degree-2 polynomial
-  // (12 DOF total: 6 per axis) that maps canonical → detected dash positions
+  // fit non-homographic residuals in the dashes. Fit a degree-3 polynomial
+  // (20 DOF total: 10 per axis) that maps canonical → detected dash positions
   // and apply it via cv.remap. Reduces residual non-homographic distortion
   // (lens curvature beyond what k1 captures, screen non-flatness, etc.).
   {
@@ -2421,9 +2421,28 @@ function applyPolynomialDashCorrection(
       }
     }
   }
+
+  // Anchor the polynomial to identity at the warp's outer corners and
+  // mid-edges. Without these anchors, the cubic terms swing wildly far
+  // from the dash perimeter (camera content gets distorted by 3-4
+  // image-px in the centre of the warp). Adding 8 "no-motion" constraints
+  // at the warp's outer edge keeps the polynomial near-identity in the
+  // camera area while still fitting the dash residuals at the perimeter.
+  const anchors: Array<[number, number]> = [
+    [0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1],
+    [(W - 1) / 2, 0], [W - 1, (H - 1) / 2],
+    [(W - 1) / 2, H - 1], [0, (H - 1) / 2],
+  ];
+  for (const [ax, ay] of anchors) {
+    ex.push(ax); ey.push(ay);
+    dx.push(ax); dy.push(ay);
+  }
   const N = ex.length;
   // Degree-3 polynomial: 10 coefficients per axis (1, u, v, u², uv, v²,
-  // u³, u²v, uv², v³). Need ≥ 20 dashes to fit safely; we have 54.
+  // u³, u²v, uv², v³). Captures keystone, barrel, fan shear, and cubic
+  // residuals. Degree-2 was tried but couldn't fit thing-2's residual
+  // pattern (aggregate regressed ~1300 px on that image). Degree-3 fits
+  // 54 dashes well-overdetermined (54 vs 20 DOF). Need ≥ 20 dashes.
   const NUM_COEFFS = 10;
   if (N < NUM_COEFFS * 2) return null;
 
