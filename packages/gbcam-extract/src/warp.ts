@@ -751,7 +751,24 @@ function findDarkCentroid2D(
   // and pull the X centroid toward the cap. (Empirically: bridging X
   // adds ~+3 image-px bias on LEFT/RIGHT dashes by extending the run
   // through DG into the next-out-frame structure.)
-  const Y_GAP_TOL = Math.max(1, Math.floor(scale / 2));
+  // Gap tolerances for bridging brief above-threshold samples within a
+  // contiguous below-threshold run.
+  //
+  // LONG axis: scale/2 (= 4 image-px at scale=8). The dash body is two
+  // LCD pixels long along the long axis; between them sits a ~2-3-px
+  // brighter inter-LCD-pixel gap. Smoothing reduces this but doesn't
+  // always fully bridge it, so explicit bridging at scale/2 catches it.
+  //
+  // SHORT axis: smaller (= 2 image-px at scale=8). Bridges:
+  //   - small screen scratches/dust on the dash body (1-3 px wide bright
+  //     spots that would otherwise split the run);
+  //   - the LCD inter-pixel gap on the perpendicular axis (~1-2 px).
+  // Stays small enough to NOT bridge into adjacent structures (e.g.,
+  // a DG cap separated from the body by a 5+ px bright frame band) —
+  // those gaps are wider than this tolerance.
+  const LONG_AXIS_GAP_TOL = Math.max(1, Math.floor(scale / 2));
+  const SHORT_AXIS_GAP_TOL = Math.max(1, Math.floor(scale / 4));
+
   const largestRun = (
     profile: Float64Array,
     gapTol: number,
@@ -795,10 +812,13 @@ function findDarkCentroid2D(
   // For vertical dashes (yHalf > xHalf): rowMean is the long-axis profile,
   // colMean is the short-axis profile. For horizontal dashes (yHalf < xHalf):
   // colMean is the long-axis profile, rowMean is the short-axis profile.
-  const rowFrac = yHalf >= xHalf ? DASH_BK_PROFILE_THRESH_FRAC_LONG : DASH_BK_PROFILE_THRESH_FRAC_SHORT;
-  const colFrac = yHalf >= xHalf ? DASH_BK_PROFILE_THRESH_FRAC_SHORT : DASH_BK_PROFILE_THRESH_FRAC_LONG;
-  const rowRun = largestRun(rowMean, Y_GAP_TOL, rowFrac);
-  const colRun = largestRun(colMean, 0, colFrac);
+  const isVertical = yHalf >= xHalf;
+  const rowFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_LONG : DASH_BK_PROFILE_THRESH_FRAC_SHORT;
+  const colFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_SHORT : DASH_BK_PROFILE_THRESH_FRAC_LONG;
+  const rowGap = isVertical ? LONG_AXIS_GAP_TOL : SHORT_AXIS_GAP_TOL;
+  const colGap = isVertical ? SHORT_AXIS_GAP_TOL : LONG_AXIS_GAP_TOL;
+  const rowRun = largestRun(rowMean, rowGap, rowFrac);
+  const colRun = largestRun(colMean, colGap, colFrac);
   if (!rowRun || !colRun) return null;
 
   // Centre of the contiguous run, in image-pixel-edge coords (centre of
