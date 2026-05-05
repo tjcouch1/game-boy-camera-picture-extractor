@@ -129,7 +129,7 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
     currentWarped = result.refined;
   }
 
-  // c — Refine (pass 2: multi-anchor homography over corners + dashes
+  // c — Refine (pass 2: dash-anchored homography over corners + dashes
   //                + inner-border points; corners weighted higher)
   {
     const result = refineWarpMultiAnchor(bgr, currentM, currentWarped, scale, corners);
@@ -142,6 +142,19 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
 
   bgr.delete();
   currentM.delete();
+
+  // d — Polynomial post-correction. Pass-2's homography (8 DOF) cannot fully
+  // fit non-homographic residuals in the dashes. Fit a degree-2 polynomial
+  // (12 DOF total: 6 per axis) that maps canonical → detected dash positions
+  // and apply it via cv.remap. Reduces residual non-homographic distortion
+  // (lens curvature beyond what k1 captures, screen non-flatness, etc.).
+  {
+    const corrected = applyPolynomialDashCorrection(currentWarped, scale, dbg);
+    if (corrected !== null) {
+      currentWarped.delete();
+      currentWarped = corrected;
+    }
+  }
 
   // Convert back to RGBA ImageData
   const rgba = new cv.Mat();
@@ -1952,15 +1965,11 @@ function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResul
   let bestScore = Infinity;
   let bestQuadScore = Infinity;
 
-  // Track the quadScore at the best k1 so we can fall back to no lens
-  // correction when source-corner detection fails on every k1.
   const evalAt = (k1: number): { score: number; quadScore: number } | null => {
     evaluated++;
     let undistorted: any = null;
     try {
       undistorted = undistortBgr(bgr, K, k1);
-      // Get raw scores (border deviation + quad-detection score) so we
-      // can decide later whether to trust the result at all.
       let detection: CornerDetection;
       try {
         detection = findScreenCornersWithMetrics(undistorted, threshVal);
@@ -1998,15 +2007,6 @@ function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResul
     }
   }
 
-  // If even the best k1 leaves the source-corner detection unreliable
-  // (quadScore > 0.3 — well above the 0.15 "low quality" warning), the
-  // lens-correction search is converging on noise. Falling back to k1=0
-  // at least avoids the *extra* distortion from an arbitrary chosen k1
-  // (often the range boundary, e.g., -0.2 = max barrel correction) when
-  // the underlying corner detection is fundamentally broken for this
-  // photo. The downstream pipeline still produces a recognisable warp
-  // even if the corners are slightly off, rather than the heavily-bowed
-  // output that an extreme k1 produces.
   const QUAD_FALLBACK_THRESH = 0.3;
   if (bestQuadScore > QUAD_FALLBACK_THRESH) {
     bestK1 = 0;
@@ -2376,5 +2376,170 @@ function computeBorderMetrics(
     },
     refined: refinedOk,
   };
+}
+
+// ─── Polynomial post-correction ───
+//
+// Fits a 2D degree-2 polynomial that maps canonical (expected) dash positions
+// to detected positions. Applies the polynomial via cv.remap to redistribute
+// the warp's pixels so the dashes land at canonical positions.
+//
+// Why a polynomial: pass-2's RANSAC fits a single homography (8 DOF) to
+// 54 dash constraints. The remaining residuals reflect non-homographic
+// distortion (lens curvature beyond what k1 corrects, screen non-flatness,
+// etc.). A degree-2 polynomial adds 4 DOF per axis (8 total) on top of
+// the homography's affine-ish part, capturing the residual.
+//
+// The polynomial is fit on (expected, detected) pairs in WARP-SPACE
+// coordinates so the remap is applied in warp-space — no need to back-
+// project to source coords.
+//
+// Returns null if the fit can't be performed safely (too few inliers,
+// numerical issues), in which case the caller keeps the un-corrected warp.
+function applyPolynomialDashCorrection(
+  warpedBgr: any,
+  scale: number,
+  dbg: DebugCollector | undefined,
+): any {
+  const cv = getCV();
+  const W = warpedBgr.cols;
+  const H = warpedBgr.rows;
+
+  // Detect dashes; collect (expected, detected) pairs.
+  const dashes = detectDashesOnWarp(warpedBgr, scale);
+  const ex: number[] = [];
+  const ey: number[] = [];
+  const dx: number[] = [];
+  const dy: number[] = [];
+  for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
+    for (const d of arr) {
+      if (d.detected !== null) {
+        ex.push(d.expected[0]);
+        ey.push(d.expected[1]);
+        dx.push(d.detected[0]);
+        dy.push(d.detected[1]);
+      }
+    }
+  }
+  const N = ex.length;
+  // Degree-3 polynomial: 10 coefficients per axis (1, u, v, u², uv, v²,
+  // u³, u²v, uv², v³). Need ≥ 20 dashes to fit safely; we have 54.
+  const NUM_COEFFS = 10;
+  if (N < NUM_COEFFS * 2) return null;
+
+  // Normalize coordinates to roughly [-1, 1] for numerical stability.
+  const cx = W / 2;
+  const cy = H / 2;
+  const sx = W / 2;
+  const sy = H / 2;
+  const u = ex.map((v) => (v - cx) / sx); // normalized expected x
+  const v = ey.map((vv) => (vv - cy) / sy); // normalized expected y
+
+  const polyTerms = (un: number, vn: number): number[] => {
+    const u2 = un * un;
+    const v2 = vn * vn;
+    return [
+      1, un, vn, u2, un * vn, v2,
+      u2 * un, u2 * vn, un * v2, v2 * vn,
+    ];
+  };
+
+  // Design matrix A (N × NUM_COEFFS).
+  const A = cv.matFromArray(
+    N, NUM_COEFFS, cv.CV_64F,
+    Array.from({ length: N }, (_, i) => polyTerms(u[i], v[i])).flat(),
+  );
+  const bX = cv.matFromArray(N, 1, cv.CV_64F, dx);
+  const bY = cv.matFromArray(N, 1, cv.CV_64F, dy);
+  const cX = new cv.Mat();
+  const cY = new cv.Mat();
+  let ok = false;
+  try {
+    ok = cv.solve(A, bX, cX, cv.DECOMP_NORMAL) && cv.solve(A, bY, cY, cv.DECOMP_NORMAL);
+  } catch {
+    ok = false;
+  }
+  A.delete();
+  bX.delete();
+  bY.delete();
+  if (!ok) {
+    cX.delete();
+    cY.delete();
+    return null;
+  }
+
+  const coefX: number[] = [];
+  const coefY: number[] = [];
+  for (let i = 0; i < NUM_COEFFS; i++) {
+    coefX.push(cX.doubleAt(i, 0));
+    coefY.push(cY.doubleAt(i, 0));
+  }
+  cX.delete();
+  cY.delete();
+
+  const evalPoly = (coef: number[], un: number, vn: number): number => {
+    const t = polyTerms(un, vn);
+    let s = 0;
+    for (let i = 0; i < NUM_COEFFS; i++) s += coef[i] * t[i];
+    return s;
+  };
+
+  // Sanity-check the polynomial fit: maximum |poly(expected) − detected|
+  // should be small (< 5 image-px). If much larger, the fit is bad and
+  // applying it would warp the image unpredictably; skip in that case.
+  let maxFitError = 0;
+  for (let i = 0; i < N; i++) {
+    const xPred = evalPoly(coefX, u[i], v[i]);
+    const yPred = evalPoly(coefY, u[i], v[i]);
+    const e = Math.hypot(xPred - dx[i], yPred - dy[i]);
+    if (e > maxFitError) maxFitError = e;
+  }
+  if (maxFitError > 5) {
+    if (dbg) dbg.log(`[warp] polyCorrection: skipped (maxFitError=${maxFitError.toFixed(2)} > 5)`);
+    return null;
+  }
+
+  if (dbg) {
+    dbg.log(
+      `[warp] polyCorrection: fit on ${N} dashes, maxFitError=${maxFitError.toFixed(2)} px, ` +
+        `coefX=[${coefX.map((c) => c.toFixed(3)).join(", ")}], ` +
+        `coefY=[${coefY.map((c) => c.toFixed(3)).join(", ")}]`,
+    );
+    dbg.setMetric("warp", "polyCorrection", {
+      n: N,
+      maxFitError: Number(maxFitError.toFixed(3)),
+      coefX: coefX.map((c) => Number(c.toFixed(5))),
+      coefY: coefY.map((c) => Number(c.toFixed(5))),
+    });
+  }
+
+  // Build remap: for each output pixel (x, y), the input pixel that maps
+  // there is at poly(x, y). cv.remap pulls input[mapX(x,y), mapY(x,y)] to
+  // output[x, y].
+  const mapX = new cv.Mat(H, W, cv.CV_32FC1);
+  const mapY = new cv.Mat(H, W, cv.CV_32FC1);
+  const mxData = mapX.data32F as Float32Array;
+  const myData = mapY.data32F as Float32Array;
+  for (let y = 0; y < H; y++) {
+    const vn = (y - cy) / sy;
+    for (let x = 0; x < W; x++) {
+      const un = (x - cx) / sx;
+      mxData[y * W + x] = evalPoly(coefX, un, vn);
+      myData[y * W + x] = evalPoly(coefY, un, vn);
+    }
+  }
+
+  const out = new cv.Mat();
+  try {
+    cv.remap(warpedBgr, out, mapX, mapY, cv.INTER_LANCZOS4, cv.BORDER_REFLECT_101);
+  } catch {
+    out.delete();
+    mapX.delete();
+    mapY.delete();
+    return null;
+  }
+  mapX.delete();
+  mapY.delete();
+  return out;
 }
 
