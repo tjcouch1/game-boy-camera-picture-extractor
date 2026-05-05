@@ -1227,6 +1227,67 @@ function firstDarkFromFrame(
 }
 
 /**
+ * Find the *outer-low edge* of the inner-border DG strip in a 1D profile of
+ * the R-B+128 channel.
+ *
+ * Algorithm: locate the DG strip's *centre* (= DG floor position) by finding
+ * the minimum of the smoothed profile within a tight ±scale window around
+ * the expected centre, then subtract `scale/2 - 0.5` to get the outer-low
+ * edge.
+ *
+ * The legacy `firstDarkFromFrame` returns the position of steepest descent
+ * on the WH→DG transition, which sits ~scale/2 image-px *outward* of where
+ * the eye places the visible DG corner pixel (because the descent midpoint
+ * lies at the WH-side of the DG strip, not at the DG-strip centre). The
+ * floor-based detector returns a position that lands directly at the
+ * visually perceived DG corner pixel.
+ *
+ * Fallback: in some images the camera content immediately adjacent to the
+ * inner-border is itself DG-coloured (e.g. thing-1 / 213443's TL has a DG
+ * camera region right inside the inner-border). The smoothed profile then
+ * has no clear minimum at the strip centre — the floor extends through the
+ * camera area too — and the floor-search wanders. To stay robust, if the
+ * floor-based result differs from the legacy descent-midpoint result by more
+ * than `scale/2` image-px, the legacy result is returned instead. The
+ * floor-based detector improves accuracy when it can; the legacy detector
+ * keeps things from getting worse when it can't.
+ */
+function dgStripOuterLow1D(
+  profile: number[],
+  scale: number,
+  expectedCentreIdx: number,
+  minContrast = 25,
+): number {
+  // Always compute the legacy descent-midpoint as a fallback.
+  const legacy = firstDarkFromFrame(profile, 1.5, scale);
+  if (profile.length < scale + 2) return legacy;
+  const smoothed = boxSmooth(profile, scale);
+  const p = gaussianFilter1d(smoothed, 1.0);
+  const N = p.length;
+  const tLo = Math.max(0, Math.floor(expectedCentreIdx - scale));
+  const tHi = Math.min(N - 1, Math.ceil(expectedCentreIdx + scale));
+  let mi = tLo, mv = p[tLo];
+  for (let i = tLo + 1; i <= tHi; i++) if (p[i] < mv) { mv = p[i]; mi = i; }
+  let baseline = -Infinity;
+  for (let i = 0; i < N; i++) if (p[i] > baseline) baseline = p[i];
+  if (baseline - mv < minContrast) return legacy;
+  let delta = 0;
+  if (mi > 0 && mi < N - 1) {
+    const v0 = p[mi - 1], v1 = p[mi], v2 = p[mi + 1];
+    const den = v0 - 2 * v1 + v2;
+    if (Math.abs(den) > 1e-10) delta = Math.max(-1, Math.min(1, 0.5 * (v0 - v2) / den));
+  }
+  // Strip centre, in pixel-edge coords, is at (mi+delta) + 0.5 (pixel N's
+  // centre is at edge N+0.5). Outer-low edge = strip_centre - scale/2.
+  const newOuterLow = (mi + delta) + 0.5 - scale / 2;
+  // If the new detector wanders far from the legacy descent-midpoint result,
+  // fall back. The two should agree within scale/2 on a clean transition;
+  // larger disagreement means camera content is fooling the floor search.
+  if (Math.abs(newOuterLow - legacy) > scale / 2) return legacy;
+  return newOuterLow;
+}
+
+/**
  * Find the inner-border DG strip in a 1D profile of the R-B+128 channel
  * and return one of its edges or its centre.
  *
@@ -1393,12 +1454,26 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
   const rTop: [number, number] = [Math.max(0, 10 * scale), midRow];
   const rBot: [number, number] = [midRow, Math.min(H, (SCREEN_H - 10) * scale)];
 
+  // Each side detector finds the DG strip's centre via dgStripCentre1D, then
+  // converts to outer-low edge by subtracting scale/2 - 0.5 (the strip
+  // centre is at index k whose pixel centre is at edge k+0.5; outer-low edge
+  // of an 8-wide strip centred there is at edge k+0.5 - scale/2).
+
+  // dgStripOuterLow1D's legacy fallback assumes the WH frame is at the
+  // LOW-coord side of the profile (it scans for "first dark from frame").
+  // For TOP/LEFT, the natural-order profile has WH at low coord ✓.
+  // For BOT/RIGHT, the profile must be REVERSED so WH is at low coord;
+  // the result is then mapped back to original coords (inverting the
+  // reversal AND shifting by -(scale-1) to convert outer-high → outer-low,
+  // matching the legacy detector's BOT/RIGHT convention).
+
   function topY(c0: number, c1: number): number {
     const exp = INNER_TOP * scale;
     const r1 = Math.max(0, exp - srch);
     const r2 = Math.min(H, exp + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
-    return r1 + firstDarkFromFrame(profile, 1.5, scale);
+    const expCentre = (exp + scale / 2) - r1;
+    return r1 + dgStripOuterLow1D(profile, scale, expCentre);
   }
 
   function botY(c0: number, c1: number): number {
@@ -1406,8 +1481,13 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const r1 = Math.max(0, expFrame - srch);
     const r2 = Math.min(H, expFrame + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
-    const reversed = [...profile].reverse();
-    const idx = firstDarkFromFrame(reversed, 1.5, scale);
+    const reversed = profile.slice().reverse();
+    // DG strip centre in reversed coords:
+    //   original strip centre = INNER_BOT*scale + scale/2.
+    //   reversed idx = (profile.length - 1) - (orig idx - r1).
+    const stripCentreOrig = INNER_BOT * scale + scale / 2;
+    const expCentreRev = (profile.length - 1) - (stripCentreOrig - r1);
+    const idx = dgStripOuterLow1D(reversed, scale, expCentreRev);
     return (r2 - 1) - idx - (scale - 1);
   }
 
@@ -1416,7 +1496,8 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const c1 = Math.max(0, exp - srch);
     const c2 = Math.min(W, exp + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
-    return c1 + firstDarkFromFrame(profile, 1.5, scale);
+    const expCentre = (exp + scale / 2) - c1;
+    return c1 + dgStripOuterLow1D(profile, scale, expCentre);
   }
 
   function rightX(r0: number, r1_: number): number {
@@ -1424,8 +1505,10 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const c1 = Math.max(0, expFrame - srch);
     const c2 = Math.min(W, expFrame + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
-    const reversed = [...profile].reverse();
-    const idx = firstDarkFromFrame(reversed, 1.5, scale);
+    const reversed = profile.slice().reverse();
+    const stripCentreOrig = INNER_RIGHT * scale + scale / 2;
+    const expCentreRev = (profile.length - 1) - (stripCentreOrig - c1);
+    const idx = dgStripOuterLow1D(reversed, scale, expCentreRev);
     return (c2 - 1) - idx - (scale - 1);
   }
 
@@ -1476,6 +1559,16 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     }
     return result;
   };
+
+  // findBorderPoints uses a single-column (or single-row) 1D profile per
+  // sample point. The DG-floor detector that findBorderCorners uses is too
+  // noisy here: a single column is much more sensitive to camera content
+  // than the multi-column averages used for corners. So findBorderPoints
+  // keeps using the legacy descent-midpoint detector, which is robust on
+  // 1D profiles even when the inner-border isn't visually distinct from
+  // adjacent camera content. The slight bias in the descent-midpoint
+  // result is uniform across all 9 sample points per side and cancels out
+  // in the edge-curvature calculation downstream.
 
   // Top edge at 9 points
   for (const colFrac of linspace(0, 1, 9)) {
