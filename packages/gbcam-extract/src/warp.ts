@@ -646,7 +646,18 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
  *  6. Centre = midpoint of the row run, midpoint of the col run.
  */
 const DASH_BK_MIN_CONTRAST = 30;
-const DASH_BK_PROFILE_THRESH_FRAC = 0.5;
+// Threshold fraction for the largest-below-threshold run on the LONG axis
+// of the dash (Y for vertical, X for horizontal). 0.5 = midpoint of profile
+// min/max; the bbox includes the full dash body plus its AA transition.
+const DASH_BK_PROFILE_THRESH_FRAC_LONG = 0.5;
+// Threshold fraction for the SHORT-axis profile. Tighter than the long
+// axis (0.3 vs 0.5) because the dash body's perpendicular edges are
+// adjacent to a DG cap (one side) or a BGR-asymmetric WH frame, and the
+// looser 0.5 threshold extends the bbox into the AA transition tail by
+// 2-3 image-px on the cap side, biasing the X-centroid toward the cap.
+// 0.3 keeps the bbox focused on cols where the profile has dropped 70% of
+// the way toward the dash-body floor, excluding most of the AA tail.
+const DASH_BK_PROFILE_THRESH_FRAC_SHORT = 0.3;
 
 function findDarkCentroid2D(
   gray: any,
@@ -744,6 +755,7 @@ function findDarkCentroid2D(
   const largestRun = (
     profile: Float64Array,
     gapTol: number,
+    threshFrac: number,
   ): [number, number] | null => {
     let pMin = Infinity;
     let pMax = -Infinity;
@@ -752,7 +764,7 @@ function findDarkCentroid2D(
       if (v > pMax) pMax = v;
     }
     if (pMax - pMin < DASH_BK_MIN_CONTRAST) return null;
-    const threshold = pMin + (pMax - pMin) * DASH_BK_PROFILE_THRESH_FRAC;
+    const threshold = pMin + (pMax - pMin) * threshFrac;
     let bestLen = 0;
     let bestRun: [number, number] | null = null;
     let curStart = -1;
@@ -780,8 +792,13 @@ function findDarkCentroid2D(
     return bestRun;
   };
 
-  const rowRun = largestRun(rowMean, Y_GAP_TOL);
-  const colRun = largestRun(colMean, 0);
+  // For vertical dashes (yHalf > xHalf): rowMean is the long-axis profile,
+  // colMean is the short-axis profile. For horizontal dashes (yHalf < xHalf):
+  // colMean is the long-axis profile, rowMean is the short-axis profile.
+  const rowFrac = yHalf >= xHalf ? DASH_BK_PROFILE_THRESH_FRAC_LONG : DASH_BK_PROFILE_THRESH_FRAC_SHORT;
+  const colFrac = yHalf >= xHalf ? DASH_BK_PROFILE_THRESH_FRAC_SHORT : DASH_BK_PROFILE_THRESH_FRAC_LONG;
+  const rowRun = largestRun(rowMean, Y_GAP_TOL, rowFrac);
+  const colRun = largestRun(colMean, 0, colFrac);
   if (!rowRun || !colRun) return null;
 
   // Centre of the contiguous run, in image-pixel-edge coords (centre of
