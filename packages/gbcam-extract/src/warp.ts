@@ -747,25 +747,17 @@ function findDarkCentroid2D(
       arr[i] = s / odd;
     }
   };
-  // Smooth BOTH axes:
-  //   LONG axis by `scale` (= 1 LCD pixel period): bridges periodic
-  //     dark/bright sub-bands within the dash body.
-  //   SHORT axis by `scale * 2 - 1` (= 15, ~ 2 LCD pixel periods): the
-  //     surrounding WH frame has an 8-px periodic BGR sub-pixel pattern
-  //     (B-sub cols dim ~19, G-sub bright ~150, R-sub mid ~76 in
-  //     idealized rendering; smoother but still asymmetric in real
-  //     photos). Smoothing by 1 LCD period leaves residual periodicity
-  //     because the 9-wide kernel doesn't perfectly cancel an 8-period
-  //     signal. Smoothing by ~2 periods cancels the BGR pattern more
-  //     fully, giving a cleaner BK → frame transition that the bbox
-  //     threshold can latch onto symmetrically. The BK body itself is
-  //     16-px wide (= 2 LCD periods), so this kernel doesn't blur the
-  //     body's edge into the surrounding frame.
+  // Smooth both axes by `scale` (= 1 LCD pixel period) once, then apply
+  // an additional pass on the SHORT axis (= effective triangular kernel
+  // of width ~ 2 LCD periods). Single-pass scale-wide smoothing leaves
+  // residual BGR-sub-pixel periodicity (the 9-wide kernel doesn't fully
+  // cancel an 8-period signal); the second pass attenuates the residual
+  // by another factor of ~9, which empirically matters: with single-
+  // pass smoothing the argmin-of-smoothed-profile picks up the dimmest
+  // sub-pixel column position rather than the BK body's geometric
+  // centre, biasing every side by 1-3 image-px.
   boxSmoothInPlace(rowMean, scale);
   boxSmoothInPlace(colMean, scale);
-  // Apply additional smoothing to the SHORT axis (which has the BGR
-  // periodicity issue). For vertical dashes (yHalf > xHalf): SHORT = X
-  // = colMean. For horizontal dashes: SHORT = Y = rowMean.
   if (yHalf >= xHalf) {
     boxSmoothInPlace(colMean, scale);
   } else {
@@ -845,23 +837,79 @@ function findDarkCentroid2D(
     return bestRun;
   };
 
-  // For vertical dashes (yHalf > xHalf): rowMean is the long-axis profile,
-  // colMean is the short-axis profile. For horizontal dashes (yHalf < xHalf):
-  // colMean is the long-axis profile, rowMean is the short-axis profile.
+  // Find the BK body's centre on each axis.
+  //
+  // LONG axis: bbox-of-below-threshold + centroid-of-bbox. The dash body
+  // is much longer than its width on this axis; the bbox cleanly spans
+  // the dash's full extent (BK rows 6-7 for top; cols 1-2 for left, etc),
+  // and the bbox's geometric centre is the dash's long-axis position.
+  //
+  // SHORT axis: argmin-of-smoothed-profile + quadratic sub-pixel interp.
+  // The dash body is only 2 GB-pixels (16 image-px) wide on this axis,
+  // and the bbox approach has known asymmetric biases (one boundary
+  // transitions to WH frame, the other to DG cap; with periodic BGR
+  // sub-pixel rendering the bbox extends differently on each side,
+  // biasing the centroid 1-3 px toward whichever frame is dimmer in
+  // its sub-pixel rendering at the BK boundary). Argmin of the
+  // smoothed profile, restricted to ±2 LCD-px around the canonical
+  // centroid, finds the position where the profile is darkest — i.e.,
+  // the BK body's geometric centre — without depending on threshold-
+  // crossing positions that are subject to the BGR asymmetry.
   const isVertical = yHalf >= xHalf;
   const rowFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_LONG : DASH_BK_PROFILE_THRESH_FRAC_SHORT;
   const colFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_SHORT : DASH_BK_PROFILE_THRESH_FRAC_LONG;
   const rowGap = isVertical ? LONG_AXIS_GAP_TOL : SHORT_AXIS_GAP_TOL;
   const colGap = isVertical ? SHORT_AXIS_GAP_TOL : LONG_AXIS_GAP_TOL;
-  const rowRun = largestRun(rowMean, rowGap, rowFrac);
-  const colRun = largestRun(colMean, colGap, colFrac);
-  if (!rowRun || !colRun) return null;
 
-  // Centre of the contiguous run, in image-pixel-edge coords (centre of
-  // pixel N is at N + 0.5; bbox spanning pixels [a, b] inclusive has
-  // centre at (a + b + 1) / 2).
-  const cx = xLo + (colRun[0] + colRun[1] + 1) / 2;
-  const cy = yLo + (rowRun[0] + rowRun[1] + 1) / 2;
+  // Argmin within ±2 LCD-px of the canonical centroid. Returns sub-pixel
+  // index (= integer index + quadratic delta).
+  const argminAround = (
+    profile: Float64Array,
+    canonicalIdx: number,
+  ): number | null => {
+    if (profile.length === 0) return null;
+    const lo = Math.max(0, Math.floor(canonicalIdx - 2 * scale));
+    const hi = Math.min(profile.length - 1, Math.ceil(canonicalIdx + 2 * scale));
+    if (lo > hi) return null;
+    let mi = lo, mv = profile[lo];
+    for (let i = lo + 1; i <= hi; i++) {
+      if (profile[i] < mv) { mv = profile[i]; mi = i; }
+    }
+    let delta = 0;
+    if (mi > 0 && mi < profile.length - 1) {
+      const v0 = profile[mi - 1], v1 = profile[mi], v2 = profile[mi + 1];
+      const den = v0 - 2 * v1 + v2;
+      if (Math.abs(den) > 1e-10) {
+        delta = Math.max(-1, Math.min(1, 0.5 * (v0 - v2) / den));
+      }
+    }
+    return mi + delta;
+  };
+
+  const expectedColIdx = expectedX - xLo;
+  const expectedRowIdx = expectedY - yLo;
+
+  let cx: number;
+  let cy: number;
+  if (isVertical) {
+    // Vertical dash: rowMean is LONG axis (bbox), colMean is SHORT axis (argmin).
+    const rowRun = largestRun(rowMean, rowGap, rowFrac);
+    if (!rowRun) return null;
+    cy = yLo + (rowRun[0] + rowRun[1] + 1) / 2;
+    const colArgmin = argminAround(colMean, expectedColIdx);
+    if (colArgmin === null) return null;
+    // colArgmin is a pixel-index sub-pixel; convert to pixel-edge coord
+    // by adding 0.5 (centre of pixel N is at edge N + 0.5).
+    cx = xLo + colArgmin + 0.5;
+  } else {
+    // Horizontal dash: colMean is LONG axis (bbox), rowMean is SHORT axis (argmin).
+    const colRun = largestRun(colMean, colGap, colFrac);
+    if (!colRun) return null;
+    cx = xLo + (colRun[0] + colRun[1] + 1) / 2;
+    const rowArgmin = argminAround(rowMean, expectedRowIdx);
+    if (rowArgmin === null) return null;
+    cy = yLo + rowArgmin + 0.5;
+  }
   return [cx, cy];
 }
 
