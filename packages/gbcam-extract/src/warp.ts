@@ -2424,12 +2424,13 @@ function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): numb
 // detection on a heavily distorted image.
 const MULTI_ANCHOR_RANSAC_THRESHOLD = 15.0;
 const CORNER_WEIGHT = 0;
-// Inner-border points (= threshold-crossing-detected DG line edges)
-// constrain the camera-area outer frame to canonical. Without this
-// constraint, pass-2's homography fits the dashes at the screen-edge
-// perimeter but lets the inner-border drift in the camera-area
-// interior; the user perceives this as "camera-area corners shifted
-// inward by 1-3 px". Weight 1 balances inner-border + dashes equally.
+// Inner-border points constrain the camera-area outer frame to
+// canonical. Without this constraint, pass-2's homography fits the
+// dashes at the screen-edge perimeter but lets the inner-border drift
+// in the camera-area interior; the user perceives this as "camera-
+// area corners shifted inward by 1-3 px". Weight 1 (= dashes also at
+// 1) gives the best aggregate accuracy empirically — higher weights
+// over-constrain pass-2's homography against dashes' detected positions.
 const BORDER_POINT_WEIGHT = 1;
 const DASH_WEIGHT = 1;
 
@@ -2447,7 +2448,10 @@ function refineWarpMultiAnchor(
   // 1. Detect dashes on the pass-1 warped output.
   const dashes = detectDashesOnWarp(warped, scale);
 
-  // 2. Detect inner-border points on the pass-1 warped output.
+  // 2. Detect inner-border points on the pass-1 warped output using the
+  // legacy R-B+128 + argmin-of-derivative detector. It has a small bias
+  // from the visual edge but is empirically stable across images, and
+  // the polynomial post-correction absorbs the bias.
   const rb = withMats((track, untrack) => {
     const rgb = track(new cv.Mat());
     cv.cvtColor(warped, rgb, cv.COLOR_BGR2RGB);
@@ -2697,6 +2701,204 @@ function computeBorderMetrics(
     },
     refined: refinedOk,
   };
+}
+
+/**
+ * Detect inner-border DG-line positions via threshold-crossing on raw
+ * grayscale of the warp output. Same detection style as the dash-distance
+ * harness (= matches the user's perceived edge):
+ *   - 1D profile perpendicular to the side, in a narrow band.
+ *   - Smooth (box-9 + gauss σ=1).
+ *   - Find the DG strip's argmin within ±0.5 LCD-px of canonical strip
+ *     centre (= tightly within the DG strip).
+ *   - Sample baseline at 1.5 LCD-px outward from canonical edge (= within
+ *     the WH frame for all sides).
+ *   - Threshold = 0.5 × (baseline − floor) + floor.
+ *   - Sub-pixel crossing where smoothed profile rises to threshold,
+ *     scanning from strip centre toward frame side.
+ *
+ * Returns an array of (expected, detected) pairs at the canonical OUTER
+ * edge of the DG strip (= where the user perceives the inner-border).
+ * Convention:
+ *   - top: expectedY = INNER_TOP * scale (= 120). detectedY ≈ 120.
+ *   - bottom: expectedY = (INNER_BOT+1) * scale (= 1032). detectedY ≈ 1032.
+ *   - left: expectedX = INNER_LEFT * scale (= 120).
+ *   - right: expectedX = (INNER_RIGHT+1) * scale (= 1160).
+ */
+interface InnerBorderXing {
+  expectedX: number;
+  expectedY: number;
+  detectedX: number;
+  detectedY: number;
+}
+function detectInnerBorderThresholdCrossings(
+  warpedBgr: any, scale: number,
+): InnerBorderXing[] {
+  const cv = getCV();
+  const W = warpedBgr.cols;
+  const H = warpedBgr.rows;
+  const gray = new cv.Mat();
+  cv.cvtColor(warpedBgr, gray, cv.COLOR_BGR2GRAY);
+
+  const expTop = INNER_TOP * scale;
+  const expBot = (INNER_BOT + 1) * scale;
+  const expLeft = INNER_LEFT * scale;
+  const expRight = (INNER_RIGHT + 1) * scale;
+  const points: InnerBorderXing[] = [];
+
+  const symBox = (p: Float64Array, k: number): Float64Array => {
+    if (k <= 1) return p.slice();
+    const odd = k % 2 === 0 ? k + 1 : k;
+    const half = Math.floor(odd / 2);
+    const out = new Float64Array(p.length);
+    for (let i = 0; i < p.length; i++) {
+      let s = 0, n = 0;
+      for (let j = -half; j <= half; j++) {
+        const idx = i + j;
+        if (idx >= 0 && idx < p.length) { s += p[idx]; n++; }
+      }
+      out[i] = s / Math.max(1, n);
+    }
+    return out;
+  };
+  const gauss = (p: Float64Array, sigma: number): Float64Array => {
+    const radius = Math.max(1, Math.ceil(3 * sigma));
+    const k = new Float64Array(2 * radius + 1);
+    let sum = 0;
+    for (let i = -radius; i <= radius; i++) {
+      const v = Math.exp(-(i * i) / (2 * sigma * sigma));
+      k[i + radius] = v; sum += v;
+    }
+    for (let i = 0; i < k.length; i++) k[i] /= sum;
+    const out = new Float64Array(p.length);
+    for (let i = 0; i < p.length; i++) {
+      let s = 0;
+      for (let j = -radius; j <= radius; j++) {
+        const idx = Math.max(0, Math.min(p.length - 1, i + j));
+        s += p[idx] * k[j + radius];
+      }
+      out[i] = s;
+    }
+    return out;
+  };
+
+  const findEdge = (
+    profile: Float64Array, canonOuterIdx: number, frameDir: 1 | -1,
+  ): number | null => {
+    const sm = gauss(symBox(profile, scale + 1), 1.0);
+    const stripCentreIdx = canonOuterIdx - frameDir * (scale / 2);
+    const floorLo = Math.max(0, Math.floor(stripCentreIdx - scale / 2));
+    const floorHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + scale / 2));
+    if (floorLo >= floorHi) return null;
+    let floorIdx = floorLo, floorVal = sm[floorLo];
+    for (let i = floorLo + 1; i <= floorHi; i++) {
+      if (sm[i] < floorVal) { floorVal = sm[i]; floorIdx = i; }
+    }
+    const baselineIdx = Math.max(0, Math.min(
+      sm.length - 1,
+      Math.round(canonOuterIdx + frameDir * 1.5 * scale),
+    ));
+    const baselineVal = sm[baselineIdx];
+    if (baselineVal - floorVal < 30) return null;
+    const threshold = floorVal + 0.5 * (baselineVal - floorVal);
+    let i = floorIdx;
+    while (i + frameDir >= 0 && i + frameDir < sm.length) {
+      const a = sm[i];
+      const b = sm[i + frameDir];
+      if (a < threshold && b >= threshold) {
+        const t = (threshold - a) / (b - a);
+        return i + frameDir * Math.max(0, Math.min(1, t));
+      }
+      i += frameDir;
+    }
+    return null;
+  };
+
+  const linspace = (start: number, end: number, n: number): number[] => {
+    const r: number[] = [];
+    for (let i = 0; i < n; i++) r.push(start + (end - start) * i / (n - 1));
+    return r;
+  };
+  const N_POINTS = 9;
+
+  for (const colFrac of linspace(0, 1, N_POINTS)) {
+    const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
+    if (x < 0 || x >= W) continue;
+    const r1 = Math.max(0, expTop - 6 * scale);
+    const r2 = Math.min(H, expTop + 6 * scale);
+    if (r2 - r1 < 3 * scale) continue;
+    const profile = new Float64Array(r2 - r1);
+    const cLo = Math.max(0, x - 1);
+    const cHi = Math.min(W, x + 2);
+    for (let r = r1; r < r2; r++) {
+      let s = 0, n = 0;
+      for (let c = cLo; c < cHi; c++) { s += gray.ucharAt(r, c); n++; }
+      profile[r - r1] = s / Math.max(1, n);
+    }
+    const canonOuterIdx = expTop - r1;
+    const edge = findEdge(profile, canonOuterIdx, -1);
+    if (edge === null) continue;
+    points.push({ expectedX: x, expectedY: expTop, detectedX: x, detectedY: r1 + edge });
+  }
+  for (const colFrac of linspace(0, 1, N_POINTS)) {
+    const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
+    if (x < 0 || x >= W) continue;
+    const r1 = Math.max(0, expBot - 6 * scale);
+    const r2 = Math.min(H, expBot + 6 * scale);
+    if (r2 - r1 < 3 * scale) continue;
+    const profile = new Float64Array(r2 - r1);
+    const cLo = Math.max(0, x - 1);
+    const cHi = Math.min(W, x + 2);
+    for (let r = r1; r < r2; r++) {
+      let s = 0, n = 0;
+      for (let c = cLo; c < cHi; c++) { s += gray.ucharAt(r, c); n++; }
+      profile[r - r1] = s / Math.max(1, n);
+    }
+    const canonOuterIdx = expBot - r1;
+    const edge = findEdge(profile, canonOuterIdx, +1);
+    if (edge === null) continue;
+    points.push({ expectedX: x, expectedY: expBot, detectedX: x, detectedY: r1 + edge });
+  }
+  for (const rowFrac of linspace(0, 1, N_POINTS)) {
+    const y = Math.floor(expTop + (expBot - expTop) * rowFrac);
+    if (y < 0 || y >= H) continue;
+    const c1 = Math.max(0, expLeft - 6 * scale);
+    const c2 = Math.min(W, expLeft + 6 * scale);
+    if (c2 - c1 < 3 * scale) continue;
+    const profile = new Float64Array(c2 - c1);
+    const rLo = Math.max(0, y - 1);
+    const rHi = Math.min(H, y + 2);
+    for (let c = c1; c < c2; c++) {
+      let s = 0, n = 0;
+      for (let r = rLo; r < rHi; r++) { s += gray.ucharAt(r, c); n++; }
+      profile[c - c1] = s / Math.max(1, n);
+    }
+    const canonOuterIdx = expLeft - c1;
+    const edge = findEdge(profile, canonOuterIdx, -1);
+    if (edge === null) continue;
+    points.push({ expectedX: expLeft, expectedY: y, detectedX: c1 + edge, detectedY: y });
+  }
+  for (const rowFrac of linspace(0, 1, N_POINTS)) {
+    const y = Math.floor(expTop + (expBot - expTop) * rowFrac);
+    if (y < 0 || y >= H) continue;
+    const c1 = Math.max(0, expRight - 6 * scale);
+    const c2 = Math.min(W, expRight + 6 * scale);
+    if (c2 - c1 < 3 * scale) continue;
+    const profile = new Float64Array(c2 - c1);
+    const rLo = Math.max(0, y - 1);
+    const rHi = Math.min(H, y + 2);
+    for (let c = c1; c < c2; c++) {
+      let s = 0, n = 0;
+      for (let r = rLo; r < rHi; r++) { s += gray.ucharAt(r, c); n++; }
+      profile[c - c1] = s / Math.max(1, n);
+    }
+    const canonOuterIdx = expRight - c1;
+    const edge = findEdge(profile, canonOuterIdx, +1);
+    if (edge === null) continue;
+    points.push({ expectedX: expRight, expectedY: y, detectedX: c1 + edge, detectedY: y });
+  }
+  gray.delete();
+  return points;
 }
 
 // ─── Polynomial post-correction ───
