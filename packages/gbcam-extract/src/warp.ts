@@ -892,23 +892,41 @@ function findDarkCentroid2D(
   let cx: number;
   let cy: number;
   if (isVertical) {
-    // Vertical dash: rowMean is LONG axis (bbox), colMean is SHORT axis (argmin).
+    // Vertical dash: rowMean is LONG axis (bbox), colMean is SHORT axis.
     const rowRun = largestRun(rowMean, rowGap, rowFrac);
     if (!rowRun) return null;
     cy = yLo + (rowRun[0] + rowRun[1] + 1) / 2;
+    // SHORT axis (X for vertical): average of bbox-centroid and argmin
+    // sub-pixel position. The bbox approach finds the geometric midpoint
+    // of the BK→{adjacent}-frame transitions; argmin finds the position
+    // of darkest column. Each has different bias modes (bbox: asymmetric
+    // boundary AA between WH and DG cap sides; argmin: asymmetric darkness
+    // distribution within the BK body due to camera PSF). Averaging them
+    // partially cancels the biases — empirically gives smaller per-side
+    // residuals than either approach alone.
+    const colRun = largestRun(colMean, colGap, colFrac);
     const colArgmin = argminAround(colMean, expectedColIdx);
-    if (colArgmin === null) return null;
-    // colArgmin is a pixel-index sub-pixel; convert to pixel-edge coord
-    // by adding 0.5 (centre of pixel N is at edge N + 0.5).
-    cx = xLo + colArgmin + 0.5;
+    if (!colRun && colArgmin === null) return null;
+    const colBboxCentre = colRun ? (colRun[0] + colRun[1] + 1) / 2 : null;
+    const colArgminCentre = colArgmin !== null ? colArgmin + 0.5 : null;
+    const colCombined = colBboxCentre !== null && colArgminCentre !== null
+      ? (colBboxCentre + colArgminCentre) / 2
+      : (colBboxCentre ?? colArgminCentre)!;
+    cx = xLo + colCombined;
   } else {
-    // Horizontal dash: colMean is LONG axis (bbox), rowMean is SHORT axis (argmin).
+    // Horizontal dash: colMean is LONG axis (bbox), rowMean is SHORT axis.
     const colRun = largestRun(colMean, colGap, colFrac);
     if (!colRun) return null;
     cx = xLo + (colRun[0] + colRun[1] + 1) / 2;
+    const rowRun = largestRun(rowMean, rowGap, rowFrac);
     const rowArgmin = argminAround(rowMean, expectedRowIdx);
-    if (rowArgmin === null) return null;
-    cy = yLo + rowArgmin + 0.5;
+    if (!rowRun && rowArgmin === null) return null;
+    const rowBboxCentre = rowRun ? (rowRun[0] + rowRun[1] + 1) / 2 : null;
+    const rowArgminCentre = rowArgmin !== null ? rowArgmin + 0.5 : null;
+    const rowCombined = rowBboxCentre !== null && rowArgminCentre !== null
+      ? (rowBboxCentre + rowArgminCentre) / 2
+      : (rowBboxCentre ?? rowArgminCentre)!;
+    cy = yLo + rowCombined;
   }
   return [cx, cy];
 }
