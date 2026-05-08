@@ -2186,8 +2186,12 @@ function refineWarpWithMetrics(
 
 // ─── Lens distortion search ───
 
-const LENS_K1_RANGE: [number, number] = [-0.20, 0.05];
-const LENS_COARSE_STEP = 0.025;
+// Range covers -0.30..+0.10 to handle aggressive barrel distortion
+// (= -0.10 to -0.20) on certain photos that have fish-eye-style screen
+// curvature. Coarse step 0.02 and fine step 0.005 give 21 + 11 = 32
+// k1 candidates per image.
+const LENS_K1_RANGE: [number, number] = [-0.30, 0.10];
+const LENS_COARSE_STEP = 0.02;
 const LENS_FINE_STEP = 0.005;
 const LENS_FINE_HALF_RANGE = 0.025;
 
@@ -2747,8 +2751,14 @@ function applyPolynomialDashCorrection(
   };
 
   // Sanity-check the polynomial fit: maximum |poly(expected) − detected|
-  // should be small (< 5 image-px). If much larger, the fit is bad and
-  // applying it would warp the image unpredictably; skip in that case.
+  // should be small. If much larger, the fit is bad and applying it
+  // would warp the image unpredictably; skip in that case.
+  //
+  // Dashes track user-perceived outer-edges (= threshold-crossings). On
+  // barrel-distorted screens, the threshold-crossing positions follow
+  // the curved screen surface, which a degree-3 polynomial can fit but
+  // with larger residuals than rigid centroids. Allow up to 10 image-px
+  // of residual to handle these images.
   let maxFitError = 0;
   for (let i = 0; i < N; i++) {
     const xPred = evalPoly(coefX, u[i], v[i]);
@@ -2756,8 +2766,8 @@ function applyPolynomialDashCorrection(
     const e = Math.hypot(xPred - dx[i], yPred - dy[i]);
     if (e > maxFitError) maxFitError = e;
   }
-  if (maxFitError > 5) {
-    if (dbg) dbg.log(`[warp] polyCorrection: skipped (maxFitError=${maxFitError.toFixed(2)} > 5)`);
+  if (maxFitError > 10) {
+    if (dbg) dbg.log(`[warp] polyCorrection: skipped (maxFitError=${maxFitError.toFixed(2)} > 10)`);
     return null;
   }
 
