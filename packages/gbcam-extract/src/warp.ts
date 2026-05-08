@@ -432,13 +432,22 @@ function addDetectionDebugImage(
     setPx(x + half, y + half, c);
   };
 
-  type DashEntry = { expected: [number, number]; detected: [number, number] | null };
+  type DashEntry = {
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  };
   const drawDashSet = (
     arr: ReadonlyArray<DashEntry>,
     side: "top" | "bottom" | "left" | "right",
   ) => {
     for (const d of arr) {
-      const [ex, ey] = d.expected;
+      // Search box and green crosshair use the BK body CENTROID
+      // (= the visual centre of the dash, where the user looks).
+      // The (expected, detected) outer-edge points are used by pass-2/
+      // polynomial internally but aren't drawn directly: the visible
+      // detection marker (magenta square) is drawn at the centroid the
+      // detector found.
+      const [ex, ey] = d.centroidExpected;
       const isHoriz = side === "top" || side === "bottom";
       const xHalf = isHoriz ? longHalf : shortHalf;
       const yHalf = isHoriz ? shortHalf : longHalf;
@@ -448,8 +457,8 @@ function addDetectionDebugImage(
       const h = Math.ceil(2 * yHalf) + 1;
       strokeRect(overlay, x0, y0, w, h, cyan, 1);
       drawCrosshair1(ex, ey, 3, green);
-      if (d.detected) {
-        const [dx, dy] = d.detected;
+      if (d.centroidDetected) {
+        const [dx, dy] = d.centroidDetected;
         drawSquareMarker(dx, dy, 2, magenta);
         const err = Math.hypot(dx - ex, dy - ey);
         if (err > 1) {
@@ -593,8 +602,11 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
     flat.create(gray.rows, gray.cols, cv.CV_8UC1);
     flat.data.set(outData);
   });
-  gray.delete();
-  // Use the flat-fielded gray for the rest of the function.
+  // Keep `gray` (raw, un-flat-fielded) for outer-edge detection — the
+  // user perceives the warp output as raw gray, and the harness measures
+  // threshold-crossings on raw gray. Use `flat` (flat-fielded) for
+  // centroid finding (= robust under front-light banding).
+  const grayRaw = gray;
   const gray2 = flat;
 
   // Dash centres are given in image-pixel-edge units; multiply by scale to
@@ -639,7 +651,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
     const r = findDarkCentroid2D(
-      gray2, expectedX, topImgY, longHalf, shortHalf, scale, -1,
+      gray2, expectedX, topImgY, longHalf, shortHalf, scale, -1, grayRaw,
     );
     if (r === null || r.outerEdge === null) {
       top.push({
@@ -658,7 +670,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
     const r = findDarkCentroid2D(
-      gray2, expectedX, bottomImgY, longHalf, shortHalf, scale, +1,
+      gray2, expectedX, bottomImgY, longHalf, shortHalf, scale, +1, grayRaw,
     );
     if (r === null || r.outerEdge === null) {
       bottom.push({
@@ -678,7 +690,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
     const expectedY = toImg(gby);
     // For vertical-axis dashes, swap: long axis is Y, short axis is X.
     const r = findDarkCentroid2D(
-      gray2, leftImgX, expectedY, shortHalf, longHalf, scale, -1,
+      gray2, leftImgX, expectedY, shortHalf, longHalf, scale, -1, grayRaw,
     );
     if (r === null || r.outerEdge === null) {
       left.push({
@@ -697,7 +709,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   for (const gby of DASH_INTERIOR_RIGHT_Y) {
     const expectedY = toImg(gby);
     const r = findDarkCentroid2D(
-      gray2, rightImgX, expectedY, shortHalf, longHalf, scale, +1,
+      gray2, rightImgX, expectedY, shortHalf, longHalf, scale, +1, grayRaw,
     );
     if (r === null || r.outerEdge === null) {
       right.push({
@@ -713,6 +725,7 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   }
 
   gray2.delete();
+  grayRaw.delete();
   return { top, bottom, left, right };
 }
 
@@ -776,6 +789,7 @@ function findDarkCentroid2D(
   yHalf: number,
   scale: number,
   outerSide: -1 | 0 | 1 = 0,
+  rawGray: any = null,
 ): { centroid: [number, number]; outerEdge: number | null } | null {
   const xLo = Math.max(0, Math.floor(expectedX - xHalf));
   const xHi = Math.min(gray.cols, Math.ceil(expectedX + xHalf) + 1);
@@ -785,9 +799,14 @@ function findDarkCentroid2D(
   const W = xHi - xLo;
   const H = yHi - yLo;
 
-  // Pass 1: row means, col means, overall min/max.
+  // Pass 1: row means, col means, overall min/max. Also compute means of
+  // the raw (un-flat-fielded) gray channel if provided, for outer-edge
+  // detection that should match the user's perception (the user sees the
+  // raw warp output, not the flat-fielded version).
   const rowSum = new Float64Array(H);
   const colSum = new Float64Array(W);
+  const rowSumRaw = rawGray ? new Float64Array(H) : null;
+  const colSumRaw = rawGray ? new Float64Array(W) : null;
   let minVal = 255;
   let maxVal = 0;
   for (let y = yLo; y < yHi; y++) {
@@ -798,6 +817,11 @@ function findDarkCentroid2D(
       if (v > maxVal) maxVal = v;
       rowSum[ry] += v;
       colSum[x - xLo] += v;
+      if (rowSumRaw && colSumRaw) {
+        const vr = rawGray.ucharAt(y, x);
+        rowSumRaw[ry] += vr;
+        colSumRaw[x - xLo] += vr;
+      }
     }
   }
   if (maxVal - minVal < DASH_BK_MIN_CONTRAST) return null;
@@ -805,6 +829,14 @@ function findDarkCentroid2D(
   for (let i = 0; i < H; i++) rowMean[i] = rowSum[i] / W;
   const colMean = new Float64Array(W);
   for (let i = 0; i < W; i++) colMean[i] = colSum[i] / H;
+  const rowMeanRaw = rowSumRaw ? new Float64Array(H) : null;
+  const colMeanRaw = colSumRaw ? new Float64Array(W) : null;
+  if (rowMeanRaw && rowSumRaw) {
+    for (let i = 0; i < H; i++) rowMeanRaw[i] = rowSumRaw[i] / W;
+  }
+  if (colMeanRaw && colSumRaw) {
+    for (let i = 0; i < W; i++) colMeanRaw[i] = colSumRaw[i] / H;
+  }
 
   // Smooth BOTH 1D profiles by one LCD-pixel period (`scale` image-px).
   //
@@ -852,9 +884,18 @@ function findDarkCentroid2D(
   // Save once-smoothed copies of the SHORT-axis profile for outer-edge
   // detection (= matches harness/user perception smoothing).
   const isVerticalForSmoothing = yHalf >= xHalf;
-  const shortProfileOnceSmoothed = isVerticalForSmoothing
-    ? colMean.slice()
-    : rowMean.slice();
+  // For OUTER-EDGE detection, use the RAW (un-flat-fielded) gray means
+  // if available. The harness computes threshold-crossings on raw gray,
+  // and the user perceives the warp output as raw gray. Flat-fielding
+  // in the centroid path is needed for stable argmin under front-light
+  // banding, but it shifts the threshold-crossing position differently
+  // from raw gray, causing a systematic harness bias.
+  const shortProfileForOuterEdgeSrc = isVerticalForSmoothing
+    ? (colMeanRaw ?? colMean).slice()
+    : (rowMeanRaw ?? rowMean).slice();
+  // Smooth this once with the same kernel as the harness (= box-9 = scale+1
+  // wide, applied with reflect-clamp boundaries).
+  boxSmoothInPlace(shortProfileForOuterEdgeSrc, scale);
   // Apply additional gauss σ=1 smoothing to match the harness's smoothing
   // exactly (= box-9 + gauss σ=1). This eliminates systematic biases
   // between detector-reported outer-edge and harness/user-perceived
@@ -879,7 +920,7 @@ function findDarkCentroid2D(
     }
     return out;
   };
-  const shortProfileForOuterEdge = gauss1d(shortProfileOnceSmoothed, 1.0);
+  const shortProfileForOuterEdge = gauss1d(shortProfileForOuterEdgeSrc, 1.0);
   if (yHalf >= xHalf) {
     boxSmoothInPlace(colMean, scale);
   } else {
