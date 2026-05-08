@@ -855,6 +855,31 @@ function findDarkCentroid2D(
   const shortProfileOnceSmoothed = isVerticalForSmoothing
     ? colMean.slice()
     : rowMean.slice();
+  // Apply additional gauss σ=1 smoothing to match the harness's smoothing
+  // exactly (= box-9 + gauss σ=1). This eliminates systematic biases
+  // between detector-reported outer-edge and harness/user-perceived
+  // edge that arise from slight kernel differences.
+  const gauss1d = (arr: Float64Array, sigma: number): Float64Array => {
+    const radius = Math.max(1, Math.ceil(3 * sigma));
+    const k = new Float64Array(2 * radius + 1);
+    let sum = 0;
+    for (let i = -radius; i <= radius; i++) {
+      const v = Math.exp(-(i * i) / (2 * sigma * sigma));
+      k[i + radius] = v; sum += v;
+    }
+    for (let i = 0; i < k.length; i++) k[i] /= sum;
+    const out = new Float64Array(arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      let s = 0;
+      for (let j = -radius; j <= radius; j++) {
+        const idx = Math.max(0, Math.min(arr.length - 1, i + j));
+        s += arr[idx] * k[j + radius];
+      }
+      out[i] = s;
+    }
+    return out;
+  };
+  const shortProfileForOuterEdge = gauss1d(shortProfileOnceSmoothed, 1.0);
   if (yHalf >= xHalf) {
     boxSmoothInPlace(colMean, scale);
   } else {
@@ -1055,9 +1080,10 @@ function findDarkCentroid2D(
     cx = xLo + colCombined;
     if (outerSide !== 0) {
       // For vertical dash, outer is on the X axis (= short axis). Scan
-      // the once-smoothed short-axis profile (matching user perception).
+      // the box-9 + gauss-σ-1 smoothed profile (matching harness/user
+      // perception kernel exactly).
       const centroidColIdx = colCombined - 0.5;
-      const cross = findOuterCrossing(shortProfileOnceSmoothed, centroidColIdx, outerSide);
+      const cross = findOuterCrossing(shortProfileForOuterEdge, centroidColIdx, outerSide);
       if (cross !== null) outerEdge = xLo + cross;
     }
   } else {
@@ -1076,9 +1102,10 @@ function findDarkCentroid2D(
     cy = yLo + rowCombined;
     if (outerSide !== 0) {
       // For horizontal dash, outer is on the Y axis (= short axis). Scan
-      // the once-smoothed short-axis profile (matching user perception).
+      // the box-9 + gauss-σ-1 smoothed profile (matching harness/user
+      // perception kernel exactly).
       const centroidRowIdx = rowCombined - 0.5;
-      const cross = findOuterCrossing(shortProfileOnceSmoothed, centroidRowIdx, outerSide);
+      const cross = findOuterCrossing(shortProfileForOuterEdge, centroidRowIdx, outerSide);
       if (cross !== null) outerEdge = yLo + cross;
     }
   }
