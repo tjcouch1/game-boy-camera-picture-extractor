@@ -709,16 +709,21 @@ function findDarkCentroid2D(
   const colMean = new Float64Array(W);
   for (let i = 0; i < W; i++) colMean[i] = colSum[i] / H;
 
-  // Smooth the 1D profile along the dash's *long* axis by one LCD-pixel
-  // period (`scale` image-px). Without this, a long dash (40 image-px)
-  // shows internal periodic bright/dark sub-bands (LCD inter-row gaps +
-  // sub-pixel bleed) that the largest-contiguous-run logic locks onto,
-  // picking a sub-band instead of the whole dash. Smoothing bridges the
-  // sub-bands so the dash becomes one contiguous below-threshold run.
+  // Smooth BOTH 1D profiles by one LCD-pixel period (`scale` image-px).
   //
-  // Don't smooth the *short* axis — the dash is uniformly dark across
-  // its 16-px width with no periodic sub-bands. Smoothing here would
-  // just blur the dash's edges and bias the centroid by a few px.
+  // LONG axis: a long dash (40 image-px) shows internal periodic bright/
+  // dark sub-bands (LCD inter-row gaps + sub-pixel bleed) that the
+  // largest-contiguous-run logic would otherwise lock onto, picking a
+  // sub-band instead of the whole dash.
+  //
+  // SHORT axis: the perpendicular profile has a periodic BGR sub-pixel
+  // pattern in the surrounding WH frame (B sub-cells appearing dim,
+  // ~19 gray) that contaminates colMean values at boundary cols. Without
+  // smoothing, the bbox-of-below-threshold extends into the WH B-sub
+  // region, biasing the centroid 1-3 image-px toward the WH side. Box-
+  // smoothing by `scale` (= 1 LCD pixel period) averages the BGR pattern
+  // out, giving a clean BK→WH transition that the threshold can latch
+  // onto symmetrically.
   const boxSmoothInPlace = (arr: Float64Array, w: number) => {
     if (w <= 1) return;
     const odd = w % 2 === 0 ? w + 1 : w;
@@ -737,16 +742,29 @@ function findDarkCentroid2D(
       arr[i] = s / odd;
     }
   };
-  // Smooth the *long*-axis profile only. The long axis (40 image-px)
-  // can have multiple periodic dark/bright sub-bands from LCD inter-
-  // pixel gaps + sub-pixel bleed; smoothing by `scale` bridges them.
-  // Don't smooth the short axis — the dash is only 16-px wide there
-  // and smoothing biases the centroid by 3-4 px when the dash's outer
-  // transitions are asymmetric (which they often are, due to AA).
+  // Smooth BOTH axes:
+  //   LONG axis by `scale` (= 1 LCD pixel period): bridges periodic
+  //     dark/bright sub-bands within the dash body.
+  //   SHORT axis by `scale * 2 - 1` (= 15, ~ 2 LCD pixel periods): the
+  //     surrounding WH frame has an 8-px periodic BGR sub-pixel pattern
+  //     (B-sub cols dim ~19, G-sub bright ~150, R-sub mid ~76 in
+  //     idealized rendering; smoother but still asymmetric in real
+  //     photos). Smoothing by 1 LCD period leaves residual periodicity
+  //     because the 9-wide kernel doesn't perfectly cancel an 8-period
+  //     signal. Smoothing by ~2 periods cancels the BGR pattern more
+  //     fully, giving a cleaner BK → frame transition that the bbox
+  //     threshold can latch onto symmetrically. The BK body itself is
+  //     16-px wide (= 2 LCD periods), so this kernel doesn't blur the
+  //     body's edge into the surrounding frame.
+  boxSmoothInPlace(rowMean, scale);
+  boxSmoothInPlace(colMean, scale);
+  // Apply additional smoothing to the SHORT axis (which has the BGR
+  // periodicity issue). For vertical dashes (yHalf > xHalf): SHORT = X
+  // = colMean. For horizontal dashes: SHORT = Y = rowMean.
   if (yHalf >= xHalf) {
-    boxSmoothInPlace(rowMean, scale);
-  } else {
     boxSmoothInPlace(colMean, scale);
+  } else {
+    boxSmoothInPlace(rowMean, scale);
   }
 
   // Helper: largest "gap-bridged" run of indices where profile[i] is
