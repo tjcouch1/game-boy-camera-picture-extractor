@@ -2944,6 +2944,7 @@ function applyPolynomialDashCorrection(
       }
     }
   }
+  const dashCount = ex.length;
 
   // Anchor the polynomial to identity at the warp's outer corners and
   // mid-edges. Without these anchors, the cubic terms swing wildly far
@@ -3036,7 +3037,7 @@ function applyPolynomialDashCorrection(
   // with larger residuals than rigid centroids. Allow up to 10 image-px
   // of residual to handle these images.
   let maxFitError = 0;
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < dashCount; i++) {
     const xPred = evalPoly(coefX, u[i], v[i]);
     const yPred = evalPoly(coefY, u[i], v[i]);
     const e = Math.hypot(xPred - dx[i], yPred - dy[i]);
