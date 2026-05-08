@@ -2424,7 +2424,13 @@ function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): numb
 // detection on a heavily distorted image.
 const MULTI_ANCHOR_RANSAC_THRESHOLD = 15.0;
 const CORNER_WEIGHT = 0;
-const BORDER_POINT_WEIGHT = 0;
+// Inner-border points (= threshold-crossing-detected DG line edges)
+// constrain the camera-area outer frame to canonical. Without this
+// constraint, pass-2's homography fits the dashes at the screen-edge
+// perimeter but lets the inner-border drift in the camera-area
+// interior; the user perceives this as "camera-area corners shifted
+// inward by 1-3 px". Weight 1 balances inner-border + dashes equally.
+const BORDER_POINT_WEIGHT = 1;
 const DASH_WEIGHT = 1;
 
 function refineWarpMultiAnchor(
