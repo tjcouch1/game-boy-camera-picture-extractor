@@ -148,12 +148,17 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   // (20 DOF total: 10 per axis) that maps canonical → detected dash positions
   // and apply it via cv.remap. Reduces residual non-homographic distortion
   // (lens curvature beyond what k1 captures, screen non-flatness, etc.).
-  {
-    const corrected = applyPolynomialDashCorrection(currentWarped, scale, dbg);
-    if (corrected !== null) {
-      currentWarped.delete();
-      currentWarped = corrected;
-    }
+  //
+  // Iterate up to 3 times: each pass detects dashes on the (now post-poly)
+  // warp and refits a polynomial against the new residuals. This converges
+  // toward detected-dash-positions = canonical (within detector's per-image
+  // measurement noise). 3 iterations is empirically the sweet spot — past
+  // that, no further improvement and runtime grows.
+  for (let iter = 0; iter < 3; iter++) {
+    const corrected = applyPolynomialDashCorrection(currentWarped, scale, iter === 0 ? dbg : undefined);
+    if (corrected === null) break;
+    currentWarped.delete();
+    currentWarped = corrected;
   }
 
   // Convert back to RGBA ImageData
