@@ -258,21 +258,20 @@ function analyseProfile(
     if (sm[i] < floorVal) { floorVal = sm[i]; floorIdx = i; }
   }
 
-  // Baseline: max of smoothed profile on the outer side of floorIdx.
-  // Restrict to a sensible window (outer side, up to canonCentre + 8 LCD-px).
-  let baselineVal = -Infinity;
-  if (outerDir === 1) {
-    const outerHi = Math.min(sm.length - 1, floorIdx + 8 * SCALE);
-    for (let i = floorIdx + 1; i <= outerHi; i++) {
-      if (sm[i] > baselineVal) baselineVal = sm[i];
-    }
-  } else {
-    const outerLo = Math.max(0, floorIdx - 8 * SCALE);
-    for (let i = outerLo; i < floorIdx; i++) {
-      if (sm[i] > baselineVal) baselineVal = sm[i];
-    }
-  }
-  if (!isFinite(baselineVal)) baselineVal = floorVal;
+  // Baseline: smoothed value 1.5 LCD-px outward from canonical centroid
+  // (= within the FIRST adjacent feature outward of the BK body, not
+  // in a brighter feature past it). For TOP dashes this lands in the
+  // DG cap (matching the user's "top is a little trickier because it
+  // goes from DG to BK" description). For LEFT/RIGHT/BOTTOM dashes
+  // there is no DG cap on the outer side, so the sample lands in the
+  // WH frame. Sampling the local plateau (vs the max of a wide window)
+  // keeps the threshold near the BK→{adjacent feature} transition the
+  // user perceives, regardless of which feature it is.
+  const baselineSampleIdx = Math.max(0, Math.min(
+    sm.length - 1,
+    Math.round(canonIdx + outerDir * 1.5 * SCALE),
+  ));
+  const baselineVal = sm[baselineSampleIdx];
 
   const threshold = floorVal + 0.5 * (baselineVal - floorVal);
   const crossingIdx = findThresholdCrossing(sm, floorIdx, outerDir, threshold);

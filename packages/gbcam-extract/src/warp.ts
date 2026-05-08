@@ -511,10 +511,40 @@ const DASH_LEFT_X = 2;
 const DASH_RIGHT_X = 158;
 
 export interface DetectedDashes {
-  top: Array<{ expected: [number, number]; detected: [number, number] | null }>;
-  bottom: Array<{ expected: [number, number]; detected: [number, number] | null }>;
-  left: Array<{ expected: [number, number]; detected: [number, number] | null }>;
-  right: Array<{ expected: [number, number]; detected: [number, number] | null }>;
+  // For each dash: `expected` and `detected` use the user-perception
+  // ground truth: the SHORT-axis coordinate is the OUTER edge of the BK
+  // body (= where the eye perceives the dash boundary as a threshold-
+  // crossing in the smoothed gray profile). The LONG-axis coordinate is
+  // the BK body's centroid.
+  //
+  // For TOP dashes: detected = (centroid_x, outer_top_y). expected =
+  //   (expected_centroid_x, canonical_outer_top_y).
+  // For BOTTOM dashes: detected = (centroid_x, outer_bottom_y). expected =
+  //   (expected_centroid_x, canonical_outer_bottom_y).
+  // For LEFT dashes: detected = (outer_left_x, centroid_y). expected =
+  //   (canonical_outer_left_x, expected_centroid_y).
+  // For RIGHT dashes: detected = (outer_right_x, centroid_y). expected =
+  //   (canonical_outer_right_x, expected_centroid_y).
+  //
+  // `centroidDetected` and `centroidExpected` retain the BK-body centroid
+  // (= long-axis-unchanged, short-axis at canonical_centroid). Provided
+  // for diagnostic / debug overlays that want to show the centroid.
+  top: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
+  bottom: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
+  left: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
+  right: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
 }
 
 /**
@@ -595,42 +625,91 @@ export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   const bottomImgY = toImg(DASH_BOTTOM_Y);
   const leftImgX = toImg(DASH_LEFT_X);
   const rightImgX = toImg(DASH_RIGHT_X);
+  // Canonical OUTER-edge positions in image-px (= where the user wants
+  // the visible dash edge to land in the warp output). BK body extends
+  // ±1 GB-pixel from centroid (= ±scale image-px) on the SHORT axis.
+  // Outer = centroid coordinate ± 1 GB-pixel on the side toward the
+  // screen edge.
+  const topOuterY = toImg(DASH_TOP_Y - 1);      // 48
+  const bottomOuterY = toImg(DASH_BOTTOM_Y + 1); // 1112
+  const leftOuterX = toImg(DASH_LEFT_X - 1);     // 8
+  const rightOuterX = toImg(DASH_RIGHT_X + 1);   // 1272
 
   const top: DetectedDashes["top"] = [];
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
-    const detected = findDarkCentroid2D(
-      gray2, expectedX, topImgY, longHalf, shortHalf, scale,
+    const r = findDarkCentroid2D(
+      gray2, expectedX, topImgY, longHalf, shortHalf, scale, -1,
     );
-    top.push({ expected: [expectedX, topImgY], detected });
+    if (r === null || r.outerEdge === null) {
+      top.push({
+        expected: [expectedX, topOuterY], detected: null,
+        centroidExpected: [expectedX, topImgY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      top.push({
+        expected: [expectedX, topOuterY], detected: [r.centroid[0], r.outerEdge],
+        centroidExpected: [expectedX, topImgY], centroidDetected: r.centroid,
+      });
+    }
   }
 
   const bottom: DetectedDashes["bottom"] = [];
   for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
     const expectedX = toImg(gbx);
-    const detected = findDarkCentroid2D(
-      gray2, expectedX, bottomImgY, longHalf, shortHalf, scale,
+    const r = findDarkCentroid2D(
+      gray2, expectedX, bottomImgY, longHalf, shortHalf, scale, +1,
     );
-    bottom.push({ expected: [expectedX, bottomImgY], detected });
+    if (r === null || r.outerEdge === null) {
+      bottom.push({
+        expected: [expectedX, bottomOuterY], detected: null,
+        centroidExpected: [expectedX, bottomImgY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      bottom.push({
+        expected: [expectedX, bottomOuterY], detected: [r.centroid[0], r.outerEdge],
+        centroidExpected: [expectedX, bottomImgY], centroidDetected: r.centroid,
+      });
+    }
   }
 
   const left: DetectedDashes["left"] = [];
   for (const gby of DASH_INTERIOR_LEFT_Y) {
     const expectedY = toImg(gby);
     // For vertical-axis dashes, swap: long axis is Y, short axis is X.
-    const detected = findDarkCentroid2D(
-      gray2, leftImgX, expectedY, shortHalf, longHalf, scale,
+    const r = findDarkCentroid2D(
+      gray2, leftImgX, expectedY, shortHalf, longHalf, scale, -1,
     );
-    left.push({ expected: [leftImgX, expectedY], detected });
+    if (r === null || r.outerEdge === null) {
+      left.push({
+        expected: [leftOuterX, expectedY], detected: null,
+        centroidExpected: [leftImgX, expectedY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      left.push({
+        expected: [leftOuterX, expectedY], detected: [r.outerEdge, r.centroid[1]],
+        centroidExpected: [leftImgX, expectedY], centroidDetected: r.centroid,
+      });
+    }
   }
 
   const right: DetectedDashes["right"] = [];
   for (const gby of DASH_INTERIOR_RIGHT_Y) {
     const expectedY = toImg(gby);
-    const detected = findDarkCentroid2D(
-      gray2, rightImgX, expectedY, shortHalf, longHalf, scale,
+    const r = findDarkCentroid2D(
+      gray2, rightImgX, expectedY, shortHalf, longHalf, scale, +1,
     );
-    right.push({ expected: [rightImgX, expectedY], detected });
+    if (r === null || r.outerEdge === null) {
+      right.push({
+        expected: [rightOuterX, expectedY], detected: null,
+        centroidExpected: [rightImgX, expectedY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      right.push({
+        expected: [rightOuterX, expectedY], detected: [r.outerEdge, r.centroid[1]],
+        centroidExpected: [rightImgX, expectedY], centroidDetected: r.centroid,
+      });
+    }
   }
 
   gray2.delete();
@@ -677,6 +756,18 @@ const DASH_BK_PROFILE_THRESH_FRAC_LONG = 0.5;
 // the way toward the dash-body floor, excluding most of the AA tail.
 const DASH_BK_PROFILE_THRESH_FRAC_SHORT = 0.3;
 
+/**
+ * @param outerSide  +1 / -1 / 0. If +1, also return the SHORT-axis outer-
+ *                   edge position by scanning the smoothed short-axis
+ *                   profile from the centroid toward the higher-index end
+ *                   and finding the sub-pixel threshold-crossing where
+ *                   the profile rises to the midpoint of (BK floor, WH
+ *                   baseline). If -1, scan toward lower-index end. If 0,
+ *                   no outer-edge computation.
+ *                   Returns 2 extra fields when set: outerEdgeShort
+ *                   (sub-pixel position in image-pixel-edge coords on the
+ *                   short axis) and a flag indicating success.
+ */
 function findDarkCentroid2D(
   gray: any,
   expectedX: number,
@@ -684,7 +775,8 @@ function findDarkCentroid2D(
   xHalf: number,
   yHalf: number,
   scale: number,
-): [number, number] | null {
+  outerSide: -1 | 0 | 1 = 0,
+): { centroid: [number, number]; outerEdge: number | null } | null {
   const xLo = Math.max(0, Math.floor(expectedX - xHalf));
   const xHi = Math.min(gray.cols, Math.ceil(expectedX + xHalf) + 1);
   const yLo = Math.max(0, Math.floor(expectedY - yHalf));
@@ -747,17 +839,22 @@ function findDarkCentroid2D(
       arr[i] = s / odd;
     }
   };
-  // Smooth both axes by `scale` (= 1 LCD pixel period) once, then apply
-  // an additional pass on the SHORT axis (= effective triangular kernel
-  // of width ~ 2 LCD periods). Single-pass scale-wide smoothing leaves
-  // residual BGR-sub-pixel periodicity (the 9-wide kernel doesn't fully
-  // cancel an 8-period signal); the second pass attenuates the residual
-  // by another factor of ~9, which empirically matters: with single-
-  // pass smoothing the argmin-of-smoothed-profile picks up the dimmest
-  // sub-pixel column position rather than the BK body's geometric
-  // centre, biasing every side by 1-3 image-px.
+  // Smooth both axes by `scale` (= 1 LCD pixel period) once. Save a copy
+  // of the SHORT-axis profile after this single pass — the outer-edge
+  // detector uses the once-smoothed profile to match the user's
+  // perception (which corresponds to a similar single-pass smoothing
+  // amount). Then apply a second smoothing pass on the SHORT axis for
+  // centroid finding (= triangular kernel of width ~ 2 LCD periods),
+  // which removes residual BGR sub-pixel periodicity that the argmin-
+  // of-smoothed-profile would otherwise lock onto.
   boxSmoothInPlace(rowMean, scale);
   boxSmoothInPlace(colMean, scale);
+  // Save once-smoothed copies of the SHORT-axis profile for outer-edge
+  // detection (= matches harness/user perception smoothing).
+  const isVerticalForSmoothing = yHalf >= xHalf;
+  const shortProfileOnceSmoothed = isVerticalForSmoothing
+    ? colMean.slice()
+    : rowMean.slice();
   if (yHalf >= xHalf) {
     boxSmoothInPlace(colMean, scale);
   } else {
@@ -889,21 +986,64 @@ function findDarkCentroid2D(
   const expectedColIdx = expectedX - xLo;
   const expectedRowIdx = expectedY - yLo;
 
+  // Find the sub-pixel position where the SMOOTHED short-axis profile
+  // crosses (floor + 0.5*(baseline - floor)), going outward from the BK
+  // body in `direction`. Returns the sub-pixel index in the profile, or
+  // null if no crossing found.
+  //
+  // The `baseline` is sampled at 1.5 LCD-pixels outward from the BK body
+  // floor — this lands in the FIRST adjacent feature outward of the BK
+  // body (= DG cap for TOP dashes, WH frame for LEFT/RIGHT/BOTTOM). The
+  // user perceives the visible dash boundary as the BK→{adjacent feature}
+  // transition, whichever feature is adjacent. Using a fixed-offset local
+  // baseline (vs the max of the entire outward window) keeps the
+  // threshold near the BK→DG transition for TOP dashes (where DG cap
+  // baseline ~50 in real photos), rather than placing it deep in the WH
+  // frame baseline (~190) which would push the crossing far past the
+  // user-perceived edge.
+  const findOuterCrossing = (
+    profile: Float64Array,
+    centroidIdx: number,
+    direction: -1 | 1,
+  ): number | null => {
+    // Floor: argmin within ±0.5 LCD-px of centroid (= deep BK).
+    const floorLo = Math.max(0, Math.floor(centroidIdx - scale / 2));
+    const floorHi = Math.min(profile.length - 1, Math.ceil(centroidIdx + scale / 2));
+    if (floorLo >= floorHi) return null;
+    let floorIdx = floorLo, floorVal = profile[floorLo];
+    for (let i = floorLo + 1; i <= floorHi; i++) {
+      if (profile[i] < floorVal) { floorVal = profile[i]; floorIdx = i; }
+    }
+    // Baseline: smoothed value 1.5 LCD-px outward from centroid (= within
+    // the first adjacent feature, not the bright WH frame past it).
+    const baselineIdx = Math.max(0, Math.min(
+      profile.length - 1,
+      Math.round(centroidIdx + direction * 1.5 * scale),
+    ));
+    const baselineVal = profile[baselineIdx];
+    if (baselineVal - floorVal < 20) return null;
+    const threshold = floorVal + 0.5 * (baselineVal - floorVal);
+    let i = floorIdx;
+    while (i + direction >= 0 && i + direction < profile.length) {
+      const a = profile[i];
+      const b = profile[i + direction];
+      if (a < threshold && b >= threshold) {
+        const t = (threshold - a) / (b - a);
+        return i + direction * Math.max(0, Math.min(1, t));
+      }
+      i += direction;
+    }
+    return null;
+  };
+
   let cx: number;
   let cy: number;
+  let outerEdge: number | null = null;
   if (isVertical) {
     // Vertical dash: rowMean is LONG axis (bbox), colMean is SHORT axis.
     const rowRun = largestRun(rowMean, rowGap, rowFrac);
     if (!rowRun) return null;
     cy = yLo + (rowRun[0] + rowRun[1] + 1) / 2;
-    // SHORT axis (X for vertical): average of bbox-centroid and argmin
-    // sub-pixel position. The bbox approach finds the geometric midpoint
-    // of the BK→{adjacent}-frame transitions; argmin finds the position
-    // of darkest column. Each has different bias modes (bbox: asymmetric
-    // boundary AA between WH and DG cap sides; argmin: asymmetric darkness
-    // distribution within the BK body due to camera PSF). Averaging them
-    // partially cancels the biases — empirically gives smaller per-side
-    // residuals than either approach alone.
     const colRun = largestRun(colMean, colGap, colFrac);
     const colArgmin = argminAround(colMean, expectedColIdx);
     if (!colRun && colArgmin === null) return null;
@@ -913,6 +1053,13 @@ function findDarkCentroid2D(
       ? (colBboxCentre + colArgminCentre) / 2
       : (colBboxCentre ?? colArgminCentre)!;
     cx = xLo + colCombined;
+    if (outerSide !== 0) {
+      // For vertical dash, outer is on the X axis (= short axis). Scan
+      // the once-smoothed short-axis profile (matching user perception).
+      const centroidColIdx = colCombined - 0.5;
+      const cross = findOuterCrossing(shortProfileOnceSmoothed, centroidColIdx, outerSide);
+      if (cross !== null) outerEdge = xLo + cross;
+    }
   } else {
     // Horizontal dash: colMean is LONG axis (bbox), rowMean is SHORT axis.
     const colRun = largestRun(colMean, colGap, colFrac);
@@ -927,8 +1074,15 @@ function findDarkCentroid2D(
       ? (rowBboxCentre + rowArgminCentre) / 2
       : (rowBboxCentre ?? rowArgminCentre)!;
     cy = yLo + rowCombined;
+    if (outerSide !== 0) {
+      // For horizontal dash, outer is on the Y axis (= short axis). Scan
+      // the once-smoothed short-axis profile (matching user perception).
+      const centroidRowIdx = rowCombined - 0.5;
+      const cross = findOuterCrossing(shortProfileOnceSmoothed, centroidRowIdx, outerSide);
+      if (cross !== null) outerEdge = yLo + cross;
+    }
   }
-  return [cx, cy];
+  return { centroid: [cx, cy], outerEdge };
 }
 
 /**
