@@ -2852,12 +2852,13 @@ function detectInnerBorderThresholdCrossings(
     for (let i = 0; i < n; i++) r.push(start + (end - start) * i / (n - 1));
     return r;
   };
-  // Sample 13 points per side, spanning 5%–95% of each side. Corner
+  // Sample 21 points per side, spanning 5%–95% of each side. Corner
   // regions are sampled but typically fail the contrast check (= dim WH
   // frame from photographed bezel), so the actual point count per side
-  // is data-dependent. The closer-to-corner points we DO accept add
-  // useful constraints to the otherwise corner-bowed regions.
-  const N_POINTS = 13;
+  // is data-dependent. Denser sampling gives the TPS more local
+  // information about border distortions; the high lambda smooths
+  // through detector noise.
+  const N_POINTS = 21;
   const CORNER_FRAC = 0.05;
 
   for (const colFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
@@ -3232,16 +3233,10 @@ function applyTPSDashCorrection(
   // taken as canonical (identity); the GBA SP screen is rigid enough
   // that the inner border corners sit at fixed offsets from the outer
   // screen corners.
-  const innerL = INNER_LEFT * scale;          // 120
-  const innerR = (INNER_RIGHT + 1) * scale;   // 1160
-  const innerT = INNER_TOP * scale;           // 120
-  const innerB = (INNER_BOT + 1) * scale;     // 1032
   const anchors: Array<[number, number]> = [
     [0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1],
     [(W - 1) / 2, 0], [W - 1, (H - 1) / 2],
     [(W - 1) / 2, H - 1], [0, (H - 1) / 2],
-    [innerL, innerT], [innerR, innerT],
-    [innerR, innerB], [innerL, innerB],
   ];
   for (const [ax, ay] of anchors) {
     ex.push(ax); ey.push(ay);
