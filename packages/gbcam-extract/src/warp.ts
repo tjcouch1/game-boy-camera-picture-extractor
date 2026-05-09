@@ -2750,6 +2750,9 @@ interface InnerBorderXing {
   expectedY: number;
   detectedX: number;
   detectedY: number;
+  /** Contrast = baseline - floor of the smoothed profile. Higher means
+   *  more reliable (= clean WH→DG transition). */
+  contrast: number;
 }
 function detectInnerBorderThresholdCrossings(
   warpedBgr: any, scale: number,
@@ -2804,11 +2807,17 @@ function detectInnerBorderThresholdCrossings(
 
   const findEdge = (
     profile: Float64Array, canonOuterIdx: number, frameDir: 1 | -1,
-  ): number | null => {
+  ): { edge: number; contrast: number } | null => {
     const sm = gauss(symBox(profile, scale + 1), 1.0);
+    // Strip centre = mid-DG (= one half-LCD-px inward of canonical outer edge).
     const stripCentreIdx = canonOuterIdx - frameDir * (scale / 2);
-    const floorLo = Math.max(0, Math.floor(stripCentreIdx - scale / 2));
-    const floorHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + scale / 2));
+    // Tighter floor argmin window: ±0.25 LCD-px around strip centre. With
+    // wider windows the argmin can land on the camera-content side of the
+    // DG strip when adjacent camera content is darker than DG (= corners
+    // and dim regions where camera-side dark bleeds across DG).
+    const floorHalf = Math.max(1, Math.round(scale / 4));
+    const floorLo = Math.max(0, Math.floor(stripCentreIdx - floorHalf));
+    const floorHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + floorHalf));
     if (floorLo >= floorHi) return null;
     let floorIdx = floorLo, floorVal = sm[floorLo];
     for (let i = floorLo + 1; i <= floorHi; i++) {
@@ -2819,15 +2828,19 @@ function detectInnerBorderThresholdCrossings(
       Math.round(canonOuterIdx + frameDir * 1.5 * scale),
     ));
     const baselineVal = sm[baselineIdx];
-    if (baselineVal - floorVal < 30) return null;
-    const threshold = floorVal + 0.5 * (baselineVal - floorVal);
+    const contrast = baselineVal - floorVal;
+    // Strict contrast threshold: corner regions with dim WH frame fall
+    // below this and get rejected. The detector is unreliable below ~50
+    // because the WH→DG step is comparable to LCD-grid noise.
+    if (contrast < 50) return null;
+    const threshold = floorVal + 0.5 * contrast;
     let i = floorIdx;
     while (i + frameDir >= 0 && i + frameDir < sm.length) {
       const a = sm[i];
       const b = sm[i + frameDir];
       if (a < threshold && b >= threshold) {
         const t = (threshold - a) / (b - a);
-        return i + frameDir * Math.max(0, Math.min(1, t));
+        return { edge: i + frameDir * Math.max(0, Math.min(1, t)), contrast };
       }
       i += frameDir;
     }
@@ -2839,9 +2852,15 @@ function detectInnerBorderThresholdCrossings(
     for (let i = 0; i < n; i++) r.push(start + (end - start) * i / (n - 1));
     return r;
   };
-  const N_POINTS = 9;
+  // Sample 13 points per side, spanning 5%–95% of each side. Corner
+  // regions are sampled but typically fail the contrast check (= dim WH
+  // frame from photographed bezel), so the actual point count per side
+  // is data-dependent. The closer-to-corner points we DO accept add
+  // useful constraints to the otherwise corner-bowed regions.
+  const N_POINTS = 13;
+  const CORNER_FRAC = 0.05;
 
-  for (const colFrac of linspace(0, 1, N_POINTS)) {
+  for (const colFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
     const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
     if (x < 0 || x >= W) continue;
     const r1 = Math.max(0, expTop - 6 * scale);
@@ -2856,11 +2875,15 @@ function detectInnerBorderThresholdCrossings(
       profile[r - r1] = s / Math.max(1, n);
     }
     const canonOuterIdx = expTop - r1;
-    const edge = findEdge(profile, canonOuterIdx, -1);
-    if (edge === null) continue;
-    points.push({ expectedX: x, expectedY: expTop, detectedX: x, detectedY: r1 + edge });
+    const result = findEdge(profile, canonOuterIdx, -1);
+    if (result === null) continue;
+    points.push({
+      expectedX: x, expectedY: expTop,
+      detectedX: x, detectedY: r1 + result.edge,
+      contrast: result.contrast,
+    });
   }
-  for (const colFrac of linspace(0, 1, N_POINTS)) {
+  for (const colFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
     const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
     if (x < 0 || x >= W) continue;
     const r1 = Math.max(0, expBot - 6 * scale);
@@ -2875,11 +2898,15 @@ function detectInnerBorderThresholdCrossings(
       profile[r - r1] = s / Math.max(1, n);
     }
     const canonOuterIdx = expBot - r1;
-    const edge = findEdge(profile, canonOuterIdx, +1);
-    if (edge === null) continue;
-    points.push({ expectedX: x, expectedY: expBot, detectedX: x, detectedY: r1 + edge });
+    const result = findEdge(profile, canonOuterIdx, +1);
+    if (result === null) continue;
+    points.push({
+      expectedX: x, expectedY: expBot,
+      detectedX: x, detectedY: r1 + result.edge,
+      contrast: result.contrast,
+    });
   }
-  for (const rowFrac of linspace(0, 1, N_POINTS)) {
+  for (const rowFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
     const y = Math.floor(expTop + (expBot - expTop) * rowFrac);
     if (y < 0 || y >= H) continue;
     const c1 = Math.max(0, expLeft - 6 * scale);
@@ -2894,11 +2921,15 @@ function detectInnerBorderThresholdCrossings(
       profile[c - c1] = s / Math.max(1, n);
     }
     const canonOuterIdx = expLeft - c1;
-    const edge = findEdge(profile, canonOuterIdx, -1);
-    if (edge === null) continue;
-    points.push({ expectedX: expLeft, expectedY: y, detectedX: c1 + edge, detectedY: y });
+    const result = findEdge(profile, canonOuterIdx, -1);
+    if (result === null) continue;
+    points.push({
+      expectedX: expLeft, expectedY: y,
+      detectedX: c1 + result.edge, detectedY: y,
+      contrast: result.contrast,
+    });
   }
-  for (const rowFrac of linspace(0, 1, N_POINTS)) {
+  for (const rowFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
     const y = Math.floor(expTop + (expBot - expTop) * rowFrac);
     if (y < 0 || y >= H) continue;
     const c1 = Math.max(0, expRight - 6 * scale);
@@ -2913,9 +2944,13 @@ function detectInnerBorderThresholdCrossings(
       profile[c - c1] = s / Math.max(1, n);
     }
     const canonOuterIdx = expRight - c1;
-    const edge = findEdge(profile, canonOuterIdx, +1);
-    if (edge === null) continue;
-    points.push({ expectedX: expRight, expectedY: y, detectedX: c1 + edge, detectedY: y });
+    const result = findEdge(profile, canonOuterIdx, +1);
+    if (result === null) continue;
+    points.push({
+      expectedX: expRight, expectedY: y,
+      detectedX: c1 + result.edge, detectedY: y,
+      contrast: result.contrast,
+    });
   }
   gray.delete();
   return points;
@@ -3171,14 +3206,42 @@ function applyTPSDashCorrection(
   }
   const dashCount = ex.length;
 
-  // Anchor points at warp's outer corners + mid-edges. Without these, the
-  // TPS extrapolates beyond the dash perimeter unpredictably (camera content
-  // could distort by several pixels). 8 no-motion anchors keep the warp
-  // near-identity in the camera area.
+  // Detect inner-border outer-edge points. Without these, the TPS leaves
+  // the area between dashes and the inner border (= ~14 GB-pixels of
+  // frame) unconstrained — the warp can bow by several image-px in that
+  // region, especially near corners where the only nearby anchor is the
+  // outer-screen-corner point. The detector only returns high-contrast
+  // mid-side points, so corner regions stay unconstrained but middle of
+  // each side gets a direct constraint.
+  const borderPoints = detectInnerBorderThresholdCrossings(warpedBgr, scale);
+  for (const p of borderPoints) {
+    ex.push(p.expectedX);
+    ey.push(p.expectedY);
+    dx.push(p.detectedX);
+    dy.push(p.detectedY);
+  }
+  const borderCount = borderPoints.length;
+
+  // Anchor points at warp's outer corners + mid-edges + inner-border
+  // corners. Without anchors, the TPS extrapolates beyond the perimeter
+  // unpredictably (camera content could distort by several pixels). The
+  // 8 outer-screen anchors keep the warp near-identity at the screen
+  // edges; the 4 inner-border-corner anchors constrain the warp at the
+  // corners of the inner DG border (= where mid-side border points
+  // can't reach due to low contrast). Inner-border corner positions are
+  // taken as canonical (identity); the GBA SP screen is rigid enough
+  // that the inner border corners sit at fixed offsets from the outer
+  // screen corners.
+  const innerL = INNER_LEFT * scale;          // 120
+  const innerR = (INNER_RIGHT + 1) * scale;   // 1160
+  const innerT = INNER_TOP * scale;           // 120
+  const innerB = (INNER_BOT + 1) * scale;     // 1032
   const anchors: Array<[number, number]> = [
     [0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1],
     [(W - 1) / 2, 0], [W - 1, (H - 1) / 2],
     [(W - 1) / 2, H - 1], [0, (H - 1) / 2],
+    [innerL, innerT], [innerR, innerT],
+    [innerR, innerB], [innerL, innerB],
   ];
   for (const [ax, ay] of anchors) {
     ex.push(ax); ey.push(ay);
@@ -3204,10 +3267,11 @@ function applyTPSDashCorrection(
   const U = (r2: number): number => (r2 < 1e-12 ? 0 : r2 * Math.log(r2));
 
   // Smoothing parameter. λ in normalized units; pixels-of-residual ≈
-  // sqrt(λ) × image-px-half-size = sqrt(λ) × ~640. Set λ small enough that
-  // residuals stay sub-pixel: λ = (0.5/640)² ≈ 6e-7. Empirically λ in
-  // [1e-7, 1e-5] gives sub-px fit error while smoothing detector noise.
-  const LAMBDA = 1e-6;
+  // sqrt(λ) × image-px-half-size = sqrt(λ) × ~640. Larger λ smooths
+  // through detector noise (= better when the control points include
+  // less-reliable border detections), at the cost of slightly larger
+  // per-point fit error.
+  const LAMBDA = 0.05;
 
   // Build augmented system L (M × M) where M = N + 3.
   const M = N + 3;
@@ -3279,9 +3343,10 @@ function applyTPSDashCorrection(
     return s;
   };
 
-  // Sanity-check fit on dashes only (anchors are identity by construction).
+  // Sanity-check fit on dashes + border points (anchors identity by construction).
   let maxFitError = 0;
-  for (let i = 0; i < dashCount; i++) {
+  const measuredCount = dashCount + borderCount;
+  for (let i = 0; i < measuredCount; i++) {
     const xPred = evalTPS(wxArr, u[i], v[i]) * sx + cx;
     const yPred = evalTPS(wyArr, u[i], v[i]) * sy + cy;
     const e = Math.hypot(xPred - dx[i], yPred - dy[i]);
@@ -3294,12 +3359,13 @@ function applyTPSDashCorrection(
 
   if (dbg) {
     dbg.log(
-      `[warp] tpsCorrection: fit on ${N} pts (${dashCount} dashes + ${anchors.length} anchors), ` +
+      `[warp] tpsCorrection: fit on ${N} pts (${dashCount} dashes + ${borderCount} border + ${anchors.length} anchors), ` +
         `λ=${LAMBDA}, maxFitError=${maxFitError.toFixed(3)} px`,
     );
     dbg.setMetric("warp", "tpsCorrection", {
       n: N,
       dashes: dashCount,
+      borderPoints: borderCount,
       anchors: anchors.length,
       lambda: LAMBDA,
       maxFitError: Number(maxFitError.toFixed(4)),
