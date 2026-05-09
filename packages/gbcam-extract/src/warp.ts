@@ -3210,18 +3210,51 @@ function applyTPSDashCorrection(
   // Detect inner-border outer-edge points. Without these, the TPS leaves
   // the area between dashes and the inner border (= ~14 GB-pixels of
   // frame) unconstrained — the warp can bow by several image-px in that
-  // region, especially near corners where the only nearby anchor is the
-  // outer-screen-corner point. The detector only returns high-contrast
-  // mid-side points, so corner regions stay unconstrained but middle of
-  // each side gets a direct constraint.
-  const borderPoints = detectInnerBorderThresholdCrossings(warpedBgr, scale);
-  for (const p of borderPoints) {
+  // region. The detector only returns high-contrast points; we further
+  // reject per-side outliers (= points whose residual is more than 2.5
+  // robust-MADs from the per-side median) since adjacent samples can
+  // vary by 4+ image-px on noisy borders even when the underlying border
+  // is reasonably straight.
+  const allBorder = detectInnerBorderThresholdCrossings(warpedBgr, scale);
+  const borderBySide = { top: [] as typeof allBorder, bottom: [] as typeof allBorder, left: [] as typeof allBorder, right: [] as typeof allBorder };
+  for (const p of allBorder) {
+    if (p.expectedY === INNER_TOP * scale) borderBySide.top.push(p);
+    else if (p.expectedY === (INNER_BOT + 1) * scale) borderBySide.bottom.push(p);
+    else if (p.expectedX === INNER_LEFT * scale) borderBySide.left.push(p);
+    else borderBySide.right.push(p);
+  }
+  const median = (xs: number[]): number => {
+    if (xs.length === 0) return 0;
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  };
+  const filterOutliers = (
+    pts: typeof allBorder, axis: "x" | "y",
+  ): typeof allBorder => {
+    if (pts.length < 5) return pts;
+    const residuals = pts.map((p) =>
+      axis === "x" ? p.detectedX - p.expectedX : p.detectedY - p.expectedY,
+    );
+    const med = median(residuals);
+    const absDevs = residuals.map((r) => Math.abs(r - med));
+    const mad = median(absDevs);
+    // 2.5 * 1.4826 * MAD ≈ 2.5σ for normal distribution
+    const cutoff = Math.max(0.5, 2.5 * 1.4826 * mad);
+    return pts.filter((_, i) => Math.abs(residuals[i] - med) <= cutoff);
+  };
+  const filteredBorder = [
+    ...filterOutliers(borderBySide.top, "y"),
+    ...filterOutliers(borderBySide.bottom, "y"),
+    ...filterOutliers(borderBySide.left, "x"),
+    ...filterOutliers(borderBySide.right, "x"),
+  ];
+  for (const p of filteredBorder) {
     ex.push(p.expectedX);
     ey.push(p.expectedY);
     dx.push(p.detectedX);
     dy.push(p.detectedY);
   }
-  const borderCount = borderPoints.length;
+  const borderCount = filteredBorder.length;
 
   // Anchor points at warp's outer corners + mid-edges + inner-border
   // corners. Without anchors, the TPS extrapolates beyond the perimeter
