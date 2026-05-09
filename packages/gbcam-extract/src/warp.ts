@@ -441,24 +441,31 @@ function addDetectionDebugImage(
     side: "top" | "bottom" | "left" | "right",
   ) => {
     for (const d of arr) {
-      // Search box and green crosshair use the BK body CENTROID
-      // (= the visual centre of the dash, where the user looks).
-      // The (expected, detected) outer-edge points are used by pass-2/
-      // polynomial internally but aren't drawn directly: the visible
-      // detection marker (magenta square) is drawn at the centroid the
-      // detector found.
-      const [ex, ey] = d.centroidExpected;
+      // Cyan search box: drawn around the BK body CENTROID (= the
+      // actual search area used by the dash detector — it scans for
+      // the dash within ±longHalf × ±shortHalf around the canonical
+      // centroid). The search center is the centroid, NOT the outer
+      // edge that pass-2/polynomial fit to.
+      const [cex, cey] = d.centroidExpected;
       const isHoriz = side === "top" || side === "bottom";
       const xHalf = isHoriz ? longHalf : shortHalf;
       const yHalf = isHoriz ? shortHalf : longHalf;
-      const x0 = Math.floor(ex - xHalf);
-      const y0 = Math.floor(ey - yHalf);
+      const x0 = Math.floor(cex - xHalf);
+      const y0 = Math.floor(cey - yHalf);
       const w = Math.ceil(2 * xHalf) + 1;
       const h = Math.ceil(2 * yHalf) + 1;
       strokeRect(overlay, x0, y0, w, h, cyan, 1);
+      // Green crosshair: drawn at the canonical OUTER EDGE position
+      // (= what pass-2/polynomial align the detected dash to). For
+      // LEFT/RIGHT this is on the X axis; for TOP/BOTTOM on the Y
+      // axis. The outer edge is 1 GB-pixel from the centroid on the
+      // side toward the screen edge.
+      const [ex, ey] = d.expected;
       drawCrosshair1(ex, ey, 3, green);
-      if (d.centroidDetected) {
-        const [dx, dy] = d.centroidDetected;
+      // Magenta marker: drawn at the detected outer-edge position
+      // (= what pass-2/polynomial pulls toward the green crosshair).
+      if (d.detected) {
+        const [dx, dy] = d.detected;
         drawSquareMarker(dx, dy, 2, magenta);
         const err = Math.hypot(dx - ex, dy - ey);
         if (err > 1) {
