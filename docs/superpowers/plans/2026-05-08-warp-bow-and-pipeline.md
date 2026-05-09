@@ -8,7 +8,7 @@
 
 **Branch state:**
 
-- `plan-a-detector-bias` HEAD: `fac2d6c` — current working state.
+- `plan-a-detector-bias` HEAD: `e942c1d` — current working state.
 - `warp-precision-restart-checkpoint`: `5c51658` — earlier checkpoint
   before the BORDER_POINT_WEIGHT and dashCount-tracking commits.
 - `warp-poly-checkpoint`: `272c563` — original baseline (before any of
@@ -176,7 +176,7 @@ brightness threshold to bite into.
 | `21570dc` | **fit pass-2/poly to dash OUTER EDGE not centroid** | 2446 | +272 (BIG) |
 | `0d33f2b` | relax polynomial maxFitError 5→10 px | 2691 | -245 (allows polynomial to run on harder images) |
 | `5c51658` | match outer-edge smoothing kernel to harness exactly | 2718 | -27 |
-| `e7b57e9` | outer-edge uses raw gray + viz uses centroid | 2655 | +63 |
+| `e7b57e9` | outer-edge uses raw gray; later commit `e942c1d` moved viz green crosshair to canonical OUTER edge | 2655 | +63 |
 | `512dd37` | enable inner-border in pass-2 RANSAC at weight 1 | 2579 | +76 |
 | `b7d07bb` | (no source change; doc/cleanup commit) | 2579 | 0 |
 | `fac2d6c` | track dashCount for poly sanity (no behaviour change) | 2579 | 0 |
@@ -433,6 +433,37 @@ cd <repo-root> && node -e '
 ```
 
 ---
+
+## Detection-debug visualization conventions
+
+The `_warp_c_detection_debug.png` overlay draws three markers per dash:
+
+- **Cyan search box** — drawn around the BK body CENTROID (= the
+  actual search area used by the dash detector, ±longHalf × ±shortHalf
+  around the canonical centroid). The search box's CENTRE is the
+  centroid; the GREEN CROSSHAIR sits at the OUTER edge (= one GB-pixel
+  away on the side toward the screen edge).
+- **Green crosshair** — drawn at the canonical OUTER EDGE position,
+  which is what pass-2/polynomial align the detected dash to. For
+  LEFT/RIGHT this is `(canonical_outer_x, canonical_centroid_y)`; for
+  TOP/BOTTOM, `(canonical_centroid_x, canonical_outer_y)`. The outer
+  edge is 1 GB-pixel from the centroid toward the screen edge — so on
+  the right side, the green crosshair sits just inside the screen
+  edge with one GB-pixel between it and the right boundary; same for
+  the other sides per the frame ASCII (1 px on left/right, 6 px on
+  top, 5 px on bottom).
+- **Magenta detection marker** + **yellow residual line** — drawn at
+  the detected outer-edge position (= where the threshold-crossing
+  was found). The yellow line shows the residual the polynomial will
+  pull out.
+
+If the user reports that the green crosshair has moved out one GB-px
+from where they expect, **the dash search-box X/Y range constants
+likely shifted along with the canonical (= centroid + outer-edge
+boundary)** — verify cyan boxes still leave the correct gap from the
+screen edge per the frame structure. The fix in commit `e942c1d`
+re-anchored the cyan box to the centroid (not the outer edge) so
+the box and crosshair are at *separate* positions — that's correct.
 
 ## Files of interest
 
