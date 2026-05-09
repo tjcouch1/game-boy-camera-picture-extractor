@@ -143,20 +143,33 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   bgr.delete();
   currentM.delete();
 
-  // d — Polynomial post-correction. Pass-2's homography (8 DOF) cannot fully
-  // fit non-homographic residuals in the dashes. Fit a degree-3 polynomial
-  // (20 DOF total: 10 per axis) that maps canonical → detected dash positions
-  // and apply it via cv.remap. Reduces residual non-homographic distortion
-  // (lens curvature beyond what k1 captures, screen non-flatness, etc.).
+  // d — TPS post-correction. Pass-2's homography (8 DOF) cannot fully fit
+  // non-homographic residuals in the dashes. A degree-3 polynomial (20 DOF
+  // total) is rigid: it cannot fit a one-side bow without distorting other
+  // sides or the camera content. Thin-plate spline (TPS) is a scattered
+  // interpolant: each control point's influence falls off with distance, so
+  // per-side bow can be fit independently.
   //
-  // Iterate up to 3 times: each pass detects dashes on the (now post-poly)
-  // warp and refits a polynomial against the new residuals. This converges
-  // toward detected-dash-positions = canonical (within detector's per-image
-  // measurement noise). 3 iterations is empirically the sweet spot — past
-  // that, no further improvement and runtime grows.
+  // Iterate up to 3 times: each pass detects dashes on the (now post-TPS)
+  // warp and refits the TPS against the new residuals. Converges to
+  // detected-dash-positions = canonical (within detector noise). If the TPS
+  // ever returns null (= ill-conditioned, too few dashes, or large fit
+  // error), fall back to the polynomial path on the current warp.
   for (let iter = 0; iter < 3; iter++) {
-    const corrected = applyPolynomialDashCorrection(currentWarped, scale, iter === 0 ? dbg : undefined);
-    if (corrected === null) break;
+    const corrected = applyTPSDashCorrection(currentWarped, scale, iter === 0 ? dbg : undefined);
+    if (corrected === null) {
+      if (iter === 0) {
+        // TPS unusable on this image; try polynomial as a fallback so the
+        // pipeline still benefits from a rigid post-correction.
+        for (let polyIter = 0; polyIter < 3; polyIter++) {
+          const poly = applyPolynomialDashCorrection(currentWarped, scale, polyIter === 0 ? dbg : undefined);
+          if (poly === null) break;
+          currentWarped.delete();
+          currentWarped = poly;
+        }
+      }
+      break;
+    }
     currentWarped.delete();
     currentWarped = corrected;
   }
@@ -3082,6 +3095,266 @@ function applyPolynomialDashCorrection(
       const un = (x - cx) / sx;
       mxData[y * W + x] = evalPoly(coefX, un, vn);
       myData[y * W + x] = evalPoly(coefY, un, vn);
+    }
+  }
+
+  const out = new cv.Mat();
+  try {
+    cv.remap(warpedBgr, out, mapX, mapY, cv.INTER_LANCZOS4, cv.BORDER_REFLECT_101);
+  } catch {
+    out.delete();
+    mapX.delete();
+    mapY.delete();
+    return null;
+  }
+  mapX.delete();
+  mapY.delete();
+  return out;
+}
+
+// ─── Thin-plate spline (TPS) post-correction ───
+//
+// Replaces the polynomial post-correction for cases where the residual is
+// non-polynomial. The polynomial is a global rigid degree-3 fit (10 DOF per
+// axis) and cannot model bow-shaped residuals on one side without distorting
+// the others. TPS is a scattered interpolant: each control point has more
+// local influence and less far-field influence, so per-side bow can be fit
+// without distorting the camera content or the other sides.
+//
+// Math:
+//   - Control points P_i in normalized coords (= (image-px - centre)/halfsize),
+//     target values Y_i.
+//   - U(r²) = r²·log(r²) is the TPS basis function.
+//   - Build L = [[K + λI, P], [P^T, 0]] where K[i][j] = U(|P_i-P_j|²),
+//     P[i] = [1, x_i, y_i].
+//   - Solve L·[w; a] = [Y; 0] for both X and Y axes.
+//   - Evaluate f(p) = a₀ + a₁·x + a₂·y + Σ wᵢ·U(|p - Pᵢ|²).
+//
+// Why λ > 0: pure interpolation (λ=0) passes exactly through every detected
+// dash position, including detector noise. A small λ regularizes by trading
+// fit error for smoothness — the surface bends less per unit of fit error.
+// We use λ = 0.001 (in normalized units), giving sub-pixel residuals on
+// the dashes while smoothing through detector noise.
+//
+// Performance: full evaluation at 1.5M output pixels × 62 control points
+// would be ~93M ops per axis. We evaluate TPS on a coarse grid (every TPS_CELL
+// pixels) then bilinearly interpolate to the full grid. With CELL=8 that's
+// ~12M ops per axis — fast enough for 3 iterations × 12 images.
+//
+// Returns null if the fit can't be performed safely (too few points,
+// ill-conditioned, large residual), in which case the caller keeps the
+// un-corrected warp.
+function applyTPSDashCorrection(
+  warpedBgr: any,
+  scale: number,
+  dbg: DebugCollector | undefined,
+): any {
+  const cv = getCV();
+  const W = warpedBgr.cols;
+  const H = warpedBgr.rows;
+
+  // Detect dashes; collect (expected, detected) pairs.
+  const dashes = detectDashesOnWarp(warpedBgr, scale);
+  const ex: number[] = [];
+  const ey: number[] = [];
+  const dx: number[] = [];
+  const dy: number[] = [];
+  for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
+    for (const d of arr) {
+      if (d.detected !== null) {
+        ex.push(d.expected[0]);
+        ey.push(d.expected[1]);
+        dx.push(d.detected[0]);
+        dy.push(d.detected[1]);
+      }
+    }
+  }
+  const dashCount = ex.length;
+
+  // Anchor points at warp's outer corners + mid-edges. Without these, the
+  // TPS extrapolates beyond the dash perimeter unpredictably (camera content
+  // could distort by several pixels). 8 no-motion anchors keep the warp
+  // near-identity in the camera area.
+  const anchors: Array<[number, number]> = [
+    [0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1],
+    [(W - 1) / 2, 0], [W - 1, (H - 1) / 2],
+    [(W - 1) / 2, H - 1], [0, (H - 1) / 2],
+  ];
+  for (const [ax, ay] of anchors) {
+    ex.push(ax); ey.push(ay);
+    dx.push(ax); dy.push(ay);
+  }
+  const N = ex.length;
+  // Need a reasonable minimum: 3 affine coeffs + ~enough scattered points
+  // for the TPS to be informative. 20 dashes + 8 anchors = 28 is comfortable.
+  if (dashCount < 20) return null;
+
+  // Normalize coordinates to [-1, 1] for numerical stability of the linear
+  // solve and for a sensible λ scale.
+  const cx = W / 2;
+  const cy = H / 2;
+  const sx = W / 2;
+  const sy = H / 2;
+  const u = ex.map((v) => (v - cx) / sx);
+  const v = ey.map((vv) => (vv - cy) / sy);
+  const tx = dx.map((v) => (v - cx) / sx);
+  const ty = dy.map((v) => (v - cy) / sy);
+
+  // U(r²) = r² · log(r²). Clamp r²<1e-12 to 0.
+  const U = (r2: number): number => (r2 < 1e-12 ? 0 : r2 * Math.log(r2));
+
+  // Smoothing parameter. λ in normalized units; pixels-of-residual ≈
+  // sqrt(λ) × image-px-half-size = sqrt(λ) × ~640. Set λ small enough that
+  // residuals stay sub-pixel: λ = (0.5/640)² ≈ 6e-7. Empirically λ in
+  // [1e-7, 1e-5] gives sub-px fit error while smoothing detector noise.
+  const LAMBDA = 1e-6;
+
+  // Build augmented system L (M × M) where M = N + 3.
+  const M = N + 3;
+  const L = cv.matFromArray(M, M, cv.CV_64F, new Array(M * M).fill(0));
+  const Ldata = L.data64F as Float64Array;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const ddx = u[i] - u[j];
+      const ddy = v[i] - v[j];
+      Ldata[i * M + j] = U(ddx * ddx + ddy * ddy);
+    }
+    Ldata[i * M + i] += LAMBDA;
+  }
+  for (let i = 0; i < N; i++) {
+    Ldata[i * M + N] = 1;
+    Ldata[i * M + N + 1] = u[i];
+    Ldata[i * M + N + 2] = v[i];
+    Ldata[N * M + i] = 1;
+    Ldata[(N + 1) * M + i] = u[i];
+    Ldata[(N + 2) * M + i] = v[i];
+  }
+
+  const bxArr = new Array(M).fill(0);
+  const byArr = new Array(M).fill(0);
+  for (let i = 0; i < N; i++) {
+    bxArr[i] = tx[i];
+    byArr[i] = ty[i];
+  }
+  const bX = cv.matFromArray(M, 1, cv.CV_64F, bxArr);
+  const bY = cv.matFromArray(M, 1, cv.CV_64F, byArr);
+  const wX = new cv.Mat();
+  const wY = new cv.Mat();
+  let ok = false;
+  try {
+    ok = cv.solve(L, bX, wX, cv.DECOMP_LU) && cv.solve(L, bY, wY, cv.DECOMP_LU);
+  } catch {
+    ok = false;
+  }
+  L.delete();
+  bX.delete();
+  bY.delete();
+  if (!ok) {
+    wX.delete();
+    wY.delete();
+    return null;
+  }
+
+  // Extract weights into typed arrays for fast inner-loop access.
+  const wxArr = new Float64Array(M);
+  const wyArr = new Float64Array(M);
+  for (let i = 0; i < M; i++) {
+    wxArr[i] = wX.doubleAt(i, 0);
+    wyArr[i] = wY.doubleAt(i, 0);
+  }
+  wX.delete();
+  wY.delete();
+  const uArr = new Float64Array(u);
+  const vArr = new Float64Array(v);
+
+  // Evaluate TPS at (un, vn). Returns normalized result.
+  const evalTPS = (w: Float64Array, un: number, vn: number): number => {
+    let s = w[N] + w[N + 1] * un + w[N + 2] * vn;
+    for (let i = 0; i < N; i++) {
+      const ddx = un - uArr[i];
+      const ddy = vn - vArr[i];
+      const r2 = ddx * ddx + ddy * ddy;
+      if (r2 >= 1e-12) s += w[i] * (r2 * Math.log(r2));
+    }
+    return s;
+  };
+
+  // Sanity-check fit on dashes only (anchors are identity by construction).
+  let maxFitError = 0;
+  for (let i = 0; i < dashCount; i++) {
+    const xPred = evalTPS(wxArr, u[i], v[i]) * sx + cx;
+    const yPred = evalTPS(wyArr, u[i], v[i]) * sy + cy;
+    const e = Math.hypot(xPred - dx[i], yPred - dy[i]);
+    if (e > maxFitError) maxFitError = e;
+  }
+  if (maxFitError > 10) {
+    if (dbg) dbg.log(`[warp] tpsCorrection: skipped (maxFitError=${maxFitError.toFixed(2)} > 10)`);
+    return null;
+  }
+
+  if (dbg) {
+    dbg.log(
+      `[warp] tpsCorrection: fit on ${N} pts (${dashCount} dashes + ${anchors.length} anchors), ` +
+        `λ=${LAMBDA}, maxFitError=${maxFitError.toFixed(3)} px`,
+    );
+    dbg.setMetric("warp", "tpsCorrection", {
+      n: N,
+      dashes: dashCount,
+      anchors: anchors.length,
+      lambda: LAMBDA,
+      maxFitError: Number(maxFitError.toFixed(4)),
+    });
+  }
+
+  // Build remap on a coarse grid then bilinearly interpolate to full grid.
+  // Cell size 8 image-px (= 1 GB-px). The TPS function is C² smooth so
+  // bilinear interpolation over 8-px cells introduces sub-0.001-px error
+  // away from control points and remains <0.05-px even right at control
+  // points (control points are at the perimeter; cell-grid-corner-to-CP
+  // distance is bounded by cell size).
+  const CELL = 8;
+  const gW = Math.ceil(W / CELL) + 1;
+  const gH = Math.ceil(H / CELL) + 1;
+  const coarseX = new Float32Array(gW * gH);
+  const coarseY = new Float32Array(gW * gH);
+  for (let gy = 0; gy < gH; gy++) {
+    const y = gy * CELL;
+    const vn = (y - cy) / sy;
+    for (let gx = 0; gx < gW; gx++) {
+      const x = gx * CELL;
+      const un = (x - cx) / sx;
+      coarseX[gy * gW + gx] = evalTPS(wxArr, un, vn) * sx + cx;
+      coarseY[gy * gW + gx] = evalTPS(wyArr, un, vn) * sy + cy;
+    }
+  }
+
+  const mapX = new cv.Mat(H, W, cv.CV_32FC1);
+  const mapY = new cv.Mat(H, W, cv.CV_32FC1);
+  const mxData = mapX.data32F as Float32Array;
+  const myData = mapY.data32F as Float32Array;
+  const invCell = 1 / CELL;
+  for (let y = 0; y < H; y++) {
+    const fy = y * invCell;
+    const gy0 = Math.floor(fy);
+    const ay = fy - gy0;
+    const gy1 = gy0 + 1;
+    for (let x = 0; x < W; x++) {
+      const fx = x * invCell;
+      const gx0 = Math.floor(fx);
+      const ax = fx - gx0;
+      const gx1 = gx0 + 1;
+      const i00 = gy0 * gW + gx0;
+      const i01 = gy0 * gW + gx1;
+      const i10 = gy1 * gW + gx0;
+      const i11 = gy1 * gW + gx1;
+      const w00 = (1 - ax) * (1 - ay);
+      const w01 = ax * (1 - ay);
+      const w10 = (1 - ax) * ay;
+      const w11 = ax * ay;
+      mxData[y * W + x] =
+        w00 * coarseX[i00] + w01 * coarseX[i01] + w10 * coarseX[i10] + w11 * coarseX[i11];
+      myData[y * W + x] =
+        w00 * coarseY[i00] + w01 * coarseY[i01] + w10 * coarseY[i10] + w11 * coarseY[i11];
     }
   }
 
