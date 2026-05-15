@@ -2882,13 +2882,14 @@ function detectInnerBorderThresholdCrossings(
     for (let i = 0; i < n; i++) r.push(start + (end - start) * i / (n - 1));
     return r;
   };
-  // Sample 33 points per side, spanning 2%–98% of each side. Wider
-  // sampling catches user-reported corner-area distortions (e.g.,
-  // 165926 left border bows 5-6 px outward in its top half); denser
-  // sampling resolves local features. The contrast filter still drops
-  // unreliable detections in dim-WH-frame regions.
+  // Sample 33 points per side, spanning 0%–100% of each side (= include
+  // the corner positions). User-reported "top-left corner X px too far
+  // left" distortions are at the side endpoints; rejecting them via a
+  // non-zero CORNER_FRAC was missing those signal positions. The
+  // contrast filter drops any corner samples that the detector can't
+  // resolve reliably.
   const N_POINTS = 33;
-  const CORNER_FRAC = 0.02;
+  const CORNER_FRAC = 0;
 
   for (const colFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
     const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
