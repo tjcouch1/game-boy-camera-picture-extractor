@@ -71,12 +71,18 @@ interface ImageSummary {
 }
 
 function makeGray(data: Buffer, W: number, H: number, channels: number): Float32Array {
+  // DG-signature channel: clip(2B - R - G, 0, 255). DG (148, 148, 255) →
+  // 214; WH (255, 255, 165) → -180 → 0; BK/LG → 0. Much more selective
+  // than gray for finding the actual DG inner border (the gray-channel
+  // approach picks up camera→dim-WH transitions instead in cases where
+  // the WH frame is dim at corners — e.g., 165926 top-left).
   const out = new Float32Array(W * H);
   for (let i = 0; i < W * H; i++) {
     const r = data[i * channels];
     const g = data[i * channels + 1];
     const b = data[i * channels + 2];
-    out[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+    const v = 2 * b - r - g;
+    out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
   }
   return out;
 }
@@ -164,27 +170,31 @@ function findBorderEdge(
   profile: Float64Array, canonOuterIdx: number, frameDir: 1 | -1, scale: number,
 ): number | null {
   const sm = gaussSmooth(symBox(profile, scale + 1), 1.0);
+  // DG-signature channel: DG strip is HIGH; surrounding WH/camera are LOW.
+  // Find peak (argmax) within ±1 LCD-px of canonical strip centre, then
+  // outer edge as crossing at half-peak going from peak toward outer side.
   const stripCentreIdx = canonOuterIdx - frameDir * (scale / 2);
-  const floorLo = Math.max(0, Math.floor(stripCentreIdx - scale / 2));
-  const floorHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + scale / 2));
-  if (floorLo >= floorHi) return null;
-  let floorIdx = floorLo, floorVal = sm[floorLo];
-  for (let i = floorLo + 1; i <= floorHi; i++) {
-    if (sm[i] < floorVal) { floorVal = sm[i]; floorIdx = i; }
+  const peakHalf = Math.max(1, scale);
+  const peakLo = Math.max(0, Math.floor(stripCentreIdx - peakHalf));
+  const peakHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + peakHalf));
+  if (peakLo >= peakHi) return null;
+  let peakIdx = peakLo, peakVal = sm[peakLo];
+  for (let i = peakLo + 1; i <= peakHi; i++) {
+    if (sm[i] > peakVal) { peakVal = sm[i]; peakIdx = i; }
   }
   const baselineIdx = Math.max(0, Math.min(
     sm.length - 1,
     Math.round(canonOuterIdx + frameDir * 1.5 * scale),
   ));
   const baselineVal = sm[baselineIdx];
-  if (baselineVal - floorVal < 20) return null;
-  const threshold = floorVal + 0.5 * (baselineVal - floorVal);
-  let i = floorIdx;
+  if (peakVal - baselineVal < 30) return null;
+  const threshold = baselineVal + 0.5 * (peakVal - baselineVal);
+  let i = peakIdx;
   while (i + frameDir >= 0 && i + frameDir < sm.length) {
     const a = sm[i];
     const b = sm[i + frameDir];
-    if (a < threshold && b >= threshold) {
-      const t = (threshold - a) / (b - a);
+    if (a >= threshold && b < threshold) {
+      const t = (a - threshold) / (a - b);
       return i + frameDir * Math.max(0, Math.min(1, t));
     }
     i += frameDir;

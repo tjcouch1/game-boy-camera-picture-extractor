@@ -2760,8 +2760,24 @@ function detectInnerBorderThresholdCrossings(
   const cv = getCV();
   const W = warpedBgr.cols;
   const H = warpedBgr.rows;
-  const gray = new cv.Mat();
-  cv.cvtColor(warpedBgr, gray, cv.COLOR_BGR2GRAY);
+  // Build a DG-signature channel: clip(2B - R - G, 0, 255). DG = (148, 148,
+  // 255) → 2*255 - 148 - 148 = 214. WH = (255, 255, 165) → 2*165 - 510 < 0
+  // → 0. BK = 0 - 0 = 0. LG = 296 - 255 - 148 = -107 → 0. So this channel
+  // is HIGH only for DG-coloured pixels and 0 for the rest. This is much
+  // more selective than gray: in 165926-class images where the WH frame at
+  // corners is dim (= similar gray to DG), gray-threshold detection picks
+  // up the WH→camera transition instead of the actual DG strip; the DG
+  // signature stays specific to DG.
+  const gray = new cv.Mat(H, W, cv.CV_8UC1);
+  const bgrData = warpedBgr.data as Uint8Array;
+  const gData = gray.data as Uint8Array;
+  for (let i = 0; i < H * W; i++) {
+    const b = bgrData[i * 3];
+    const g = bgrData[i * 3 + 1];
+    const r = bgrData[i * 3 + 2];
+    const v = 2 * b - r - g;
+    gData[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+  }
 
   const expTop = INNER_TOP * scale;
   const expBot = (INNER_BOT + 1) * scale;
@@ -2805,41 +2821,55 @@ function detectInnerBorderThresholdCrossings(
     return out;
   };
 
+  // For the DG-signature channel: the DG strip is HIGH-valued (~100-200);
+  // surrounding WH frame and camera content are LOW (~0-30). We find the
+  // strip's PEAK (argmax), then the OUTER edge as the sub-pixel position
+  // where signature crosses 0.5 * peak going from the peak toward the
+  // outer screen edge.
+  //
+  // "Floor" here is the OUTER-side baseline (= LOW DG signature in WH
+  // frame). Contrast = peakValue - baselineValue. Wide search to capture
+  // user-reported 5-7 px corner-area distortions where the DG strip can
+  // be far from canonical position.
   const findEdge = (
     profile: Float64Array, canonOuterIdx: number, frameDir: 1 | -1,
   ): { edge: number; contrast: number } | null => {
     const sm = gauss(symBox(profile, scale + 1), 1.0);
-    // Strip centre = mid-DG (= one half-LCD-px inward of canonical outer edge).
+    // Strip-centre canonical (= half-LCD-px inward of canonical outer).
     const stripCentreIdx = canonOuterIdx - frameDir * (scale / 2);
-    // Tighter floor argmin window: ±0.25 LCD-px around strip centre. With
-    // wider windows the argmin can land on the camera-content side of the
-    // DG strip when adjacent camera content is darker than DG (= corners
-    // and dim regions where camera-side dark bleeds across DG).
-    const floorHalf = Math.max(1, Math.round(scale / 4));
-    const floorLo = Math.max(0, Math.floor(stripCentreIdx - floorHalf));
-    const floorHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + floorHalf));
-    if (floorLo >= floorHi) return null;
-    let floorIdx = floorLo, floorVal = sm[floorLo];
-    for (let i = floorLo + 1; i <= floorHi; i++) {
-      if (sm[i] < floorVal) { floorVal = sm[i]; floorIdx = i; }
+    // Wide peak search: ±1.0 LCD-px (= ±scale image-px). DG strip can shift
+    // by several image-px from canonical (e.g., 165926 has 5-7 px shift
+    // in the top-left quadrant); a tight argmax window would miss the
+    // actual peak.
+    const peakHalf = Math.max(1, scale);
+    const peakLo = Math.max(0, Math.floor(stripCentreIdx - peakHalf));
+    const peakHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + peakHalf));
+    if (peakLo >= peakHi) return null;
+    let peakIdx = peakLo, peakVal = sm[peakLo];
+    for (let i = peakLo + 1; i <= peakHi; i++) {
+      if (sm[i] > peakVal) { peakVal = sm[i]; peakIdx = i; }
     }
+    // Baseline = signature 1.5 LCD-px OUTWARD (= deep in WH frame, where
+    // DG signature should be near 0).
     const baselineIdx = Math.max(0, Math.min(
       sm.length - 1,
       Math.round(canonOuterIdx + frameDir * 1.5 * scale),
     ));
     const baselineVal = sm[baselineIdx];
-    const contrast = baselineVal - floorVal;
-    // Strict contrast threshold: corner regions with dim WH frame fall
-    // below this and get rejected. The detector is unreliable below ~50
-    // because the WH→DG step is comparable to LCD-grid noise.
-    if (contrast < 50) return null;
-    const threshold = floorVal + 0.5 * contrast;
-    let i = floorIdx;
+    const contrast = peakVal - baselineVal;
+    // Require a clear DG peak. DG signature of ~100+ at peak with
+    // baseline near 0 → contrast ≥ 60 means a real DG strip; below this
+    // is detector noise or a non-DG-coloured screen.
+    if (contrast < 60) return null;
+    const threshold = baselineVal + 0.5 * contrast;
+    // Scan from the peak in frameDir direction (= toward outer screen
+    // edge) until the signature drops below threshold.
+    let i = peakIdx;
     while (i + frameDir >= 0 && i + frameDir < sm.length) {
       const a = sm[i];
       const b = sm[i + frameDir];
-      if (a < threshold && b >= threshold) {
-        const t = (threshold - a) / (b - a);
+      if (a >= threshold && b < threshold) {
+        const t = (a - threshold) / (a - b);
         return { edge: i + frameDir * Math.max(0, Math.min(1, t)), contrast };
       }
       i += frameDir;
@@ -2852,14 +2882,13 @@ function detectInnerBorderThresholdCrossings(
     for (let i = 0; i < n; i++) r.push(start + (end - start) * i / (n - 1));
     return r;
   };
-  // Sample 21 points per side, spanning 5%–95% of each side. Corner
-  // regions are sampled but typically fail the contrast check (= dim WH
-  // frame from photographed bezel), so the actual point count per side
-  // is data-dependent. Denser sampling gives the TPS more local
-  // information about border distortions; the high lambda smooths
-  // through detector noise.
-  const N_POINTS = 21;
-  const CORNER_FRAC = 0.05;
+  // Sample 33 points per side, spanning 2%–98% of each side. Wider
+  // sampling catches user-reported corner-area distortions (e.g.,
+  // 165926 left border bows 5-6 px outward in its top half); denser
+  // sampling resolves local features. The contrast filter still drops
+  // unreliable detections in dim-WH-frame regions.
+  const N_POINTS = 33;
+  const CORNER_FRAC = 0.02;
 
   for (const colFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
     const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
@@ -3210,51 +3239,17 @@ function applyTPSDashCorrection(
   // Detect inner-border outer-edge points. Without these, the TPS leaves
   // the area between dashes and the inner border (= ~14 GB-pixels of
   // frame) unconstrained — the warp can bow by several image-px in that
-  // region. The detector only returns high-contrast points; we further
-  // reject per-side outliers (= points whose residual is more than 2.5
-  // robust-MADs from the per-side median) since adjacent samples can
-  // vary by 4+ image-px on noisy borders even when the underlying border
-  // is reasonably straight.
+  // region. No outlier filter: the user's round-5 feedback indicates
+  // real, large local distortions (e.g., 165926 top-left has 7-px bump
+  // at X=285) that a MAD filter would falsely flag as noise.
   const allBorder = detectInnerBorderThresholdCrossings(warpedBgr, scale);
-  const borderBySide = { top: [] as typeof allBorder, bottom: [] as typeof allBorder, left: [] as typeof allBorder, right: [] as typeof allBorder };
   for (const p of allBorder) {
-    if (p.expectedY === INNER_TOP * scale) borderBySide.top.push(p);
-    else if (p.expectedY === (INNER_BOT + 1) * scale) borderBySide.bottom.push(p);
-    else if (p.expectedX === INNER_LEFT * scale) borderBySide.left.push(p);
-    else borderBySide.right.push(p);
-  }
-  const median = (xs: number[]): number => {
-    if (xs.length === 0) return 0;
-    const s = [...xs].sort((a, b) => a - b);
-    return s[Math.floor(s.length / 2)];
-  };
-  const filterOutliers = (
-    pts: typeof allBorder, axis: "x" | "y",
-  ): typeof allBorder => {
-    if (pts.length < 5) return pts;
-    const residuals = pts.map((p) =>
-      axis === "x" ? p.detectedX - p.expectedX : p.detectedY - p.expectedY,
-    );
-    const med = median(residuals);
-    const absDevs = residuals.map((r) => Math.abs(r - med));
-    const mad = median(absDevs);
-    // 2.5 * 1.4826 * MAD ≈ 2.5σ for normal distribution
-    const cutoff = Math.max(0.5, 2.5 * 1.4826 * mad);
-    return pts.filter((_, i) => Math.abs(residuals[i] - med) <= cutoff);
-  };
-  const filteredBorder = [
-    ...filterOutliers(borderBySide.top, "y"),
-    ...filterOutliers(borderBySide.bottom, "y"),
-    ...filterOutliers(borderBySide.left, "x"),
-    ...filterOutliers(borderBySide.right, "x"),
-  ];
-  for (const p of filteredBorder) {
     ex.push(p.expectedX);
     ey.push(p.expectedY);
     dx.push(p.detectedX);
     dy.push(p.detectedY);
   }
-  const borderCount = filteredBorder.length;
+  const borderCount = allBorder.length;
 
   // Anchor points at warp's outer corners + mid-edges + inner-border
   // corners. Without anchors, the TPS extrapolates beyond the perimeter
@@ -3294,11 +3289,10 @@ function applyTPSDashCorrection(
   // U(r²) = r² · log(r²). Clamp r²<1e-12 to 0.
   const U = (r2: number): number => (r2 < 1e-12 ? 0 : r2 * Math.log(r2));
 
-  // Smoothing parameter. λ in normalized units; pixels-of-residual ≈
-  // sqrt(λ) × image-px-half-size = sqrt(λ) × ~640. Larger λ smooths
-  // through detector noise (= better when the control points include
-  // less-reliable border detections), at the cost of slightly larger
-  // per-point fit error.
+  // Smoothing parameter. Higher λ trades fit error for smoothness; the
+  // DG-signature border detector is more accurate than the previous gray-
+  // channel version so we can run with relatively low lambda without
+  // amplifying detector noise too much.
   const LAMBDA = 0.05;
 
   // Build augmented system L (M × M) where M = N + 3.
