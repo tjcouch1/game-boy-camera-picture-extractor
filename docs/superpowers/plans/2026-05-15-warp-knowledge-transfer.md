@@ -30,9 +30,20 @@ touch downstream steps until the user signs off on the warp.
 
 | Phase | Primary signal | Secondary signals |
 |-------|----------------|-------------------|
-| Warp iteration (NOW) | User's visual feedback on warp PNG | border-distance harness, dash-distance harness, blotch detection |
-| Pipeline iteration (LATER, early) | User's visual feedback on `_gbcam_rgb.png` and structured spot-checks | per-image confusion matrix shapes, blotch detection |
-| Pipeline iteration (LATER, late) | `pnpm test:pipeline` aggregate diff vs reference | per-image diff, per-color confusion |
+| Warp iteration (NOW) | User's visual feedback on warp PNG | **blotch detection on `_gbcam.png`** (large non-BK patches almost always indicate a warp problem in that region), border-distance harness, dash-distance harness, the to-be-built border-detection overlay diagnostic |
+| Pipeline iteration (LATER, early) | User's visual feedback on `_gbcam_rgb.png` and structured spot-checks | blotch detection (can also catch downstream classification errors), per-image confusion matrix shapes |
+| Pipeline iteration (LATER, late) | `pnpm test:pipeline` aggregate diff vs reference | per-image diff, per-color confusion, blotch detection as sanity check |
+
+**Blotch detection deserves special mention** — the user notes that
+"large patches of the same non-BK color in the output `_gbcam.png`
+often indicate a warp error in that region" (size ~12×12 and up, not
+always rectangular, may contain a few stray pixels of other colors).
+This is a SELF-FEEDBACK SIGNAL we can compute without user input.
+Build the blotch detector early so you can monitor whether each
+warp change is reducing or introducing blotches. Per-image known
+blotch positions are in this plan's "Round 7" section; use them as
+your ground-truth check that the detector is working before relying
+on it for new images.
 
 **Do not use `pnpm test:pipeline` aggregate diff as a signal during
 warp work.** The reference images were authored to match the OLD
@@ -472,6 +483,9 @@ within each pixel; a similar approach could apply to border detection.
   confirm that the overlay matches their visual perception of where
   the border is. **Without this, we are blind, and we will keep
   going in circles.**
+- Build the blotch-detection script alongside. Use it as an
+  automated self-feedback signal: every warp change should reduce
+  the known problem-region blotches without introducing new ones.
 - Hypothesize and test *algorithmic* generalizations, not constant
   tweaks. E.g., multi-channel consensus, smooth-curve fitting,
   per-side detector variants, pre-warp brightness normalization.
@@ -501,22 +515,37 @@ within each pixel; a similar approach could apply to border detection.
 
 ## Recommended sequence
 
-1. **Build diagnostic visualization** (no warp change). Add border
-   detection overlay to a new debug image (or to the existing
-   `_warp_c_detection_debug.png`). Send to user; confirm whether
-   detector predictions match visible border. This anchors all
-   subsequent work.
+1. **Build the two diagnostic tools first** (no warp change yet):
 
-2. **Investigate 213443 / 213457 root cause**. Both have persistent
-   top-left blotches across detector changes. Hypothesis: source
-   corner detection or lens k1 is the root issue. Check by:
+   1a. **Blotch detection script** (= self-feedback signal). Scan
+   each output `_gbcam.png` for connected components of the same
+   non-BK color larger than ~12×12. Output a list per image
+   (color, bounding box, area, centroid). Validate against the
+   user-confirmed blotch lists in this plan's Round 7 section to
+   ensure the detector matches the user's eye before trusting it
+   on new images. This becomes the automated check you can use
+   between every warp change to verify you're not introducing
+   new blotches.
+
+   1b. **Border-detection overlay** on `_warp_c_detection_debug.png`
+   (or a new debug image). Mark every detected border point with a
+   coloured dot indicating bias magnitude/direction. Send the
+   updated debug PNGs to the user and confirm whether detector
+   predictions match the visible border. This anchors what
+   "detector says" means in user terms.
+
+2. **Investigate 213443 / 213457 / 165926 root cause**. All three
+   have persistent top-left blotches across detector changes (in
+   both `53017be` and current HEAD output). Hypothesis: source
+   corner detection or lens k1 is the root issue, not border
+   detection. Check by:
    - Looking at `_warp_a_corners.png` for whether corners detected
      correctly
    - Inspecting `_debug.json`'s `lensDistortion.k1`, `quadScore`,
      `sourceCorners`, `pass2.cornerErrors`
    - Comparing to a known-good image's diagnostics
 
-3. **Decide branch direction based on Step 1's findings**:
+3. **Decide branch direction based on Step 1b findings**:
    - **If detector predictions match user perception**: detector
      is fine, TPS is over-correcting. Solutions = smoother
      constraints (curve-fit through detected points), fewer
@@ -527,16 +556,15 @@ within each pixel; a similar approach could apply to border detection.
    - **Likely**: both, in different proportions per image. Build
      both improvements.
 
-4. **Implement blotch-detection script** (optional but useful).
-   External tool: scan `_gbcam.png` for large connected
-   non-BK regions, flag for review. Use as automated sanity check
-   between iterations.
+4. **Iterate with blotch detection + diagnostic overlay as
+   primary signals, user feedback to confirm**. Each warp change
+   should:
+   - Not introduce blotches in regions that were previously clean
+   - Reduce or eliminate the known problematic blotches in 213443
+     / 213457 / 165926
+   - Keep dash bias near sub-pixel
 
-5. **Iterate with user visual feedback as ground truth**, but with
-   the new diagnostic overlay as the *shared* signal so we both
-   agree on what the detector is seeing.
-
-6. **Once warp converges** (= user sign-off): branch
+5. **Once warp converges** (= user sign-off): branch
    `warp-fixed-or-similar`, then proceed to downstream pipeline
    tuning. THAT phase can use test diff as a signal once references
    match the new warp.
