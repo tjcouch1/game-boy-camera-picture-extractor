@@ -183,11 +183,242 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   if (dbg) {
     addInnerBorderResidualImage(dbg, currentWarped, result, scale);
     addDetectionDebugImage(dbg, currentWarped, result, scale);
+    addBorderDetectionImage(dbg, currentWarped, result, scale);
   }
 
   currentWarped.delete();
 
   return result;
+}
+
+/**
+ * Border-detection overlay — visualises *the actual TPS-input detector's
+ * predictions* on top of the final post-TPS warp output. The goal is shared
+ * ground truth between the detector and the user's eye: every detected point
+ * is drawn at its detected (not expected) position, so the user can scan
+ * the image and verify whether each magenta dot lands on the visible
+ * WH→DG transition.
+ *
+ * Markers:
+ *   • GREEN dashed rectangle — expected outer-edge of the inner DG border
+ *     (where detection should land if the warp is perfect).
+ *   • MAGENTA 1×1 dots — detected DG-signature outer-edge positions
+ *     (= what `detectInnerBorderThresholdCrossings` returned). Each dot is
+ *     anchored to the long-axis sample position; deviations from the green
+ *     rectangle on the perpendicular axis show detector residual.
+ *   • YELLOW 1-px line from detected → expected for points with
+ *     |residual| > 1 image-px. Length+direction encodes bias magnitude
+ *     and direction.
+ *   • CYAN 1-px ticks on the side opposite the perpendicular bias — a
+ *     small (~3 image-px) mark showing the detector's contrast. Higher
+ *     contrast = more reliable detection. This is a quick visual cue
+ *     that low-contrast detections (which are more likely to be wrong)
+ *     stand out.
+ *
+ * The image is post-TPS, so if both detector and TPS are working, every
+ * magenta dot should sit on the green dashed rectangle. Magenta dots
+ * deviating from green = either detector noise (= harmless if TPS
+ * smoothed it away) or genuine residual (= warp still has distortion).
+ * Magenta dots falling on visible camera content rather than the actual
+ * DG strip = detector false positive (= warp is being pulled by the
+ * detector toward wrong positions and needs algorithmic fix).
+ */
+function addBorderDetectionImage(
+  dbg: DebugCollector,
+  warpedBgr: any,
+  warpedRgba: GBImageData,
+  scale: number,
+): void {
+  const points = detectInnerBorderThresholdCrossings(warpedBgr, scale);
+
+  const overlay = cloneImage(warpedRgba);
+
+  const green: [number, number, number] = [0, 255, 0];
+  const magenta: [number, number, number] = [255, 0, 220];
+  const yellow: [number, number, number] = [255, 255, 0];
+  const cyan: [number, number, number] = [0, 200, 255];
+
+  const setPx = (x: number, y: number, c: [number, number, number]) => {
+    const xi = Math.round(x);
+    const yi = Math.round(y);
+    if (xi < 0 || xi >= overlay.width || yi < 0 || yi >= overlay.height) return;
+    const idx = (yi * overlay.width + xi) * 4;
+    overlay.data[idx] = c[0];
+    overlay.data[idx + 1] = c[1];
+    overlay.data[idx + 2] = c[2];
+    overlay.data[idx + 3] = 255;
+  };
+
+  // Dashed-line drawer (4-on, 4-off).
+  const dashLine = (
+    x0: number, y0: number, x1: number, y1: number,
+    c: [number, number, number], onLen = 4, offLen = 4,
+  ) => {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.max(Math.abs(dx), Math.abs(dy));
+    if (len === 0) return;
+    const stepX = dx / len;
+    const stepY = dy / len;
+    const period = onLen + offLen;
+    for (let i = 0; i <= len; i++) {
+      const phase = i % period;
+      if (phase < onLen) setPx(x0 + stepX * i, y0 + stepY * i, c);
+    }
+  };
+
+  // Solid 1-px line.
+  const line1 = (
+    x0: number, y0: number, x1: number, y1: number,
+    c: [number, number, number],
+  ) => {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.max(Math.abs(dx), Math.abs(dy));
+    if (len === 0) { setPx(x0, y0, c); return; }
+    const stepX = dx / len;
+    const stepY = dy / len;
+    for (let i = 0; i <= len; i++) setPx(x0 + stepX * i, y0 + stepY * i, c);
+  };
+
+  // ── Expected outer-edge rectangle (green dashed) ──
+  // INNER_TOP/LEFT * scale = outer edge of the DG strip on top/left.
+  // (INNER_BOT+1)/(INNER_RIGHT+1) * scale - 1 = outer edge on bottom/right.
+  const expTop = INNER_TOP * scale;                  // 120
+  const expBottom = (INNER_BOT + 1) * scale - 1;     // 1031
+  const expLeft = INNER_LEFT * scale;                // 120
+  const expRight = (INNER_RIGHT + 1) * scale - 1;    // 1159
+  dashLine(expLeft, expTop, expRight, expTop, green);
+  dashLine(expLeft, expBottom, expRight, expBottom, green);
+  dashLine(expLeft, expTop, expLeft, expBottom, green);
+  dashLine(expRight, expTop, expRight, expBottom, green);
+
+  // ── Per-point detected markers + residual lines ──
+  // Bias magnitudes for summary logging.
+  const biases: number[] = [];
+  let maxAbsBias = 0;
+  let nLargeBias = 0; // |bias| > 1 px
+  for (const p of points) {
+    // detectInnerBorderThresholdCrossings returns the OUTER edge of the
+    // DG strip. expectedX/Y is the canonical outer-edge position;
+    // detectedX/Y is the per-point detection result. For top/bottom the
+    // y axis is perpendicular; for left/right the x axis is.
+    setPx(p.detectedX, p.detectedY, magenta);
+    // Reinforce with a 3×3 cross to make detection visible against busy
+    // backgrounds (= the actual border line is only 1-2 px wide, so a
+    // single-pixel marker can be hard to spot).
+    setPx(p.detectedX - 1, p.detectedY, magenta);
+    setPx(p.detectedX + 1, p.detectedY, magenta);
+    setPx(p.detectedX, p.detectedY - 1, magenta);
+    setPx(p.detectedX, p.detectedY + 1, magenta);
+
+    const bias = Math.hypot(p.detectedX - p.expectedX, p.detectedY - p.expectedY);
+    biases.push(bias);
+    if (bias > maxAbsBias) maxAbsBias = bias;
+    if (bias > 1) {
+      nLargeBias++;
+      line1(p.detectedX, p.detectedY, p.expectedX, p.expectedY, yellow);
+    }
+
+    // Contrast tick: small cyan mark whose length encodes log10(contrast).
+    // Contrast values seen in practice: ~60 (threshold floor) to ~200+
+    // (clean DG strip). Map to 1–4 px tick length.
+    const tickLen = Math.max(1, Math.min(4, Math.round(p.contrast / 50)));
+    // Place tick on the "frame side" of the detected point — for top
+    // border that's UP, for bottom DOWN, for left LEFT, for right RIGHT.
+    // We infer side from whether expectedY equals expTop/expBottom or
+    // expectedX equals expLeft/expRight.
+    let dxTick = 0, dyTick = 0;
+    if (Math.abs(p.expectedY - expTop) < 0.5) dyTick = -1;        // top → up
+    else if (Math.abs(p.expectedY - (INNER_BOT + 1) * scale) < 0.5) dyTick = 1; // bottom → down
+    else if (Math.abs(p.expectedX - expLeft) < 0.5) dxTick = -1;  // left → left
+    else if (Math.abs(p.expectedX - (INNER_RIGHT + 1) * scale) < 0.5) dxTick = 1; // right → right
+    for (let k = 1; k <= tickLen; k++) {
+      setPx(p.detectedX + dxTick * k, p.detectedY + dyTick * k, cyan);
+    }
+  }
+
+  dbg.addImage("warp_e_border_detection", overlay);
+
+  // Per-side & per-point metrics — let the JSON capture enough to grep for
+  // specific user-reported positions (e.g., "right border at Y604"). Each
+  // entry holds detected (sub-pixel), expected (canonical), and bias.
+  const expBotOuter = (INNER_BOT + 1) * scale;
+  const expRightOuter = (INNER_RIGHT + 1) * scale;
+  type PerPoint = {
+    side: "top" | "bottom" | "left" | "right";
+    longAxis: number;            // x for top/bottom, y for left/right
+    detected: number;            // y for top/bottom, x for left/right
+    expected: number;
+    bias: number;                // detected - expected (signed; sign meaning depends on side)
+    contrast: number;
+  };
+  const perPoint: PerPoint[] = [];
+  for (const p of points) {
+    let side: PerPoint["side"];
+    let longAxis: number, detected: number, expected: number, bias: number;
+    if (Math.abs(p.expectedY - expTop) < 0.5) {
+      side = "top"; longAxis = p.detectedX; detected = p.detectedY; expected = expTop;
+      bias = detected - expected;
+    } else if (Math.abs(p.expectedY - expBotOuter) < 0.5) {
+      side = "bottom"; longAxis = p.detectedX; detected = p.detectedY; expected = expBotOuter;
+      bias = detected - expected;
+    } else if (Math.abs(p.expectedX - expLeft) < 0.5) {
+      side = "left"; longAxis = p.detectedY; detected = p.detectedX; expected = expLeft;
+      bias = detected - expected;
+    } else {
+      side = "right"; longAxis = p.detectedY; detected = p.detectedX; expected = expRightOuter;
+      bias = detected - expected;
+    }
+    perPoint.push({
+      side,
+      longAxis: Number(longAxis.toFixed(2)),
+      detected: Number(detected.toFixed(2)),
+      expected,
+      bias: Number(bias.toFixed(2)),
+      contrast: Number(p.contrast.toFixed(1)),
+    });
+  }
+
+  const sideStats: Record<string, { n: number; meanBias: number; maxAbsBias: number; missing: number }> = {
+    top:    { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
+    bottom: { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
+    left:   { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
+    right:  { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
+  };
+  for (const pp of perPoint) {
+    const s = sideStats[pp.side];
+    s.n++;
+    s.meanBias += pp.bias;
+    if (Math.abs(pp.bias) > s.maxAbsBias) s.maxAbsBias = Math.abs(pp.bias);
+  }
+  for (const k of Object.keys(sideStats)) {
+    const s = sideStats[k];
+    if (s.n > 0) s.meanBias /= s.n;
+    s.meanBias = Number(s.meanBias.toFixed(3));
+    s.maxAbsBias = Number(s.maxAbsBias.toFixed(3));
+    // Detector samples 33 evenly-spaced points per side; missing = 33 - n.
+    s.missing = Math.max(0, 33 - s.n);
+  }
+
+  const meanAbsBias = biases.length > 0
+    ? biases.reduce((s, v) => s + v, 0) / biases.length
+    : 0;
+  dbg.log(
+    `[warp] borderDetection: ${points.length} points, ` +
+      `meanAbsBias=${meanAbsBias.toFixed(2)} px, maxAbsBias=${maxAbsBias.toFixed(2)} px, ` +
+      `${nLargeBias} with |bias|>1px ` +
+      `(missing: T=${sideStats.top.missing}, B=${sideStats.bottom.missing}, ` +
+      `L=${sideStats.left.missing}, R=${sideStats.right.missing})`,
+  );
+  dbg.setMetric("warp", "borderDetectionPostTps", {
+    n: points.length,
+    meanAbsBias: Number(meanAbsBias.toFixed(3)),
+    maxAbsBias: Number(maxAbsBias.toFixed(3)),
+    nLargeBias,
+    perSide: sideStats,
+    perPoint,
+  });
 }
 
 function addInnerBorderResidualImage(
