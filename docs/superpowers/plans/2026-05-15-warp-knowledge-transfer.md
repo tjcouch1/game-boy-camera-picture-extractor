@@ -594,3 +594,150 @@ input, you may ask the user *focused* questions like:
 
 Avoid open-ended questions like "what should I try next?". Make
 specific, narrow requests.
+
+## Round 8 — diagnostics + multi-channel attempt (May 15 session)
+
+### Diagnostics built (committed `debb5f2`)
+
+- `scripts/blotch-detection.ts` (run via `pnpm blotch -- --dir <out>`):
+  4-connected components of same non-BK color, filters `bbox≥12 OR
+  area≥144`. One-time `--validate` cross-checks against Round 7
+  user-confirmed lists (4/4 current HEAD; 5/5 53017be). Do NOT run
+  with `--validate` on new outputs — those reference blotches won't
+  re-appear in later runs; new outputs may have different (or no)
+  blotches. Run without `--validate` and human-judge each result.
+- `_warp_e_border_detection.png` (added in `addBorderDetectionImage`
+  in `warp.ts`): runs the actual TPS-input detector on the post-TPS
+  warp, drawing each detected position as a magenta cross, expected
+  outer-edge as a green dashed rectangle, yellow lines for `|bias|>1
+  px`, cyan ticks scaled by contrast. Per-point bias and per-side
+  stats are also written to `debug.json` under
+  `warp.borderDetectionPostTps.perPoint` / `.perSide` so specific
+  user-reported positions can be looked up.
+
+### User Round-8 visual feedback on `20260328_165926_warp_e_border_detection.png`
+
+Recorded verbatim:
+
+> - right border: Y604 the magenta cross could probably go left 1px;
+>   maybe 2px. This is where it starts bending left. 690 should go
+>   left 1px. 747 should go left 1px. 774 and the two below it should
+>   go left 2px. 860 and the three below it should go left 2-3px. The
+>   bottom two should go left 1-2px.
+> - bottom border: left-most 7 should go up 2-3px. X900 and the two
+>   to the left of that should go up 2px. 802 and the three left of
+>   it should go up 1-2px. 674 and 5 left of it should go up 1px.
+> - left border: bottom corner is correct. Y919 is 2px too far left.
+>   804 is 1-2px too far left. 604 is 1px too far left. 320 is 1px
+>   too far left. There are no magenta markers above this, but the
+>   border warps far inward such that at 237 the border is 3px too
+>   far right.
+> - top border: X672 and all left of it are 1px too far up. 705 and
+>   two right of it are correct. 802 and 7 to the right of it are
+>   1px too low. The rest are correct.
+
+Interpretation: the detector's predictions sit 1–3 px **outward** of
+the user-perceived inner-border edge on left/right (and ±1–3 px
+biased on top/bottom). 165926 top-left has the additional
+"detector-doesn't-see-it" failure mode above Y=320, plus 3–7 px of
+genuine warp distortion the detector can't reach.
+
+### BGR sub-pixel root-cause analysis
+
+The DG-signature channel (`2B − R − G`) is HIGH **only** at the **B
+sub-cell** of a DG-coloured LCD pixel, because the LCD emits each
+sub-cell's colour independently. The B sub-cell is at the LEFT third
+of every LCD pixel (canonical BGR layout). For an 8-px-wide LCD
+pixel:
+
+- B sub-cell occupies the first ~3 image-px of the pixel.
+- DG pixel 15 (left inner border) occupies image-cols 120–127. Its B
+  sub-cell is at cols 120–122. The outer-edge canonical = col 120
+  (pixel boundary just left of the B sub-cell).
+- DG pixel 144 (right inner border) occupies image-cols 1152–1159.
+  Its B sub-cell is at cols 1152–1154. The outer-edge canonical =
+  col 1160 (pixel boundary at the FAR side of the pixel).
+
+The raw DG-signature profile is therefore a 3-col-wide spike inside
+each DG pixel, not a step at the pixel boundary. After symBox-9 +
+gauss σ=1 smoothing the spike becomes a flat plateau ~10 cols wide
+centred on the B sub-cell; the half-peak threshold-crossing on the
+outer side lands ~3 image-px from the spike, which is `kernel_half −
+B_subcell_half ≈ 4 − 0.5 = 3.5` px outward of the canonical pixel
+boundary for the LEFT border, and ~2 px inward for the RIGHT border
+(by symmetry, since the B sub-cell is FAR from the right pixel's
+outer edge). This matches user feedback: left border 1–2 px outward,
+right border 1–3 px outward when camera content adjacent to the
+strip has nonzero DG-signature that raises the smoothed signal
+past the strip's inner edge and shifts the crossing outward.
+
+TOP/BOTTOM borders run horizontally; sub-cell variation is
+horizontal too, so it averages out within each row band and does
+NOT shift the perpendicular (Y) detected position. Consistent with
+the user reporting top/bottom mostly correct.
+
+### What didn't work this round
+
+Tried — and reverted — a "multi-channel consensus + gradient-peak +
+lighter smoothing + smooth-curve-fit" combined change. Blotch count
+went **78 → 99** (worse). Lessons:
+
+- **Smooth-curve fit with degree-2 polynomial averages away local
+  distortion** that the user-reported blotches stem from (165926
+  top-left has 3–7 px localised bump; a degree-2 fit can't capture
+  that without distorting other sides). Don't use a low-degree
+  global fit for per-side smoothing.
+- **Gradient-peak alone doesn't fix the BGR offset** because the
+  smoothed signal's peak still sits on the B sub-cell, not on the
+  pixel boundary. The systematic shift is in the *signal shape*,
+  not the smoothing kernel.
+- **Multi-channel consensus (DG + R+G + inv-gray) didn't help**
+  because all three channels are computed from the same captured
+  image with sub-cell-emitted light — they don't disagree on the
+  BGR-skewed peak; they all find similar positions.
+
+### Most promising path forward (not yet tried, ran out of time)
+
+**Pre-average across each LCD pixel's sub-cells before computing
+detection channels.** A horizontal box-blur of width = `scale`
+image-px (= 1 LCD pixel) applied to the BGR image collapses each
+LCD pixel's three sub-cell emissions into a single "as-displayed"
+RGB. After this pre-blur:
+
+- The B channel transitions smoothly from WH-pixel-level (165) to
+  DG-pixel-level (255) at the pixel boundary — not at the B sub-cell.
+- All three channels behave consistently at the pixel boundary.
+- Threshold-crossing or gradient-peak detection on the pre-blurred
+  signal should land at the canonical pixel boundary regardless of
+  smoothing kernel.
+
+Implementation sketch:
+
+1. Apply `cv.GaussianBlur` with a horizontal kernel (e.g.,
+   `(scale*2+1, 1)` σ ≈ scale/3) to the BGR image once, before
+   building the DG/R+G/gray channels.
+2. Keep everything else the same (channel formulas, threshold
+   crossing, contrast filter).
+3. For LEFT/RIGHT borders only — TOP/BOTTOM don't have the issue
+   because sub-cell variation is in the X direction and the
+   perpendicular (Y) scan is invariant to X-smoothing.
+
+Sanity check before deploying:
+
+- Look at `_warp_e_border_detection.png` after the change. Magenta
+  crosses on left/right should sit ON the visible WH→DG line, not
+  2–3 px outward.
+- Blotch count should drop on at least the 213443 / 213457 /
+  165926 problem regions.
+
+### Things to specifically AVOID next iteration
+
+- **Don't apply low-degree polynomial smoothing per side** — proven
+  to wipe out the 165926 top-left's real local distortion.
+- **Don't tune `LAMBDA`, `CORNER_FRAC`, contrast threshold, peak
+  search width** — every attempt to chase the latest feedback this
+  way has reintroduced different regressions.
+- **Don't switch detection channels without addressing BGR
+  sub-pixel structure first** — the channel choice doesn't matter
+  if all channels work on sub-cell-emitted data. Pre-averaging
+  fixes it for everything.

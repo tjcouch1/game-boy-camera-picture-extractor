@@ -2991,6 +2991,24 @@ function detectInnerBorderThresholdCrossings(
   const cv = getCV();
   const W = warpedBgr.cols;
   const H = warpedBgr.rows;
+  // Pre-blur the BGR image horizontally to integrate sub-cell-emitted
+  // light into LCD-pixel-level RGB. Without this, the DG-signature
+  // (2B-R-G) peaks at each LCD pixel's B sub-cell (= LEFT third of the
+  // pixel), not at the pixel centre, so the half-peak threshold-crossing
+  // on left/right borders lands ~(kernel_half − sub_cell_half) image-px
+  // outward of the actual pixel boundary — exactly the 1-3 px outward
+  // bias the user observed on left/right magenta crosses. A horizontal
+  // Gaussian σ ≈ scale/3 (= ~1 sub-cell width) blurs the sub-cells of
+  // each LCD pixel together, after which the DG-signature transitions
+  // at the actual pixel boundary the user perceives. Vertical σ = 0
+  // (no vertical blur) — top/bottom borders don't have BGR asymmetry on
+  // the Y axis, and a vertical blur would smear dashes and other
+  // horizontal features the rest of the pipeline relies on. This blur is
+  // local to detector use only (a separate Mat); the warp output itself
+  // stays untouched.
+  const blurredBgr = new cv.Mat();
+  const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+  cv.GaussianBlur(warpedBgr, blurredBgr, new cv.Size(kx, 1), scale / 3, 0);
   // Build a DG-signature channel: clip(2B - R - G, 0, 255). DG = (148, 148,
   // 255) → 2*255 - 148 - 148 = 214. WH = (255, 255, 165) → 2*165 - 510 < 0
   // → 0. BK = 0 - 0 = 0. LG = 296 - 255 - 148 = -107 → 0. So this channel
@@ -3000,7 +3018,7 @@ function detectInnerBorderThresholdCrossings(
   // up the WH→camera transition instead of the actual DG strip; the DG
   // signature stays specific to DG.
   const gray = new cv.Mat(H, W, cv.CV_8UC1);
-  const bgrData = warpedBgr.data as Uint8Array;
+  const bgrData = blurredBgr.data as Uint8Array;
   const gData = gray.data as Uint8Array;
   for (let i = 0; i < H * W; i++) {
     const b = bgrData[i * 3];
@@ -3009,6 +3027,7 @@ function detectInnerBorderThresholdCrossings(
     const v = 2 * b - r - g;
     gData[i] = v < 0 ? 0 : v > 255 ? 255 : v;
   }
+  blurredBgr.delete();
 
   const expTop = INNER_TOP * scale;
   const expBot = (INNER_BOT + 1) * scale;
