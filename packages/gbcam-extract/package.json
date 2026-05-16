@@ -27,6 +27,7 @@
     "extract": "tsup scripts/extract.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/extract.js",
     "test:pipeline": "tsup scripts/run-tests.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/run-tests.js",
     "interleave": "tsup scripts/interleave-test.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/interleave-test.js",
+    "blotch": "tsup scripts/blotch-detection.ts --format esm --out-dir dist-scripts --clean && node dist-scripts/blotch-detection.js",
     "generate:palettes": "node scripts/generate-palettes.ts"
   },
   "dependencies": {

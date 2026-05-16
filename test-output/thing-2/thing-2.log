@@ -15,6 +15,7 @@ PIPELINE DIAGNOSTICS
   [warp] pass2 residual: maxCornerErr=2.35 meanEdgeCurv=0.44
   [warp] pass2 dash residuals (image-px, det-exp): top=-0.12(15/15) bot=-0.69(15/15) left=0.37(12/12) right=0.04(12/12)
   [warp] tpsCorrection: fit on 191 pts (54 dashes + 129 border + 8 anchors), λ=0.05, maxFitError=1.493 px
+  [warp] borderDetection: 130 points, meanAbsBias=0.24 px, maxAbsBias=0.88 px, 0 with |bias|>1px
   [pipeline] raw frame B median = 216; useB = true (gate < 240)
   [white-balance] raw frame median: R=242 G=220 B=216 (target 255 255 165)
   [white-balance] scales: R=1.054 G=1.161 B=0.765 (clamp [0.4, 2.5])
