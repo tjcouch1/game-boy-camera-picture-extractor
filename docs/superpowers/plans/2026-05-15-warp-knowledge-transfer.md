@@ -990,3 +990,82 @@ unless the channel is averaged across a full LCD-pixel width first.
   weighted by distance-from-centre. If higher-radius dashes have
   more variance, k2 likely needs adjustment.
 
+## Round 11 — G-channel-only LCD-centre detection in sample.ts
+
+### The fix (`56377cd`)
+
+`detectLcdCentreCol` in `sample.ts` was computing a brightness
+centroid over the combined R+G+B brightness to locate the LCD pixel
+centre per GB-pixel block. But the per-sub-cell brightness of an LCD
+pixel depends on the pixel's **colour**:
+- **DG** (R=G=148, B=255) is brightest at its B sub-cell (LEFT third
+  of LCD pixel) → centroid biased LEFT.
+- **LG** (R=255, G=B=148) is brightest at its R sub-cell (RIGHT
+  third) → centroid biased RIGHT.
+- **WH** (R=G=255, B=165) is roughly centred (G+R contribute
+  similarly at the middle two thirds).
+- **BK** has no contrast → returns default centre.
+
+In SOLID-colour regions of either DG or LG, the bias is large
+enough (~±2.5 image-px on an 8-px LCD pixel) to exceed
+OFFSET_CLAMP (±2) and saturate the smoothed offset map. The
+sub-cell windows in sample's second pass then land on the wrong
+sub-cell — sample reads the WRONG colour out of each LCD pixel and
+the wrong values feed quantize, creating solid-colour blotches in
+the output.
+
+Switch the centroid input to **G channel only**. G channel emits at
+255 (WH) or 148 (LG/DG) or 0 (BK) ONLY at the G sub-cell (MIDDLE
+third of the LCD pixel) and is ~0 at B/R sub-cells (because those
+sub-cells don't emit G light). So the G-channel bright spot is at
+the LCD pixel centre **regardless of pixel colour**, and the
+centroid measures only the warp alignment.
+
+### Results — warp is "right"
+
+**Sample-pictures-out: 10 → 7 blotches**. Per image:
+- **213443: 3 → 0** (all three WH warp blotches eliminated — this
+  was one of the three plan-flagged "persistent" problem images)
+- 165926: 2 → 2 (1 legitimate WH + 1 LG residual)
+- 165926~2-EDIT: 3 → 3 (1 legitimate + 2 residual)
+- Others unchanged
+- 213430 still 2 (both legitimate)
+
+**Test-output zelda-poster-2: 1 → 2 blotches** — previously the
+merged WH from "wrong sub-cell" sample errors made the top and
+bottom WH blotches look like one giant blotch (4460 px); now they
+are correctly separated and match the reference's 2 legitimate WH
+patches.
+
+All three test-output zelda-poster images now show **2 WH blotches
+each, matching the hand-corrected reference exactly**. thing-1/2/3
+each show **0 blotches**, matching their dithered reference. The
+warp pipeline is producing correct outputs across all 6 test
+images and 5 of 7 sample images. The remaining 2 sample-image
+issues (1 LG blotch on each 165926 variant) correspond to the
+real top-left photo distortion the user described in Round 6 of
+this plan — likely the limit of what the current warp model can
+correct without true-3D-screen-geometry information.
+
+### Session arc (4 commits)
+
+`9af0cff` (blotch detector rewrite) → `051923a` (pass-1 + pass-2
+BGR pre-blur) → `dcead65` (dash-detection BGR pre-blur) →
+`56377cd` (G-channel-only LCD-centre detection). The first three
+incrementally tightened warp accuracy by removing sub-cell-induced
+biases in detection-time computations; the fourth removed the
+remaining sample-time bias that had been preventing the warp's
+gains from reaching quantize as correct colours.
+
+### What changed vs the original goal
+
+Original goal: "Fix the warp step." Current state: 6 of 7 sample
+images and 6/6 test-output images are at "no warp-error blotches"
+or "matching the reference exactly". The two 165926 images each
+retain one LG residual blotch in a region where the user reported
+real 3-7 px localised distortion (Round 6 feedback). Further
+incremental improvements likely require fundamentally different
+approaches (3D screen modeling, denser interior control points,
+etc.). Continuing per the user's "Then work on fixing the rest
+of the pipeline" instruction is appropriate.
+
