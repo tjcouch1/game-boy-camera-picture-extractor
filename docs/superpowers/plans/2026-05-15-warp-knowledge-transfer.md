@@ -741,3 +741,135 @@ Sanity check before deploying:
   sub-pixel structure first** — the channel choice doesn't matter
   if all channels work on sub-cell-emitted data. Pre-averaging
   fixes it for everything.
+
+## Round 9 — source-corner BGR pre-blur (May 21 session)
+
+### Committed (`9a1dbfa`): BGR pre-blur for source-corner detection
+
+Same root-cause fix as `9d53237` (inner-border BGR pre-blur), applied
+to `findScreenCornersWithMetrics`. Threshold-then-contour detection
+on the raw gray channel lands on the WH frame's G sub-cell (= middle
+of the WH frame's leftmost LCD pixel, because B sub-cell of WH has
+B=165 vs G/R=255), placing detected corners ~3 phone-px **inward**
+of the true screen edge on the LEFT side; right side's R sub-cell
+is at the rightmost position so it's not biased.
+
+Fix: horizontal Gaussian blur on the gray channel (`σ = imgW/400`)
+before threshold detection. Averages each LCD pixel's three sub-cell
+emissions; threshold-crossing then lands at the actual LCD-pixel
+boundary on both sides. Vertical sigma = 0 (no Y blur).
+
+Knock-on effects: pass-1's initial warp is closer to canonical →
+lens k1 search converges to a slightly different optimum → pass-2's
+homography has smaller corner residuals → post-TPS inner-border has
+fewer points needing correction.
+
+**Aggregate blotch count: 77 → 67** across the 7 sample images.
+Per-image (prior session vs after this commit):
+
+| image | before | after |
+|---|---|---|
+| 213416 | 2 | 2 |
+| 213430 | 19 | 19 |
+| 213443 (problem image) | 17 | **9** |
+| 213457 | 12 | 12 |
+| 213510 | 7 | 8 |
+| 165926 (problem image) | 9 | 8 |
+| 165926~2-EDIT | 11 | **7** |
+
+`213443` and `165926~2-EDIT` improved the most — both are among the
+three "persistent top-left" images the plan flagged as needing
+source-corner / lens-k1 fixes. The plan's hypothesis was correct.
+
+### What didn't work this session (reverted, not committed)
+
+- **Inner-border corner anchors at canonical** (TPS anchor pairs
+  `(canonical, canonical)` at the 4 inner-border corners). Goal:
+  pin TPS at corners when the side-detector misses corner samples
+  (165926 top-left where the left detector returns nothing below
+  Y=291). Result: regressed 67 → 69. Wrong semantics — pinning
+  canonical→canonical means "render canonical from pre-TPS canonical"
+  = no-motion at canonical, which DOESN'T move the actual visible
+  border to canonical. The TPS needs `(canonical, detected_corner)`
+  pairs (i.e., the actual detected corner position as the "from"
+  side of the warp) to render the actual corner at canonical.
+
+- **Inner-border corner anchors via legacy `findBorderCorners`
+  detector** (`(canonical, detected_corner)` pairs computed by
+  the R-B+128 detector). Result: 67 → 67 (neutral overall) but
+  165926 went 9 → 10. The legacy detector's BGR bias propagates
+  back into the anchor positions; an unbiased corner detector
+  would be needed.
+
+- **Brightness flattening on gray before source-corner threshold
+  detection** (compute local mean via downsample → blur → upsample,
+  then `gray − local_mean + 128`). Goal: handle dim corners in
+  165926 where the WH frame is brightness-gradient-attenuated.
+  First attempt used a 700+ px Gaussian kernel directly and made
+  one image take 55+ minutes (kernel-size-dependent quadratic
+  blowup) — DO NOT use giant kernels with `cv.GaussianBlur`, use
+  downsample → small-kernel-blur → upsample instead. The
+  downsample-based version was usable speed-wise but blotch count
+  on 165926 was unchanged. Reverted — not worth keeping.
+
+- **Replace pass-2's `findBorderPoints` (R-B+128) with the new
+  multi-channel DG-signature detector** (`detectInnerBorderThreshold
+  Crossings`). Goal: less-biased border points in pass-2 →
+  less-biased homography → less work for TPS. Result: aggregate
+  66 vs 67 (neutral) BUT 213443 went **9 → 16** (significant
+  regression). The new detector returns fewer points on some
+  images and pass-2's RANSAC then fits to a different inlier set;
+  for 213443 the new inlier set was worse. Reverted.
+
+### Next iteration ideas (untried)
+
+- **Unbiased corner detector** — a 2D peak search on the BGR-pre-
+  blurred DG-signature channel, restricted to a box around each
+  canonical inner-border corner. Output: actual corner sub-pixel
+  position in the warp output. Use as `(canonical, detected)`
+  anchor pairs in TPS — same shape as the legacy attempt but with
+  an unbiased detector. Should fix 165926 top-left where the
+  side detector misses corner samples.
+
+- **Lens-k1 search refinement post-pass-2** — currently the k1
+  search scores by dash residuals AFTER pass-1 only. Re-scoring
+  at candidate k1 values using POST-pass-2 (not pass-1) residuals
+  would let pass-2's homography "absorb" the k1 fit's leftovers,
+  but post-pass-2 dash residuals are already low on the problem
+  images, so this may give marginal improvement only. Cost: 32×
+  slower k1 search (each k1 candidate runs pass-1 + pass-2).
+
+- **Higher-order lens distortion** — `k2` is currently fixed at 0.
+  Adding it would require a 2D search (k1, k2). Could be
+  hierarchical: best k1 first, then small k2 search around it.
+  Worth trying if k1-only correction leaves consistent radial-
+  distortion-shaped residuals.
+
+- **Speed up source-corner detection** — `findScreenCornersWithMetrics`
+  is called 32+ times during k1 search. Each call now does the
+  BGR pre-blur. Computing the BGR pre-blur once and passing it
+  down would save measurable time without changing accuracy.
+
+- **Source-corner detection that doesn't depend on contour-then-
+  threshold** — Hough-transform lines or RANSAC-fit edges on a
+  Canny image could be more robust to dim corners and partial
+  contour breakage than the current threshold-then-contour
+  approach.
+
+### Don't repeat these mistakes
+
+- **Never use `cv.GaussianBlur` with a kernel that's hundreds of
+  pixels wide.** OpenCV.js's GaussianBlur is not FFT-based and
+  becomes unusably slow for large kernels. For a sigma > ~30,
+  use downsample → blur → upsample (e.g., 8× downscale lets a
+  σ=120 effective blur run as σ=15 on a small image, ~50× faster
+  end-to-end).
+
+- **Don't add per-side smoothing/curve-fitting that averages
+  away local distortion** (still applies from Round 8). The user-
+  reported "big distortion in 165926 top-left" IS a real local
+  bump that gets smoothed into nothing by a degree-2 polynomial.
+
+- **Don't add canonical→canonical TPS anchors** — they implement
+  "no motion at canonical", which doesn't make the warp's
+  visible border land at canonical when it's currently off.
