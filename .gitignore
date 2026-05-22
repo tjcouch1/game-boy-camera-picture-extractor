@@ -222,7 +222,6 @@ test-output/**/*
 !test-output/**/*.log
 !test-output/**/*_gbcam.png
 !test-output/**/*_gbcam_rgb.png
-!test-output/**/*_gbcam_blotches.png
 
 test-output-py/**/*
 !test-output-py/*/

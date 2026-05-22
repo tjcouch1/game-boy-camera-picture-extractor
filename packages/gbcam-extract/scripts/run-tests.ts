@@ -406,11 +406,11 @@ async function runPipeline(
 }
 
 /**
- * Render and save the blotch-detection overlay PNG for a pipeline output.
- * Detects blotches with the default parameters (erodeRadius=4, minArea=220),
- * traces each detected component's pixel boundary in red on the 8×
- * upscaled gbcam image, and writes <stem>_gbcam_blotches.png. Logs the
- * detection count to stdout.
+ * Render and save the blotch-detection overlay PNG for a pipeline
+ * output. Writes to `<outputDir>/debug/<stem>_gbcam_blotches.png` —
+ * the overlay is a diagnostic, not a primary pipeline artifact, so it
+ * lives alongside the warp/correct/sample debug images rather than
+ * next to the main gbcam.png.
  */
 async function writeBlotchOverlay(
   gbcam: GBImageData,
@@ -424,7 +424,9 @@ async function writeBlotchOverlay(
   for (let i = 0; i < w * h; i++) gray[i] = gbcam.data[i * 4];
   const blotches = detectBlotches(gray, w, h);
   const overlay = renderBlotchOverlay(gray, w, h, blotches);
-  const outPath = join(outputDir, `${stem}_gbcam_blotches.png`);
+  const debugDir = join(outputDir, "debug");
+  if (!existsSync(debugDir)) mkdirSync(debugDir, { recursive: true });
+  const outPath = join(debugDir, `${stem}_gbcam_blotches.png`);
   await sharp(Buffer.from(overlay.rgba.buffer, overlay.rgba.byteOffset, overlay.rgba.byteLength), {
     raw: { width: overlay.width, height: overlay.height, channels: 4 },
   })
@@ -624,6 +626,7 @@ async function main() {
           );
 
           await writeDebugArtifacts(result, SAMPLE_PICTURES_OUT, stem);
+          await writeBlotchOverlay(result.grayscale, SAMPLE_PICTURES_OUT, stem);
         } catch (err) {
           console.error(
             `  ERROR: ${err instanceof Error ? err.message : String(err)}`
