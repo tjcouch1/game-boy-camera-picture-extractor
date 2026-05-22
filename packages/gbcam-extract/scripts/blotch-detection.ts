@@ -313,13 +313,15 @@ export function renderBlotchOverlay(
 
   // 2. For each blotch, trace its 1-pixel-thick boundary on the
   // upscaled image. Boundary = blotch pixels that have at least one
-  // 4-neighbour outside the blotch. Stroke colour: bright red for high
-  // contrast against the GB palette (no palette colour is similar).
+  // 4-neighbour outside the blotch. Stroke colour: bright green —
+  // none of the four GB palette colours (BK, DG-blue, LG-pink, WH-
+  // yellow) are close to pure green, so the outline stays
+  // unambiguously visible against any of them.
   // Stroke thickness: 2 image-px on the upscaled output, so each
   // boundary GB-pixel paints a 2×(scale+2) ring inside its 8×8 block.
-  const strokeR = 255;
-  const strokeG = 32;
-  const strokeB = 32;
+  const strokeR = 0;
+  const strokeG = 255;
+  const strokeB = 0;
   for (const b of blotches) {
     const m = b.mask;
     const mw = b.maskWidth;
