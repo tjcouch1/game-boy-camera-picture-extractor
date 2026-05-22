@@ -2314,12 +2314,22 @@ function refineWarpWithMetrics(
   const H = warped.rows;
   const W = warped.cols;
 
-  // Compute R-B channel: warm frame (#FFFFA5) -> HIGH; cool border (#9494FF) -> LOW
-  // In BGR: frame is (165,255,255) so R=255, B=165 → R-B=90 + 128 = HIGH
-  //         border is (255,148,148) so R=148, B=255 → R-B=-107 + 128 = LOW
+  // Compute R-B channel from a BGR-pre-blurred warp output. Same root
+  // cause as the inner-border (9d53237) and source-corner (9a1dbfa)
+  // pre-blur fixes: the BGR sub-cell layout in the LCD source puts B
+  // (165 for WH, 255 for DG) at the left of each LCD pixel, so the
+  // R-B+128 channel peaks at the B sub-cell rather than at the actual
+  // pixel boundary. Horizontal Gaussian blur (σ ≈ scale/3) averages
+  // each LCD pixel's sub-cell emissions together; the channel then
+  // transitions at the pixel boundary. Pass-1 / pass-2 then refine the
+  // homography based on actually-pixel-boundary edges rather than
+  // sub-cell-skewed ones.
   const rbCh = withMats((track, untrack) => {
+    const blurred = track(new cv.Mat());
+    const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+    cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
     const rgb = track(new cv.Mat());
-    cv.cvtColor(warped, rgb, cv.COLOR_BGR2RGB);
+    cv.cvtColor(blurred, rgb, cv.COLOR_BGR2RGB);
 
     // Create single-channel Mat for R-B+128
     const result = new cv.Mat(H, W, cv.CV_8UC1);
@@ -2726,12 +2736,18 @@ function refineWarpMultiAnchor(
   const dashes = detectDashesOnWarp(warped, scale);
 
   // 2. Detect inner-border points on the pass-1 warped output using the
-  // legacy R-B+128 + argmin-of-derivative detector. It has a small bias
-  // from the visual edge but is empirically stable across images, and
-  // the polynomial post-correction absorbs the bias.
+  // legacy R-B+128 + argmin-of-derivative detector. Compute on a
+  // BGR-pre-blurred warp output (σ ≈ scale/3) so the R-B+128 channel
+  // transitions at the actual pixel boundary instead of at the sub-cell
+  // (same fix as in refineWarpWithMetrics + detectInnerBorderThreshold
+  // Crossings: BGR sub-cell layout skews the channel peak away from the
+  // pixel boundary on left/right borders).
   const rb = withMats((track, untrack) => {
+    const blurred = track(new cv.Mat());
+    const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+    cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
     const rgb = track(new cv.Mat());
-    cv.cvtColor(warped, rgb, cv.COLOR_BGR2RGB);
+    cv.cvtColor(blurred, rgb, cv.COLOR_BGR2RGB);
     const out = new cv.Mat(Hc, Wc, cv.CV_8UC1);
     const rgbData = rgb.data;
     const outData = out.data;
