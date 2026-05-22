@@ -1069,3 +1069,51 @@ approaches (3D screen modeling, denser interior control points,
 etc.). Continuing per the user's "Then work on fixing the rest
 of the pipeline" instruction is appropriate.
 
+## Round 12 — quantize G-valley fallback (smarter version)
+
+### Committed (`8a9b532`): conditional midpoint fallback
+
+`gValleyThreshold` searches the smoothed G-histogram for the minimum
+between LG and WH cluster centres, returning that index. When the
+histogram is monotonic in the safe range [lgCenter+8, whCenter-8],
+the minimum lands at the boundary — which is right next to the LG
+cluster centre, pushing many high-R / mid-G pixels into WH that
+the reference labels as LG (= zelda-poster-2 had 2650 WH→LG errors
+caused by this).
+
+The fix: when the search returns a boundary value AND the cluster
+centres are far enough apart (span ≥ 60 G units), fall back to the
+midpoint of the two centres. This is the unbiased default for
+well-separated bimodal-but-no-valley distributions.
+
+The span guard matters: for tightly-spaced clusters (thing-1
+span=40, 213443 span=59), the histogram has no clean bimodality
+and the OLD boundary behaviour is empirically better. A no-guard
+"always midpoint at boundary" version (tried + reverted) regressed
+thing-1 by ~560 diff pixels and added 2 WH blotches to 213443.
+The span ≥ 60 threshold keeps both behaviours' strengths.
+
+**Results:** zelda-poster-2 test diff 3646 → 2038 (≈1600 fewer
+wrong pixels, all WH↔LG confusion). All other test images
+unchanged. Sample-pictures-out blotch count unchanged at 7 (3
+warp errors remaining, none introduced by this fix).
+
+### Untried next quantize step
+
+zelda-poster-3 still has 4186 diff (~30% of pixels). Its cluster
+centres span LG G=93.5 to WH G=230.8 (= span 137), and the valley
+detector finds an INTERIOR minimum at G=137 (not at the boundary,
+so the smarter-fallback fix doesn't trigger). The valley at 137
+is ~25 G-units BELOW the midpoint of 162 — likely because the
+histogram has many low-G pixels (= many LG pixels with G slightly
+above cluster centre) and few high-G pixels (= fewer WH pixels in
+this image's content). The interior valley is statistically real
+but classifies too many pixels as WH.
+
+A possible next rule: when span is very wide (≥ 100 G-units) AND
+the interior valley is far from midpoint (|valley − midpoint| >
+span/6), prefer midpoint. Would shift zelda-poster-3 threshold
+137 → 162 and likely reduce WH→LG errors. Risk: same pattern of
+some-images-improve / some-images-regress as the first attempt;
+needs validation per image before committing.
+
