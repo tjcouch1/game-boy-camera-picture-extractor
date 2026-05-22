@@ -159,10 +159,13 @@ export function sample(
 
   // Smoothing: 5×5 median filter rejects per-block detection outliers
   // (e.g., dark blocks where the centroid lands randomly) and preserves
-  // gradual regional variation. Then clamp to ±2 to keep sub-pixel windows
-  // within ±1 GB pixel of expected.
+  // gradual regional variation. Then clamp to ±3 — at scale=8 the sub-cell
+  // width is ~2.67 image-px, so an offset of ±3 still resolves to the
+  // correct LCD pixel's sub-cells (just crossing one block boundary for R
+  // or B, which sampleAt handles). ±4 would put R into the *next* LCD
+  // pixel's B sub-cell, which is wrong, so 3 is the safe ceiling.
   const SMOOTH_RADIUS = 2;
-  const OFFSET_CLAMP = 2;
+  const OFFSET_CLAMP = 3;
   for (let by = 0; by < CAM_H; by++) {
     for (let bx = 0; bx < CAM_W; bx++) {
       const vals: number[] = [];
@@ -271,9 +274,9 @@ export function sample(
       `[sample] subpixel cols (scale=${scale}): ` +
         `B=[${bLoLog},${bHiLog}) G=[${gLoLog},${gHiLog}) R=[${rLoLog},${rHiLog}) vMargin=${vMargin}`,
     );
-    // Per-block sub-pixel offset distribution
+    // Per-block sub-pixel offset distribution (smoothed + clamped)
     const offsetBuckets: Record<string, number> = {
-      "≤-3": 0, "-2": 0, "-1": 0, "0": 0, "+1": 0, "+2": 0, "≥+3": 0,
+      "≤-4": 0, "-3": 0, "-2": 0, "-1": 0, "0": 0, "+1": 0, "+2": 0, "+3": 0, "≥+4": 0,
     };
     let offMin = Infinity, offMax = -Infinity, offSum = 0;
     for (let i = 0; i < CAM_W * CAM_H; i++) {
@@ -282,14 +285,50 @@ export function sample(
       if (o > offMax) offMax = o;
       offSum += o;
       const r = Math.round(o);
-      const key = r <= -3 ? "≤-3" : r === -2 ? "-2" : r === -1 ? "-1" : r === 0 ? "0" : r === 1 ? "+1" : r === 2 ? "+2" : "≥+3";
+      const key = r <= -4 ? "≤-4" : r === -3 ? "-3" : r === -2 ? "-2" : r === -1 ? "-1" : r === 0 ? "0" : r === 1 ? "+1" : r === 2 ? "+2" : r === 3 ? "+3" : "≥+4";
       offsetBuckets[key]++;
     }
     const offMean = offSum / (CAM_W * CAM_H);
     dbg.log(
-      `[sample] LCD centre offsets: mean=${offMean.toFixed(2)} ` +
+      `[sample] LCD centre offsets (clamped): mean=${offMean.toFixed(2)} ` +
         `range=[${offMin.toFixed(2)}, ${offMax.toFixed(2)}] ` +
         `dist=` + Object.entries(offsetBuckets).map(([k, v]) => `${k}:${v}`).join(" "),
+    );
+    // Raw (pre-smooth, pre-clamp) offset distribution — tells us if the
+    // clamp is throwing away signal the warp residual could otherwise
+    // expose. Use median per 5×5 window like the smoothed map, but skip
+    // the clamp, to see what the warp residual actually looks like.
+    const rawBuckets: Record<string, number> = {
+      "≤-4": 0, "-3": 0, "-2": 0, "-1": 0, "0": 0, "+1": 0, "+2": 0, "+3": 0, "≥+4": 0,
+    };
+    let rawMin = Infinity, rawMax = -Infinity, rawSum = 0;
+    for (let by = 0; by < CAM_H; by++) {
+      for (let bx = 0; bx < CAM_W; bx++) {
+        const vals: number[] = [];
+        const yLo = Math.max(0, by - 2);
+        const yHi = Math.min(CAM_H, by + 3);
+        const xLo = Math.max(0, bx - 2);
+        const xHi = Math.min(CAM_W, bx + 3);
+        for (let yy = yLo; yy < yHi; yy++) {
+          for (let xx = xLo; xx < xHi; xx++) {
+            vals.push(rawOffsetMap[yy * CAM_W + xx]);
+          }
+        }
+        vals.sort((a, b) => a - b);
+        const med = vals[Math.floor(vals.length / 2)];
+        if (med < rawMin) rawMin = med;
+        if (med > rawMax) rawMax = med;
+        rawSum += med;
+        const r = Math.round(med);
+        const key = r <= -4 ? "≤-4" : r === -3 ? "-3" : r === -2 ? "-2" : r === -1 ? "-1" : r === 0 ? "0" : r === 1 ? "+1" : r === 2 ? "+2" : r === 3 ? "+3" : "≥+4";
+        rawBuckets[key]++;
+      }
+    }
+    const rawMean = rawSum / (CAM_W * CAM_H);
+    dbg.log(
+      `[sample] LCD centre offsets (raw, pre-clamp): mean=${rawMean.toFixed(2)} ` +
+        `range=[${rawMin.toFixed(2)}, ${rawMax.toFixed(2)}] ` +
+        `dist=` + Object.entries(rawBuckets).map(([k, v]) => `${k}:${v}`).join(" "),
     );
 
     dbg.setMetrics("sample", {
@@ -309,6 +348,10 @@ export function sample(
         min: Number(offMin.toFixed(3)),
         max: Number(offMax.toFixed(3)),
         distribution: offsetBuckets,
+        rawMean: Number(rawMean.toFixed(3)),
+        rawMin: Number(rawMin.toFixed(3)),
+        rawMax: Number(rawMax.toFixed(3)),
+        rawDistribution: rawBuckets,
       },
     });
     // 8x upscale for visual inspection
