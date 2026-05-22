@@ -23,6 +23,7 @@ import { processPicture } from "../src/index.js";
 import { applyPalette } from "../src/palette.js";
 import type { GBImageData } from "../src/common.js";
 import { GB_COLORS, CAM_W, CAM_H } from "../src/common.js";
+import { detectBlotches, renderBlotchOverlay } from "./blotch-detection.js";
 
 // "Down" palette (matches the GBA SP screen colors used as input).
 const DOWN_PALETTE: [string, string, string, string] = [
@@ -390,10 +391,53 @@ async function runPipeline(
 
   await writeDebugArtifacts(result, outputDir, stem);
 
+  // Blotch-detection debug overlay. Standalone diagnostic — not part
+  // of the pipeline — but rendered automatically by test:pipeline so
+  // every pipeline run leaves a side-by-side view of the gbcam output
+  // and the detected warp-error blotches outlined in red. The
+  // detector + overlay live in scripts/blotch-detection.ts and are
+  // shared with the standalone `pnpm blotch -- --overlay` CLI.
+  await writeBlotchOverlay(result.grayscale, outputDir, stem);
+
   return {
     grayscale: result.grayscale,
     debugLog: result.debug?.log ?? [],
   };
+}
+
+/**
+ * Render and save the blotch-detection overlay PNG for a pipeline output.
+ * Detects blotches with the default parameters (erodeRadius=4, minArea=220),
+ * traces each detected component's pixel boundary in red on the 8×
+ * upscaled gbcam image, and writes <stem>_gbcam_blotches.png. Logs the
+ * detection count to stdout.
+ */
+async function writeBlotchOverlay(
+  gbcam: GBImageData,
+  outputDir: string,
+  stem: string,
+): Promise<void> {
+  // Build a grayscale Uint8Array from the RGBA gbcam image.
+  const w = gbcam.width;
+  const h = gbcam.height;
+  const gray = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) gray[i] = gbcam.data[i * 4];
+  const blotches = detectBlotches(gray, w, h);
+  const overlay = renderBlotchOverlay(gray, w, h, blotches);
+  const outPath = join(outputDir, `${stem}_gbcam_blotches.png`);
+  await sharp(Buffer.from(overlay.rgba.buffer, overlay.rgba.byteOffset, overlay.rgba.byteLength), {
+    raw: { width: overlay.width, height: overlay.height, channels: 4 },
+  })
+    .png()
+    .toFile(outPath);
+  if (blotches.length > 0) {
+    const summary = blotches
+      .map((b) => `${b.colorName}@(${b.centroid.x.toFixed(0)},${b.centroid.y.toFixed(0)})`)
+      .join(" ");
+    console.log(`  blotch overlay: ${blotches.length} (${summary})`);
+  } else {
+    console.log(`  blotch overlay: 0`);
+  }
 }
 
 /**
