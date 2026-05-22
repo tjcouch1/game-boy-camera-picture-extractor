@@ -283,7 +283,27 @@ function gValleyThreshold(
     return midpoint;
   }
 
-  return lo + valleyIdx;
+  // Even for an INTERIOR valley, if the cluster centres are very far
+  // apart (span ≥ 100) AND the detected valley is FAR from the
+  // midpoint (|valley − midpoint| > span/6), the asymmetric histogram
+  // is biasing the detected minimum toward one cluster. The smoothed
+  // valley is statistically real but lies in a position that creates
+  // more LG/WH misclassification than the midpoint does (e.g.,
+  // zelda-poster-3 LG G=93.5 / WH G=230.8 / span=137: the smoothed
+  // histogram min lands at G=137, ~25 below midpoint G=162, dragged
+  // by a long LG-tail of mid-G pixels; classifying everything above
+  // 137 as WH puts ~2800 actually-LG pixels into WH per the
+  // reference). Use midpoint when this asymmetry is large.
+  const WIDE_SPAN = 100;
+  const valleyG = lo + valleyIdx;
+  if (
+    span >= WIDE_SPAN &&
+    Math.abs(valleyG - midpoint) > span / 6
+  ) {
+    return midpoint;
+  }
+
+  return valleyG;
 }
 
 /**
