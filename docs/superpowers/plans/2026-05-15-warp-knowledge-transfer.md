@@ -873,3 +873,120 @@ source-corner / lens-k1 fixes. The plan's hypothesis was correct.
 - **Don't add canonical→canonical TPS anchors** — they implement
   "no motion at canonical", which doesn't make the warp's
   visible border land at canonical when it's currently off.
+
+## Round 10 — usable blotch detection + full BGR pre-blur (May 21-22)
+
+### Blotch detection rewrite (`9af0cff`)
+
+User pointed out the previous detector was over-counting (77
+detections!) because 4-connected-component on a per-pixel mask treats
+two distinct visual blotches as one if they're joined by a 1-3 px
+bridge, and dithered picture content (= scattered ~3 px clumps of a
+colour) also passes the size filter. Rewrote with morphological
+opening (erode then dilate, 7×7 box kernel) on each per-colour mask
+before 4-connected-component, plus minArea 350 (= ~10×10 post-open
+core). Now matches user's manual identification exactly on the 7
+sample images (12 total: 213430×2 + 213443×3 + 213457×1 +
+165926×3 + 165926~2-EDIT×3) AND on the reference images
+(zelda-poster reference = 2 legitimate WH, thing reference = 0).
+
+Going forward, **anything beyond the user-confirmed legitimate-content
+blotches is a warp error** — currently 4 blotches are legitimate
+(213430×2 WH top+bottom, 165926×1 WH bottom-right, 165926~2-EDIT×1
+WH bottom-right). The rest is what to fix.
+
+### Three more BGR pre-blur commits (the same fix applied wherever
+R-B+128 or gray was being computed from raw warp output):
+
+- `051923a` — pass-1 (`refineWarpWithMetrics`) and pass-2
+  (`refineWarpMultiAnchor`) build R-B+128 from a horizontal-Gaussian-
+  pre-blurred warp output (σ ≈ scale/3). Without it, the channel
+  peaks at the B sub-cell rather than at the actual pixel boundary,
+  biasing findBorderPoints and findBorderCorners on left/right.
+  Blotch count: 12 → 11.
+- `dcead65` — `detectDashesOnWarp` converts a BGR-pre-blurred warp
+  output to gray. The WH frame's gray varies by sub-cell (B~18, G~150,
+  R~76 because only one channel emits per sub-cell at scale=8) so the
+  dark-mass centroid that locates each dash was pulled toward the
+  LEFT of each LCD pixel (= where the dim-B sub-cell sits, the
+  "darkest" WH region the centroid weights highest). After pre-blur,
+  centroid lands at the real BK body centre. Blotch count: 11 → 10.
+
+Total session arc: 12 → 10 blotches (4 legitimate + 6 warp errors
+remaining). All five BGR-pre-blur sites — source-corner detection,
+inner-border DG-signature, pass-1 R-B+128, pass-2 R-B+128, dash
+detection — share the same physics: WH frame's leftmost-bright
+sub-cell is at the G sub-cell (middle of LCD pixel) for WH and at
+the B sub-cell (left of LCD pixel) for DG, so any channel that
+depends on per-sub-cell brightness is biased toward those positions
+unless the channel is averaged across a full LCD-pixel width first.
+
+### Remaining warp errors (6, all in 213443 / 165926 / 165926~2-EDIT)
+
+- **213443: 3 WH blotches** at (108,87), (54,64), (82,10). Scattered
+  across the image; not corner-specific. `sample.lcdOffset` shows
+  20.2% of pixels are clamped at ±2 image-px, with a mean shift of
+  +0.53 px. That means the warp's interior has 3+ image-px radial
+  residual that k1 alone doesn't capture and the sample-step's ±2
+  clamp can't fully compensate for. The picture content is heavily
+  dithered, so wrong-sub-cell samples flip pixel colour and accumulate
+  into solid-colour blotches.
+- **165926 + 165926~2-EDIT: 2 extra blotches each** (WH middle-left
+  and LG middle/bottom-left in both). User's Round 6 feedback
+  described real 3-7 px localised distortion in the top-left region;
+  this is the same area. Post-TPS border bias is sub-pixel
+  (~0.2 mean, ~1.0 max) but the camera content there mis-samples.
+
+### What didn't work this round
+
+- **k1 search extended to (k1, k2) 2D** (`undistortBgr` now takes k2).
+  Tried both wide search (~700 candidate combinations) which
+  blew up runtime to 55+ minutes and a tiny 4-candidate search
+  (±0.025, ±0.05 around best k1). **Every image picked k2=0**
+  because the lens scorer measures perimeter dash residuals, and
+  k2 corrects interior distortion that the perimeter dashes don't
+  see. The scorer would need to be replaced with a metric that
+  captures interior radial residual to make k2 search work — no
+  clean way to do that without ground truth for the camera
+  content. Reverted both attempts.
+- **Pass-2 detector swap to `detectInnerBorderThresholdCrossings`**
+  (same as Round 8). Result: aggregate 67 → 66 but 213443 went
+  9 → 16 (significant regression). The new detector returns
+  fewer points on 213443, RANSAC fits a different inlier set, the
+  resulting homography is worse on that image. Reverted.
+
+### Don't repeat these mistakes (added this round)
+
+- **`cv.GaussianBlur` with σ > ~30 IS UNUSABLY SLOW.** Already noted
+  in Round 9; this round saw it again with a wider lens-k2 search
+  (=~700 evaluations each running the full source-corner detector,
+  which itself called GaussianBlur). Pipeline went from ~6 min to
+  55+ min. Always validate the candidate count budget before
+  expanding any search range.
+- **Lens scoring via dash residuals can't see k2 effects.** k1
+  affects radial position of perimeter dashes (high signal). k2
+  is a 4th-order correction that's significant only at high radius
+  AND beyond the linear contribution of k1. Perimeter dashes don't
+  span enough radius range to disambiguate k1 vs k2. A k2-aware
+  scoring function would need to measure interior radial residual
+  (= run pass-1 / pass-2 / TPS and measure something the perimeter
+  doesn't capture — non-trivial).
+
+### Untried next steps (for further iteration)
+
+- **Unbiased 2D inner-border corner detector** — still untried as a
+  proper 2D peak search (the two attempts with the legacy
+  `findBorderCorners` regressed). Concept: from canonical inner-
+  border corner, do a small 2D peak search on the BGR-pre-blurred
+  DG-signature channel to find the actual corner. Use as TPS
+  anchor pair.
+- **Iterative refinement of source corners** — after pass-2 + TPS
+  converge, re-run source-corner detection on the post-TPS warp
+  (back-projected to source), update the initial warp, re-iterate.
+  Could refine the corners beyond what the initial pre-blurred
+  detection achieves.
+- **Per-region radial-residual measurement** for a k2-aware
+  scoring function. Idea: run pass-1, measure dash residual variance
+  weighted by distance-from-centre. If higher-radius dashes have
+  more variance, k2 likely needs adjustment.
+
