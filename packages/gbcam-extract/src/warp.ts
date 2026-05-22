@@ -1692,10 +1692,36 @@ function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetect
   const cv = getCV();
 
   return withMats((track, _untrack) => {
+    const grayRaw = track(new cv.Mat());
+    cv.cvtColor(bgr, grayRaw, cv.COLOR_BGR2GRAY);
+    const imgH = grayRaw.rows;
+    const imgW = grayRaw.cols;
+
+    // Pre-blur the gray channel HORIZONTALLY before thresholding. Same
+    // root cause as the inner-border BGR fix in 9d53237: the LCD's BGR
+    // sub-cell layout (B left, G middle, R right) makes the WH frame's
+    // leftmost bright sub-cell its G sub-cell, sitting in the MIDDLE of
+    // the WH frame's leftmost LCD pixel rather than at the actual screen
+    // edge. The threshold-then-contour detector lands on the G sub-cell
+    // → detected corners are ~3 phone-px INWARD of the true screen edge
+    // on the LEFT side; the right side has its R sub-cell at the
+    // rightmost position so it's not biased. Top/bottom borders run
+    // horizontally so they don't have this asymmetry.
+    //
+    // Horizontal Gaussian blur with σ ≈ half-an-LCD-pixel (estimated as
+    // image-width / 400 = 1/(2*200), conservative vs the typical 160
+    // LCD pixels per screen width and ~80% of photo width = 5 phone-px
+    // per LCD pixel; sigma = 2.5 phone-px = ~1 sub-cell width) averages
+    // sub-cell emissions of each LCD pixel together. After blurring,
+    // the WH frame's leftmost gray value rises consistently across the
+    // entire pixel width, and the threshold-crossing contour lands at
+    // the actual LCD-pixel boundary. Vertical blur kept at 0 — top/
+    // bottom don't have the BGR asymmetry, and any Y-blur would smear
+    // dashes and inner features.
     const gray = track(new cv.Mat());
-    cv.cvtColor(bgr, gray, cv.COLOR_BGR2GRAY);
-    const imgH = gray.rows;
-    const imgW = gray.cols;
+    const sigmaX = Math.max(1.5, imgW / 400);
+    const kx = Math.max(3, Math.floor(2 * Math.ceil(3 * sigmaX) / 2) * 2 + 1);
+    cv.GaussianBlur(grayRaw, gray, new cv.Size(kx, 1), sigmaX, 0);
 
     const kernel = track(cv.Mat.ones(7, 7, cv.CV_8U));
 
