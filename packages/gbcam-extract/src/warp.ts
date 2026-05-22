@@ -822,8 +822,25 @@ export interface DetectedDashes {
 export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
   const cv = getCV();
 
+  // Pre-blur the BGR image horizontally before converting to gray (same
+  // BGR sub-cell fix as for source-corner / inner-border / pass-1+2
+  // border detectors). The WH frame's gray value varies strongly across
+  // sub-cells (B sub-cell ~18, G sub-cell ~150, R sub-cell ~76 because
+  // only one of R/G/B is emitted per sub-cell at scale=8). Without the
+  // pre-blur, the dark-mass centroid that locates each dash is biased
+  // toward whichever sub-cell happens to be in the search box — pulling
+  // the centroid toward the LEFT of each LCD pixel where the B sub-cell
+  // (dimmest, "darkest", thus highest weight in the centroid) sits.
+  // After pre-blur, each LCD pixel's three sub-cells average to a
+  // uniform per-pixel gray, so the dash centroid lands at the real
+  // BK body centre instead of a sub-cell-biased position. Vertical σ
+  // kept at 0 — sub-cell variation is horizontal only.
+  const blurred = new cv.Mat();
+  const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+  cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
   const gray = new cv.Mat();
-  cv.cvtColor(warped, gray, cv.COLOR_BGR2GRAY);
+  cv.cvtColor(blurred, gray, cv.COLOR_BGR2GRAY);
+  blurred.delete();
 
   // Flat-field the gray channel: subtract a wide-gaussian-blurred version
   // (the slow brightness "background") and re-centre at 128. This cancels
