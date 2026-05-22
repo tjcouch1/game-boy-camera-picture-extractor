@@ -3146,11 +3146,19 @@ function detectInnerBorderThresholdCrossings(
     const sm = gauss(symBox(profile, scale + 1), 1.0);
     // Strip-centre canonical (= half-LCD-px inward of canonical outer).
     const stripCentreIdx = canonOuterIdx - frameDir * (scale / 2);
-    // Wide peak search: ±1.0 LCD-px (= ±scale image-px). DG strip can shift
-    // by several image-px from canonical (e.g., 165926 has 5-7 px shift
-    // in the top-left quadrant); a tight argmax window would miss the
-    // actual peak.
-    const peakHalf = Math.max(1, scale);
+    // Wide peak search: ±3 LCD-px (= ±3*scale image-px). User-reported
+    // 5-7 px corner-area shifts on 165926 / ~2-EDIT can extend to 15-20
+    // image-px in the top-left quadrant per the border-curve-overlay
+    // diagnostic. The previous ±scale (±8 image-px) search missed those
+    // peaks entirely, so TPS received no anchor for the deviated regions
+    // and left them uncorrected. Widening to ±3*scale lets us find the
+    // actual DG strip even when it has shifted far from canonical.
+    //
+    // Risk: wider search may catch DG-toned CAMERA content as a spurious
+    // peak. Mitigated by the contrast filter (peak >= baseline+60) and
+    // by sampling baseline 1.5 LCD-px outward (still in the WH frame
+    // even when the strip has shifted by up to 2 LCD-px).
+    const peakHalf = Math.max(1, 3 * scale);
     const peakLo = Math.max(0, Math.floor(stripCentreIdx - peakHalf));
     const peakHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + peakHalf));
     if (peakLo >= peakHi) return null;
