@@ -11,7 +11,7 @@ TEST SUMMARY
   thing-3          14128 ( 98.55%)     208 (  1.45%)   FAIL
   zelda-poster-1   14072 ( 98.16%)     264 (  1.84%)   FAIL
   zelda-poster-2   12298 ( 85.78%)    2038 ( 14.22%)   FAIL
-  zelda-poster-3   10150 ( 70.80%)    4186 ( 29.20%)   FAIL
+  zelda-poster-3   10320 ( 71.99%)    4016 ( 28.01%)   FAIL
 
   0/6 passed
 
