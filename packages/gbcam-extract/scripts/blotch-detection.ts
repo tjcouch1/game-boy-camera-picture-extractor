@@ -23,26 +23,43 @@
  *   pnpm blotch -- --dir <root> --json
  *   pnpm blotch -- --dir <root> --validate   # check vs plan's Round 7 list
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { resolve, basename, join } from "node:path";
 import sharp from "sharp";
 
-const COLOR_NAMES: Record<number, string> = {
+export const BLOTCH_COLOR_NAMES: Record<number, string> = {
   0: "BK",
   82: "DG",
   165: "LG",
   255: "WH",
 };
 
-interface Blotch {
+const COLOR_NAMES = BLOTCH_COLOR_NAMES;
+
+/** Default morphological-opening + size parameters tuned to match the
+ *  user's manual blotch identification on the current sample-pictures
+ *  output: catches every blotch the user flagged (12-22 px wide solid
+ *  patches) without picking up the per-pixel dithered content. See
+ *  Round 13 in the plan for the parameter sweep. */
+export const BLOTCH_DEFAULT_ERODE_RADIUS = 4;
+export const BLOTCH_DEFAULT_MIN_AREA = 220;
+
+export interface Blotch {
   color: number;
   colorName: string;
   area: number;
   bbox: { x: number; y: number; w: number; h: number };
   centroid: { x: number; y: number };
+  /** Pixel mask of the same dimensions as the input image: 1 where this
+   *  blotch's post-opening pixels live, 0 elsewhere. Used by the overlay
+   *  renderer to draw the actual blotch boundary rather than just the
+   *  axis-aligned bbox. */
+  mask: Uint8Array;
+  /** Image width that `mask` is sized against. */
+  maskWidth: number;
 }
 
-interface ImageResult {
+export interface ImageResult {
   path: string;
   stem: string;
   width: number;
@@ -50,7 +67,7 @@ interface ImageResult {
   blotches: Blotch[];
 }
 
-function snapToPalette(v: number): number {
+export function snapToPalette(v: number): number {
   // Reference images sometimes have values slightly off the canonical
   // 0/82/165/255 due to PNG round-tripping; snap to nearest palette.
   const palette = [0, 82, 165, 255];
@@ -66,7 +83,7 @@ function snapToPalette(v: number): number {
   return best;
 }
 
-async function loadGray(path: string): Promise<{ data: Uint8Array; w: number; h: number }> {
+export async function loadGray(path: string): Promise<{ data: Uint8Array; w: number; h: number }> {
   const { data, info } = await sharp(path).greyscale().raw().toBuffer({
     resolveWithObject: true,
   });
@@ -132,8 +149,9 @@ function dilateMask(mask: Uint8Array, w: number, h: number, radius: number): Uin
 
 /**
  * 4-connected components of pixels where mask[i] === 1, returning bbox,
- * area, and centroid for each. Used after morphological opening of a
- * per-colour binary mask.
+ * area, centroid, and per-component pixel mask for each. The mask is
+ * what the overlay renderer uses to draw the actual blotch contour
+ * (vs the axis-aligned bbox).
  */
 function componentsOnMask(
   mask: Uint8Array,
@@ -149,10 +167,12 @@ function componentsOnMask(
     stack.length = 0;
     stack.push(i);
     visited[i] = 1;
+    const compMask = new Uint8Array(w * h);
     let minX = w, maxX = -1, minY = h, maxY = -1;
     let sumX = 0, sumY = 0, area = 0;
     while (stack.length > 0) {
       const k = stack.pop()!;
+      compMask[k] = 1;
       const x = k % w;
       const y = (k - x) / w;
       if (x < minX) minX = x;
@@ -185,6 +205,8 @@ function componentsOnMask(
       area,
       bbox: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
       centroid: { x: sumX / area, y: sumY / area },
+      mask: compMask,
+      maskWidth: w,
     });
   }
   return blotches;
@@ -203,23 +225,21 @@ function rankBlotches(blotches: Blotch[]): Blotch[] {
  * components on the opened mask each correspond to a single
  * solid-coloured region (= "almost entirely one color").
  *
- * Parameters chosen to match user's expected counts on the current
- * pipeline output (see plan's Round 7 + Round 9 sections):
- * - erodeRadius 3 (= 7x7 kernel): removes bridges thinner than 7 px
- *   and any clump smaller than 7x7 entirely. The "few stray pixels of
- *   a different color within" a blotch don't break the mask of the
- *   blotch's main colour, but dithered-edge picture content (where
- *   the colour appears in scattered tiny clumps) is wiped out.
- * - minArea 90 (= ~12x8 or ~10x10 final core): a 12x12 blotch survives
- *   7x7 opening as roughly 12x12; smaller mostly-solid regions get
- *   filtered out.
+ * Parameters chosen to match user's manual identification on the
+ * current sample-pictures-out and test-output, including two small
+ * warp-error blotches that needed the more sensitive defaults (Round
+ * 13: 213443 upper-left LG ≈ 18×22 px, 213457 middle-left WH ≈ 16×15
+ * px). At erodeRadius=4 minArea=220 these survive while dithered
+ * picture content remains filtered out across the suite.
  */
-async function analyse(
-  path: string,
-  erodeRadius: number,
-  minArea: number,
-): Promise<ImageResult> {
-  const { data, w, h } = await loadGray(path);
+export function detectBlotches(
+  data: Uint8Array,
+  w: number,
+  h: number,
+  opts: { erodeRadius?: number; minArea?: number } = {},
+): Blotch[] {
+  const erodeRadius = opts.erodeRadius ?? BLOTCH_DEFAULT_ERODE_RADIUS;
+  const minArea = opts.minArea ?? BLOTCH_DEFAULT_MIN_AREA;
   const all: Blotch[] = [];
   for (const color of [82, 165, 255]) {
     const mask = new Uint8Array(w * h);
@@ -229,13 +249,129 @@ async function analyse(
     const comps = componentsOnMask(opened, w, h, color);
     for (const c of comps) if (c.area >= minArea) all.push(c);
   }
+  return rankBlotches(all);
+}
+
+async function analyse(
+  path: string,
+  erodeRadius: number,
+  minArea: number,
+): Promise<ImageResult> {
+  const { data, w, h } = await loadGray(path);
   return {
     path,
     stem: basename(path).replace(/_gbcam\.png$/, "").replace(/\.png$/, ""),
     width: w,
     height: h,
-    blotches: rankBlotches(all),
+    blotches: detectBlotches(data, w, h, { erodeRadius, minArea }),
   };
+}
+
+/**
+ * Render a debug overlay PNG showing the detected blotches outlined on
+ * the upscaled gbcam image. Each blotch's actual pixel boundary is
+ * traced with a 1-px ring in a contrasting color (= bright red),
+ * making the boundary of the blotch immediately legible against the
+ * 4-colour gbcam palette. The image is upscaled by `scale` (default 8)
+ * so the 128×112 gbcam becomes a 1024×896 PNG that's easy to inspect.
+ *
+ * Returns RGBA Uint8Array of size 4 * (w*scale) * (h*scale).
+ */
+export function renderBlotchOverlay(
+  grayData: Uint8Array,
+  w: number,
+  h: number,
+  blotches: Blotch[],
+  scale: number = 8,
+): { rgba: Uint8Array; width: number; height: number } {
+  const palette: Record<number, [number, number, number]> = {
+    0: [0, 0, 0],
+    82: [148, 148, 255],
+    165: [255, 148, 148],
+    255: [255, 255, 165],
+  };
+  const outW = w * scale;
+  const outH = h * scale;
+  const rgba = new Uint8Array(outW * outH * 4);
+
+  // 1. Render the base image (= 8× upscaled gbcam, palette-colored).
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const v = grayData[y * w + x];
+      const [r, g, b] = palette[v] ?? [128, 128, 128];
+      for (let dy = 0; dy < scale; dy++) {
+        for (let dx = 0; dx < scale; dx++) {
+          const oi = ((y * scale + dy) * outW + (x * scale + dx)) * 4;
+          rgba[oi] = r;
+          rgba[oi + 1] = g;
+          rgba[oi + 2] = b;
+          rgba[oi + 3] = 255;
+        }
+      }
+    }
+  }
+
+  // 2. For each blotch, trace its 1-pixel-thick boundary on the
+  // upscaled image. Boundary = blotch pixels that have at least one
+  // 4-neighbour outside the blotch. Stroke colour: bright red for high
+  // contrast against the GB palette (no palette colour is similar).
+  // Stroke thickness: 2 image-px on the upscaled output, so each
+  // boundary GB-pixel paints a 2×(scale+2) ring inside its 8×8 block.
+  const strokeR = 255;
+  const strokeG = 32;
+  const strokeB = 32;
+  for (const b of blotches) {
+    const m = b.mask;
+    const mw = b.maskWidth;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (m[y * mw + x] === 0) continue;
+        // Is this pixel on the boundary? (any 4-neighbour outside)
+        const leftOut = x === 0 || m[y * mw + (x - 1)] === 0;
+        const rightOut = x === mw - 1 || m[y * mw + (x + 1)] === 0;
+        const topOut = y === 0 || m[(y - 1) * mw + x] === 0;
+        const botOut = y === h - 1 || m[(y + 1) * mw + x] === 0;
+        if (!leftOut && !rightOut && !topOut && !botOut) continue;
+        // Paint the 8×8 block's outer ring on the upscaled image,
+        // 2-px-thick on whichever sides are boundary edges.
+        const px0 = x * scale;
+        const py0 = y * scale;
+        const paint = (sx: number, sy: number) => {
+          const oi = (sy * outW + sx) * 4;
+          rgba[oi] = strokeR;
+          rgba[oi + 1] = strokeG;
+          rgba[oi + 2] = strokeB;
+          rgba[oi + 3] = 255;
+        };
+        if (topOut) {
+          for (let dx = 0; dx < scale; dx++) {
+            paint(px0 + dx, py0);
+            paint(px0 + dx, py0 + 1);
+          }
+        }
+        if (botOut) {
+          for (let dx = 0; dx < scale; dx++) {
+            paint(px0 + dx, py0 + scale - 1);
+            paint(px0 + dx, py0 + scale - 2);
+          }
+        }
+        if (leftOut) {
+          for (let dy = 0; dy < scale; dy++) {
+            paint(px0, py0 + dy);
+            paint(px0 + 1, py0 + dy);
+          }
+        }
+        if (rightOut) {
+          for (let dy = 0; dy < scale; dy++) {
+            paint(px0 + scale - 1, py0 + dy);
+            paint(px0 + scale - 2, py0 + dy);
+          }
+        }
+      }
+    }
+  }
+
+  return { rgba, width: outW, height: outH };
 }
 
 function fmtBlotch(b: Blotch): string {
@@ -257,18 +393,12 @@ function printResult(res: ImageResult): void {
   }
 }
 
-async function main(): Promise<void> {
+export async function runCli(): Promise<void> {
   const args = process.argv.slice(2);
-  // Morphological-opening parameters tuned to match user's expected
-  // blotch counts on the current pipeline output (see plan Round 10).
-  // erodeRadius 3 = 7×7 kernel; thinner-than-7-px bridges and clumps
-  // get wiped out (which is the user's definition of "thin bridges
-  // connecting different areas don't count as one blotch", and also
-  // removes dithered picture content). minArea 90 = ~10×10 post-open
-  // region survives the filter.
-  let erodeRadius = 3;
-  let minArea = 350;
+  let erodeRadius = BLOTCH_DEFAULT_ERODE_RADIUS;
+  let minArea = BLOTCH_DEFAULT_MIN_AREA;
   let asJson = false;
+  let overlay = false;
   const paths: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -280,6 +410,8 @@ async function main(): Promise<void> {
       minArea = parseInt(args[++i], 10);
     } else if (a === "--json") {
       asJson = true;
+    } else if (a === "--overlay") {
+      overlay = true;
     } else if (a === "--dir" && i + 1 < args.length) {
       const dir = args[++i];
       const stack = [dir];
@@ -305,9 +437,12 @@ async function main(): Promise<void> {
   }
   if (paths.length === 0) {
     console.error(
-      "Usage: tsx scripts/blotch-detection.ts [--erode-radius N] [--min-area N] [--json]\n" +
-      "                                       <gbcam.png> [<gbcam.png> ...]\n" +
-      "       tsx scripts/blotch-detection.ts --dir <root>",
+      "Usage: pnpm blotch -- [--erode-radius N] [--min-area N] [--json] [--overlay]\n" +
+      "                     <gbcam.png> [<gbcam.png> ...]\n" +
+      "       pnpm blotch -- --dir <root> [--overlay]\n" +
+      "\n" +
+      "  --overlay  write <stem>_gbcam_blotches.png next to each input image\n" +
+      "             with detected blotches outlined.",
     );
     process.exit(1);
   }
@@ -318,13 +453,29 @@ async function main(): Promise<void> {
     try {
       const r = await analyse(p, erodeRadius, minArea);
       results.push(r);
+      if (overlay) {
+        const { data: grayData, w, h } = await loadGray(p);
+        const { rgba, width, height } = renderBlotchOverlay(grayData, w, h, r.blotches);
+        const outPath = p.replace(/_gbcam\.png$/, "_gbcam_blotches.png");
+        await sharp(Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength), {
+          raw: { width, height, channels: 4 },
+        })
+          .png()
+          .toFile(outPath);
+      }
     } catch (e) {
       console.error(`error processing ${p}: ${(e as Error).message}`);
     }
   }
 
   if (asJson) {
-    console.log(JSON.stringify(results, null, 2));
+    // JSON serialisation drops the Uint8Array masks — they're useful
+    // only for the overlay step and would explode the output size.
+    const trimmed = results.map((r) => ({
+      ...r,
+      blotches: r.blotches.map(({ mask: _m, maskWidth: _mw, ...rest }) => rest),
+    }));
+    console.log(JSON.stringify(trimmed, null, 2));
   } else {
     console.log(`images: ${results.length}  (erodeRadius=${erodeRadius}, minArea=${minArea})`);
     for (const r of results) printResult(r);
@@ -334,5 +485,3 @@ async function main(): Promise<void> {
     console.log(`  ${total} blotch(es) across ${results.length} image(s)`);
   }
 }
-
-main();
