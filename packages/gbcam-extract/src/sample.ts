@@ -44,12 +44,26 @@ function detectLcdCentreCol(
   const yLo = y0 + vMargin;
   const yHi = y0 + scale - vMargin;
   if (yHi <= yLo) return defaultCentre;
+  // Use the G channel ONLY for centroid detection. The combined-channel
+  // brightness profile is biased by sub-cell colour: DG (B=255 R=G=148)
+  // is brightest at the B sub-cell (LEFT third of LCD pixel) → centroid
+  // biased LEFT. LG (R=255 G=B=148) is brightest at R sub-cell (RIGHT
+  // third) → centroid biased RIGHT. These per-colour biases can exceed
+  // OFFSET_CLAMP (±2) in solid-colour regions, leaving the sub-cell
+  // windows misaligned and feeding wrong-colour values into quantize.
+  //
+  // G channel: G=255 (WH) / G=148 (LG, DG) / G=0 (BK) at the G sub-cell
+  // (MIDDLE third of LCD pixel), and ~0 at B/R sub-cells (since B/R
+  // sub-cells don't emit G light). The G-channel bright spot sits at the
+  // LCD pixel CENTRE regardless of pixel colour, so the centroid lands
+  // at the true LCD centre and the offset map measures only the warp
+  // alignment (not the pixel-colour-driven sub-cell brightness).
   for (let dx = 0; dx < scale; dx++) {
     let sum = 0;
     let n = 0;
     for (let y = yLo; y < yHi; y++) {
       const idx = (y * input.width + x0 + dx) * 4;
-      sum += (input.data[idx] + input.data[idx + 1] + input.data[idx + 2]) / 3;
+      sum += input.data[idx + 1]; // G channel only
       n++;
     }
     profile[dx] = sum / n;
