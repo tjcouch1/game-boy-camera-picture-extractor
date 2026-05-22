@@ -263,6 +263,26 @@ function gValleyThreshold(
     }
   }
 
+  // If the histogram minimum lies AT the safe-range boundary, the
+  // distribution is monotonic over the search range (no real valley
+  // between the two cluster peaks). Returning the boundary value would
+  // make the threshold sit right next to the LG cluster centre and
+  // over-classify high-R pixels with mid-G values as WH, even when the
+  // reference splits them more evenly. However, only fall back to the
+  // midpoint when the cluster centres are FAR enough apart (≥ 60 G
+  // units) that a midpoint threshold is genuinely better than a
+  // boundary threshold — for closely-spaced clusters (which is the
+  // bright/dithered-content case), the boundary minimum is often the
+  // empirically better choice because the data has no clean
+  // bi-modality to anchor a midpoint against.
+  const VALLEY_FALLBACK_MIN_SPAN = 60;
+  if (
+    (valleyIdx === safeMinIdx || valleyIdx === safeMaxIdx) &&
+    span >= VALLEY_FALLBACK_MIN_SPAN
+  ) {
+    return midpoint;
+  }
+
   return lo + valleyIdx;
 }
 
