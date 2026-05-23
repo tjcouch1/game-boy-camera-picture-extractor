@@ -243,15 +243,38 @@ export function sample(
       // Decision rule: nearest canonical distance. The sample that lands
       // closer to one of the 4 palette colors (BK / DG / LG / WH) is more
       // likely the correct reading.
-      // Per-block smear detection. Compute per-channel column profile
-      // across rows [y1, y2). If the R/G/B argmax cols are all within 1
-      // col of each other, the camera+warp have smeared sub-cell distinct-
-      // ness away (typical for 165926-class phone photos): all channels
-      // gradient up to a single bright spot. Use whole-LCD-pixel averaging
-      // — the integrated channel response is robust to smear. If the peaks
-      // are 2+ cols apart, the sub-cells are still distinct (typical for
-      // sharp test photos like thing-1/2/3): use per-sub-cell sampling so
-      // each channel reads its proper sub-cell.
+      // Per-block smear-aware sampling. Compute per-channel column profile
+      // across rows [y1, y2). The R/G/B argmax cols tell us how distinct
+      // the sub-cells are in this block AND whether the G-centroid offset
+      // detector is biased here.
+      //
+      // CASE A — SHARP (R/G/B peaks 2+ cols apart): sub-cells are at
+      // distinct positions, the G-centroid offset truly reflects warp
+      // residual (= real LCD-pixel-grid shift). Sample per-sub-cell using
+      // the detected offset — sample reads the correct (possibly shifted)
+      // sub-cells.
+      //
+      // CASE B — SMEARED (R/G/B peaks within 1 col): camera demosaicing +
+      // warp Lanczos have blurred sub-cell distinctness so all channels
+      // gradient up to whichever sub-cell is brightest (R for LG, B for
+      // DG, etc.). The G-centroid offset detector becomes COLOR-BIASED:
+      // for LG (R brightest) it reports +1.5 to +2 even though the actual
+      // LCD pixel is at canonical position. Sample with the biased offset
+      // shifts the sub-cell windows away from the true sub-cells and reads
+      // contaminated values (= the upper blotches on 165926/~2-EDIT, and
+      // the LG-shifted-right pattern on thing-3 where the cat-figure's
+      // LG body has offset+1 firing across the cat).
+      //
+      // Fix: for SMEARED blocks, FORCE offset=0 (ignore the biased offset)
+      // and sample per-sub-cell at canonical positions. The warp on a
+      // smeared image typically lands the LCD pixel near canonical (the
+      // border-detector + TPS work confirms perimeter is at canonical
+      // ≤ 1 px); forcing offset=0 in the interior reads the true sub-cells
+      // and recovers the actual LCD-pixel colour.
+      //
+      // For SHARP blocks where the warp does have real residual (e.g.,
+      // 213443), the offset detection is reliable (because R/G/B peaks
+      // separate cleanly when sub-cells are distinct), so we honour it.
       const wLo = innerStart + offsetInt;
       const wHi = innerEnd + offsetInt;
       const bLo = innerStart + offsetInt;
@@ -291,43 +314,35 @@ export function sample(
       const sharp = peakSpread >= 2;
 
       const TRIM = 0.2;
-      let rOut: number, gOut: number, bOut: number;
-      if (sharp) {
-        const subR: number[] = [], subG: number[] = [], subB: number[] = [];
-        for (let dx = bLo; dx < bHi; dx++) {
-          const px = x0 + dx;
-          if (px < 0 || px >= input.width) continue;
-          for (let y = y1; y < y2; y++) subB.push(input.data[(y * input.width + px) * 4 + 2]);
-        }
-        for (let dx = gLo; dx < gHi; dx++) {
-          const px = x0 + dx;
-          if (px < 0 || px >= input.width) continue;
-          for (let y = y1; y < y2; y++) subG.push(input.data[(y * input.width + px) * 4 + 1]);
-        }
-        for (let dx = rLo; dx < rHi; dx++) {
-          const px = x0 + dx;
-          if (px < 0 || px >= input.width) continue;
-          for (let y = y1; y < y2; y++) subR.push(input.data[(y * input.width + px) * 4]);
-        }
-        rOut = Math.round(trimmedMean(subR, TRIM));
-        gOut = Math.round(trimmedMean(subG, TRIM));
-        bOut = Math.round(trimmedMean(subB, TRIM));
-      } else {
-        const wR: number[] = [], wG: number[] = [], wB: number[] = [];
-        for (let dx = wLo; dx < wHi; dx++) {
-          const px = x0 + dx;
-          if (px < 0 || px >= input.width) continue;
-          for (let y = y1; y < y2; y++) {
-            const idx = (y * input.width + px) * 4;
-            wR.push(input.data[idx]);
-            wG.push(input.data[idx + 1]);
-            wB.push(input.data[idx + 2]);
-          }
-        }
-        rOut = Math.round(trimmedMean(wR, TRIM));
-        gOut = Math.round(trimmedMean(wG, TRIM));
-        bOut = Math.round(trimmedMean(wB, TRIM));
+      // Sub-cell windows; for SMEARED blocks the offset is ignored (forced 0)
+      // because the G-centroid is color-biased on smeared content.
+      const useOffset = sharp ? offsetInt : 0;
+      const sBLo = innerStart + useOffset;
+      const sBHi = sBLo + subWidth;
+      const sGLo = innerStart + subWidth + useOffset;
+      const sGHi = sGLo + subWidth;
+      const sRLo = innerStart + 2 * subWidth + useOffset;
+      const sRHi = sRLo + subWidth;
+
+      const subR: number[] = [], subG: number[] = [], subB: number[] = [];
+      for (let dx = sBLo; dx < sBHi; dx++) {
+        const px = x0 + dx;
+        if (px < 0 || px >= input.width) continue;
+        for (let y = y1; y < y2; y++) subB.push(input.data[(y * input.width + px) * 4 + 2]);
       }
+      for (let dx = sGLo; dx < sGHi; dx++) {
+        const px = x0 + dx;
+        if (px < 0 || px >= input.width) continue;
+        for (let y = y1; y < y2; y++) subG.push(input.data[(y * input.width + px) * 4 + 1]);
+      }
+      for (let dx = sRLo; dx < sRHi; dx++) {
+        const px = x0 + dx;
+        if (px < 0 || px >= input.width) continue;
+        for (let y = y1; y < y2; y++) subR.push(input.data[(y * input.width + px) * 4]);
+      }
+      const rOut = Math.round(trimmedMean(subR, TRIM));
+      const gOut = Math.round(trimmedMean(subG, TRIM));
+      const bOut = Math.round(trimmedMean(subB, TRIM));
 
       output.data[outIdx] = rOut;
       output.data[outIdx + 1] = gOut;
