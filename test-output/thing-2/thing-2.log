@@ -40,7 +40,7 @@ PIPELINE DIAGNOSTICS
   [quantize] global k-means cluster centers (palette-ordered):  BK=(R82,G39)  DG=(R147,G155)  LG=(R206,G151)  WH=(R239,G248)
   [quantize] after global kmeans: BK=1363  DG=8745  LG=2513  WH=1715
   [quantize] drift snap (1 snapped, * marks snapped): BK=90* DG=7 LG=49 WH=17
-  [quantize] strip ensemble: 7 strips, changed 473 px  now: BK=1324  DG=8581  LG=2648  WH=1783
+  [quantize] strip ensemble: 7 strips, changed 472 px  now: BK=1324  DG=8581  LG=2648  WH=1783
   [quantize] G-valley refinement: threshold=218.0 (LG center G=150.6, WH center G=248.5), changed 102 px
   [quantize] final: BK=1324 (9.2%)  DG=8581 (59.9%)  LG=2750 (19.2%)  WH=1681 (11.7%)
 

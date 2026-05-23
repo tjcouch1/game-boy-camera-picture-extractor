@@ -3166,11 +3166,17 @@ function detectInnerBorderThresholdCrossings(
     for (let i = peakLo + 1; i <= peakHi; i++) {
       if (sm[i] > peakVal) { peakVal = sm[i]; peakIdx = i; }
     }
-    // Baseline = signature 1.5 LCD-px OUTWARD (= deep in WH frame, where
-    // DG signature should be near 0).
+    // Baseline = signature 3 LCD-px OUTWARD (= deep in WH frame, where
+    // DG signature should be near 0). The previous 1.5·scale put baseline
+    // INSIDE the shifted strip when the strip itself has moved outward
+    // by 12+ image-px (165926 LEFT shifts the strip to X≈101 vs canonical
+    // 120, so baseline at canonical−12 = X=108 lands inside the shifted
+    // strip → contrast ≈ 0 → detector returns null and TPS loses the
+    // anchor at exactly the most-deviated columns). 3·scale = 24 image-px
+    // outward stays in the WH frame even for the worst observed shifts.
     const baselineIdx = Math.max(0, Math.min(
       sm.length - 1,
-      Math.round(canonOuterIdx + frameDir * 1.5 * scale),
+      Math.round(canonOuterIdx + frameDir * 3 * scale),
     ));
     const baselineVal = sm[baselineIdx];
     const contrast = peakVal - baselineVal;
@@ -3204,7 +3210,8 @@ function detectInnerBorderThresholdCrossings(
   // left" distortions are at the side endpoints; rejecting them via a
   // non-zero CORNER_FRAC was missing those signal positions. The
   // contrast filter drops any corner samples that the detector can't
-  // resolve reliably.
+  // resolve reliably. Tried 65 — over-fits detection noise on
+  // clean images (thing-2: 100 → 200 diff px); 33 is the sweet spot.
   const N_POINTS = 33;
   const CORNER_FRAC = 0;
 
