@@ -117,7 +117,13 @@ export function sample(
   options?: SampleOptions,
 ): GBImageData {
   const scale = options?.scale ?? 8;
-  const vMargin = options?.marginV ?? Math.max(2, Math.floor(scale / 4));
+  // Less aggressive vertical trim: drop only the 1-px inter-pixel gap rows
+  // at top and bottom (rows 0 and scale-1) and use the full middle of each
+  // block. Previous vMargin=2 dropped 4 of 8 rows, losing a lot of LCD
+  // pixel signal — when the warp is sub-pixel accurate (= now, with the
+  // wider TPS border detector), the extra rows are valid LCD-pixel-content
+  // not noise.
+  const vMargin = options?.marginV ?? 1;
   const dbg = options?.debug;
 
   const expectedW = CAM_W * scale;
@@ -209,34 +215,52 @@ export function sample(
         continue;
       }
 
-      // Deadband: only shift the sub-pixel window when the smoothed offset
+      // Deadband: only shift the sampling window when the smoothed offset
       // is decisive (> 0.75). Sub-0.75 offsets are within sampling noise
       // and shifting them produces small per-pixel value changes that
       // accumulate into label flips on well-aligned images.
       const rawOff = offsetMap[pi];
       const offsetInt = Math.abs(rawOff) > 0.75 ? Math.round(rawOff) : 0;
-      const bLo = innerStart + offsetInt;
-      const bHi = bLo + subWidth;
-      const gLo = innerStart + subWidth + offsetInt;
-      const gHi = gLo + subWidth;
-      const rLo = innerStart + 2 * subWidth + offsetInt;
-      const rHi = rLo + subWidth;
+
+      // Per-channel WHOLE-LCD-PIXEL averaging: read each channel across the
+      // FULL LCD pixel area (cols [innerStart+offset, innerEnd+offset),
+      // = 6 cols wide), not per-sub-cell windows. The previous per-sub-cell
+      // approach (B from cols 1-2, G from 3-4, R from 5-6) assumed clean
+      // sub-cell separation in the warp output, but the phone camera's
+      // demosaicing + warp's Lanczos interpolation smear each LCD pixel's
+      // sub-cell emissions so that any narrow per-sub-cell sample is biased
+      // toward whichever sub-cell happens to be brightest. For LG (R=255,
+      // G=148, B=148), the brightest sub-cell is R; the smearing inflates G
+      // channel readings *near* the bright R sub-cell, and the per-sub-cell
+      // G window (at cols 3-4 or shifted 5-6) reads G≈220-244 instead of
+      // the canonical ~148, causing LG to misclassify as WH (the upper
+      // blotch in 165926 / ~2-EDIT).
+      //
+      // Whole-pixel averaging integrates each channel's signal across the
+      // ENTIRE LCD pixel, recovering the true emitted R/G/B intensity:
+      //   LG (255, 148, 148) → R high, G mid, B mid ✓
+      //   WH (255, 255, 165) → R high, G high, B mid ✓
+      //   DG (148, 148, 255) → R mid, G mid, B high ✓
+      //   BK (0, 0, 0)        → all dim ✓
+      // and is robust to sub-cell smear / inter-sub-cell bleed because
+      // any leak between sub-cells stays within the same averaged window.
+      const wLo = innerStart + offsetInt;
+      const wHi = innerEnd + offsetInt;
 
       const rVals: number[] = [];
       const gVals: number[] = [];
       const bVals: number[] = [];
 
-      const sampleAt = (vals: number[], dx: number, channel: 0 | 1 | 2): void => {
+      for (let dx = wLo; dx < wHi; dx++) {
         const px = x0 + dx;
-        if (px < 0 || px >= input.width) return;
+        if (px < 0 || px >= input.width) continue;
         for (let y = y1; y < y2; y++) {
-          vals.push(input.data[(y * input.width + px) * 4 + channel]);
+          const idx = (y * input.width + px) * 4;
+          rVals.push(input.data[idx]);
+          gVals.push(input.data[idx + 1]);
+          bVals.push(input.data[idx + 2]);
         }
-      };
-
-      for (let dx = bLo; dx < bHi; dx++) sampleAt(bVals, dx, 2);
-      for (let dx = gLo; dx < gHi; dx++) sampleAt(gVals, dx, 1);
-      for (let dx = rLo; dx < rHi; dx++) sampleAt(rVals, dx, 0);
+      }
 
       const TRIM = 0.2;
       output.data[outIdx] = Math.round(trimmedMean(rVals, TRIM));
