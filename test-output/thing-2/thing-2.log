@@ -32,58 +32,59 @@ PIPELINE DIAGNOSTICS
   [correct] frame post-correction p85: R=254 G=255 B=154 (target #FFFFA5 = R255 G255 B165)
   [correct] camera region mean: R=160.0 G=152.3 B=164.2
   [crop] inner-border mean=164.4 white-frame mean=200.7 (ratio 0.819, OK)
-  [sample] R: 44–255  G: 0–251  B: 96–191
+  [sample] R: 34–255  G: 0–255  B: 87–195
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
   [sample] LCD centre offsets (clamped): mean=0.29 range=[-2.69, 3.00] dist=0:11153 ≤-4:0 -3:3 -2:7 -1:149 +1:1600 +2:1406 +3:18 ≥+4:0
   [sample] LCD centre offsets (raw, pre-clamp): mean=0.29 range=[-2.69, 3.21] dist=0:11153 ≤-4:0 -3:3 -2:7 -1:149 +1:1600 +2:1406 +3:18 ≥+4:0
-  [quantize] 3D RGB refinement: dgBTarget=172 bInit=[BK108 DG176 LG162 WH163] changed=247
-  [quantize] global k-means cluster centers (palette-ordered):  BK=(R94,G55)  DG=(R149,G150)  LG=(R185,G164)  WH=(R243,G239)
-  [quantize] after global kmeans: BK=1403  DG=8703  LG=2546  WH=1684
-  [quantize] drift snap (1 snapped, * marks snapped): BK=109* DG=2 LG=72 WH=20
-  [quantize] strip ensemble: 7 strips, changed 1880 px  now: BK=1326  DG=7641  LG=3677  WH=1692
-  [quantize] G-valley refinement: threshold=204.0 (LG center G=164.1, WH center G=239.3), changed 11 px
-  [quantize] final: BK=1326 (9.2%)  DG=7641 (53.3%)  LG=3688 (25.7%)  WH=1681 (11.7%)
+  [quantize] 3D RGB refinement: dgBTarget=176 bInit=[BK106 DG180 LG140 WH161] changed=140
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R91,G49)  DG=(R146,G153)  LG=(R203,G153)  WH=(R243,G242)
+  [quantize] after global kmeans: BK=1362  DG=8494  LG=2777  WH=1703
+  [quantize] drift snap (1 snapped, * marks snapped): BK=103* DG=6 LG=52 WH=18
+  [quantize] strip ensemble: 7 strips, changed 689 px  now: BK=1301  DG=8575  LG=2656  WH=1804
+  [quantize] G-valley refinement: threshold=208.0 (LG center G=153.1, WH center G=241.6), changed 118 px
+  [quantize] final: BK=1301 (9.1%)  DG=8575 (59.8%)  LG=2774 (19.3%)  WH=1686 (11.8%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 11728  (81.81%)
-  Different    : 2608   (18.19%)
+  Matching     : 13958  (97.36%)
+  Different    : 378   (2.64%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
-  BK  #000000                 1326        1336  -10
-  DG  #9494FF                 7641        8626  -985
-  LG  #FF9494                 3688        2690  +998
-  WH  #FFFFA5                 1681        1684  -3
+  BK  #000000                 1301        1336  -35
+  DG  #9494FF                 8575        8626  -51
+  LG  #FF9494                 2774        2690  +84
+  WH  #FFFFA5                 1686        1684  +2
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
-  BK  #000000                    1304 v                0                 22 X                0      1326
-  DG  #9494FF                      32 X             6842 v              767 X                0      7641
-  LG  #FF9494                       0               1784 X             1901 v                3 X    3688
-  WH  #FFFFA5                       0                  0                  0               1681 v    1681
+  BK  #000000                    1301 v                0                  0                  0      1301
+  DG  #9494FF                      34 X             8416 v              125 X                0      8575
+  LG  #FF9494                       1 X              210 X             2560 v                3 X    2774
+  WH  #FFFFA5                       0                  0                  5 X             1681 v    1686
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  BK  #000000  ->  LG  #FF9494 : 22 px
-  DG  #9494FF  ->  BK  #000000 : 32 px
-  DG  #9494FF  ->  LG  #FF9494 : 767 px
-  LG  #FF9494  ->  DG  #9494FF : 1784 px
+  DG  #9494FF  ->  BK  #000000 : 34 px
+  DG  #9494FF  ->  LG  #FF9494 : 125 px
+  LG  #FF9494  ->  BK  #000000 : 1 px
+  LG  #FF9494  ->  DG  #9494FF : 210 px
   LG  #FF9494  ->  WH  #FFFFA5 : 3 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 5 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 11728  (81.81%)
-  Different    : 2608   (18.19%)
+  Matching     : 13958  (97.36%)
+  Different    : 378   (2.64%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
