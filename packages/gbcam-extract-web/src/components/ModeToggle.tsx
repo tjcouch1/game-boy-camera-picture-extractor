@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun, SunMoon } from "lucide-react";
+import { Moon, Sun, SunMoon } from "lucide-react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Button } from "@/shadcn/components/button";
 import { cn } from "@/shadcn/utils/utils";

@@ -18,7 +18,7 @@ import {
   AccordionTrigger,
 } from "@/shadcn/components/accordion";
 import { Button } from "@/shadcn/components/button";
-import { Card, CardContent } from "@/shadcn/components/card";
+import { Card } from "@/shadcn/components/card";
 import { cn } from "@/shadcn/utils/utils";
 import { Field, FieldDescription, FieldLabel } from "@/shadcn/components/field";
 import { Input } from "@/shadcn/components/input";
