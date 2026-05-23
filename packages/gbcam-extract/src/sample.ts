@@ -314,35 +314,68 @@ export function sample(
       const sharp = peakSpread >= 2;
 
       const TRIM = 0.2;
-      // Sub-cell windows; for SMEARED blocks the offset is ignored (forced 0)
-      // because the G-centroid is color-biased on smeared content.
-      const useOffset = sharp ? offsetInt : 0;
-      const sBLo = innerStart + useOffset;
-      const sBHi = sBLo + subWidth;
-      const sGLo = innerStart + subWidth + useOffset;
-      const sGHi = sGLo + subWidth;
-      const sRLo = innerStart + 2 * subWidth + useOffset;
-      const sRHi = sRLo + subWidth;
 
-      const subR: number[] = [], subG: number[] = [], subB: number[] = [];
-      for (let dx = sBLo; dx < sBHi; dx++) {
-        const px = x0 + dx;
-        if (px < 0 || px >= input.width) continue;
-        for (let y = y1; y < y2; y++) subB.push(input.data[(y * input.width + px) * 4 + 2]);
+      // Sub-cell sample at a given offset.
+      const sampleSubCell = (off: number): [number, number, number] => {
+        const sBLo = innerStart + off;
+        const sBHi = sBLo + subWidth;
+        const sGLo = innerStart + subWidth + off;
+        const sGHi = sGLo + subWidth;
+        const sRLo = innerStart + 2 * subWidth + off;
+        const sRHi = sRLo + subWidth;
+        const sR: number[] = [], sG: number[] = [], sB: number[] = [];
+        for (let dx = sBLo; dx < sBHi; dx++) {
+          const px = x0 + dx;
+          if (px < 0 || px >= input.width) continue;
+          for (let y = y1; y < y2; y++) sB.push(input.data[(y * input.width + px) * 4 + 2]);
+        }
+        for (let dx = sGLo; dx < sGHi; dx++) {
+          const px = x0 + dx;
+          if (px < 0 || px >= input.width) continue;
+          for (let y = y1; y < y2; y++) sG.push(input.data[(y * input.width + px) * 4 + 1]);
+        }
+        for (let dx = sRLo; dx < sRHi; dx++) {
+          const px = x0 + dx;
+          if (px < 0 || px >= input.width) continue;
+          for (let y = y1; y < y2; y++) sR.push(input.data[(y * input.width + px) * 4]);
+        }
+        return [
+          Math.round(trimmedMean(sR, TRIM)),
+          Math.round(trimmedMean(sG, TRIM)),
+          Math.round(trimmedMean(sB, TRIM)),
+        ];
+      };
+
+      let rOut: number, gOut: number, bOut: number;
+      if (sharp || offsetInt === 0) {
+        // SHARP block, or no offset to consider — just use detected offset.
+        [rOut, gOut, bOut] = sampleSubCell(offsetInt);
+      } else {
+        // SMEARED block with non-zero offset. The offset MIGHT be real warp
+        // residual (zelda-poster-class images with mean offset ~0.5) OR
+        // color-bias on LG content (165926-class images). Compute both
+        // candidates and pick the one closer to a canonical palette colour:
+        // the correct sample naturally clusters near a palette colour,
+        // while the contaminated sample lands in the ambiguous mid-tones.
+        const candA = sampleSubCell(offsetInt);
+        const candB = sampleSubCell(0);
+        const PALETTE: Array<[number, number, number]> = [
+          [0, 0, 0],
+          [148, 148, 255],
+          [255, 148, 148],
+          [255, 255, 165],
+        ];
+        const nearestSq = (rgb: [number, number, number]): number => {
+          let best = Infinity;
+          for (const p of PALETTE) {
+            const d = (rgb[0] - p[0]) ** 2 + (rgb[1] - p[1]) ** 2 + (rgb[2] - p[2]) ** 2;
+            if (d < best) best = d;
+          }
+          return best;
+        };
+        const chosen = nearestSq(candA) <= nearestSq(candB) ? candA : candB;
+        [rOut, gOut, bOut] = chosen;
       }
-      for (let dx = sGLo; dx < sGHi; dx++) {
-        const px = x0 + dx;
-        if (px < 0 || px >= input.width) continue;
-        for (let y = y1; y < y2; y++) subG.push(input.data[(y * input.width + px) * 4 + 1]);
-      }
-      for (let dx = sRLo; dx < sRHi; dx++) {
-        const px = x0 + dx;
-        if (px < 0 || px >= input.width) continue;
-        for (let y = y1; y < y2; y++) subR.push(input.data[(y * input.width + px) * 4]);
-      }
-      const rOut = Math.round(trimmedMean(subR, TRIM));
-      const gOut = Math.round(trimmedMean(subG, TRIM));
-      const bOut = Math.round(trimmedMean(subB, TRIM));
 
       output.data[outIdx] = rOut;
       output.data[outIdx + 1] = gOut;
