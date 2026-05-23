@@ -222,50 +222,103 @@ export function sample(
       const rawOff = offsetMap[pi];
       const offsetInt = Math.abs(rawOff) > 0.75 ? Math.round(rawOff) : 0;
 
-      // Per-channel WHOLE-LCD-PIXEL averaging: read each channel across the
-      // FULL LCD pixel area (cols [innerStart+offset, innerEnd+offset),
-      // = 6 cols wide), not per-sub-cell windows. The previous per-sub-cell
-      // approach (B from cols 1-2, G from 3-4, R from 5-6) assumed clean
-      // sub-cell separation in the warp output, but the phone camera's
-      // demosaicing + warp's Lanczos interpolation smear each LCD pixel's
-      // sub-cell emissions so that any narrow per-sub-cell sample is biased
-      // toward whichever sub-cell happens to be brightest. For LG (R=255,
-      // G=148, B=148), the brightest sub-cell is R; the smearing inflates G
-      // channel readings *near* the bright R sub-cell, and the per-sub-cell
-      // G window (at cols 3-4 or shifted 5-6) reads G≈220-244 instead of
-      // the canonical ~148, causing LG to misclassify as WH (the upper
-      // blotch in 165926 / ~2-EDIT).
+      // HYBRID sampling: compute BOTH per-sub-cell readings AND whole-LCD-
+      // pixel-area readings; choose per pixel based on which classifies
+      // closer to a canonical palette color.
       //
-      // Whole-pixel averaging integrates each channel's signal across the
-      // ENTIRE LCD pixel, recovering the true emitted R/G/B intensity:
-      //   LG (255, 148, 148) → R high, G mid, B mid ✓
-      //   WH (255, 255, 165) → R high, G high, B mid ✓
-      //   DG (148, 148, 255) → R mid, G mid, B high ✓
-      //   BK (0, 0, 0)        → all dim ✓
-      // and is robust to sub-cell smear / inter-sub-cell bleed because
-      // any leak between sub-cells stays within the same averaged window.
+      // Why hybrid: per-sub-cell sampling (B at cols 1-2, G at 3-4, R at
+      // 5-6) is correct for SHARP images (thing-1/2/3) where camera+warp
+      // preserve sub-cell separation — each channel's signal is localised
+      // at its sub-cell, narrow window captures it cleanly. But on
+      // SMEARED images (165926/~2-EDIT) the camera+warp blend sub-cells,
+      // and the G-centroid offset detector is color-biased: for LG (R=255,
+      // G=148, B=148), R-sub-cell is brightest and smear inflates G near
+      // it, so the centroid lands at offset+2 → sample-G reads 234-244
+      // instead of LG's canonical 148 → LG misclassifies as WH.
+      //
+      // Whole-LCD-pixel averaging integrates each channel across the full
+      // pixel; smear-tolerant but underestimates brightness on sharp
+      // images (most cols have no signal in each channel).
+      //
+      // Decision rule: nearest canonical distance. The sample that lands
+      // closer to one of the 4 palette colors (BK / DG / LG / WH) is more
+      // likely the correct reading.
       const wLo = innerStart + offsetInt;
       const wHi = innerEnd + offsetInt;
+      const bLo = innerStart + offsetInt;
+      const bHi = bLo + subWidth;
+      const gLo = innerStart + subWidth + offsetInt;
+      const gHi = gLo + subWidth;
+      const rLo = innerStart + 2 * subWidth + offsetInt;
+      const rHi = rLo + subWidth;
 
-      const rVals: number[] = [];
-      const gVals: number[] = [];
-      const bVals: number[] = [];
+      const subR: number[] = [], subG: number[] = [], subB: number[] = [];
+      const wR: number[] = [], wG: number[] = [], wB: number[] = [];
 
       for (let dx = wLo; dx < wHi; dx++) {
         const px = x0 + dx;
         if (px < 0 || px >= input.width) continue;
         for (let y = y1; y < y2; y++) {
           const idx = (y * input.width + px) * 4;
-          rVals.push(input.data[idx]);
-          gVals.push(input.data[idx + 1]);
-          bVals.push(input.data[idx + 2]);
+          wR.push(input.data[idx]);
+          wG.push(input.data[idx + 1]);
+          wB.push(input.data[idx + 2]);
+        }
+      }
+      for (let dx = bLo; dx < bHi; dx++) {
+        const px = x0 + dx;
+        if (px < 0 || px >= input.width) continue;
+        for (let y = y1; y < y2; y++) {
+          subB.push(input.data[(y * input.width + px) * 4 + 2]);
+        }
+      }
+      for (let dx = gLo; dx < gHi; dx++) {
+        const px = x0 + dx;
+        if (px < 0 || px >= input.width) continue;
+        for (let y = y1; y < y2; y++) {
+          subG.push(input.data[(y * input.width + px) * 4 + 1]);
+        }
+      }
+      for (let dx = rLo; dx < rHi; dx++) {
+        const px = x0 + dx;
+        if (px < 0 || px >= input.width) continue;
+        for (let y = y1; y < y2; y++) {
+          subR.push(input.data[(y * input.width + px) * 4]);
         }
       }
 
       const TRIM = 0.2;
-      output.data[outIdx] = Math.round(trimmedMean(rVals, TRIM));
-      output.data[outIdx + 1] = Math.round(trimmedMean(gVals, TRIM));
-      output.data[outIdx + 2] = Math.round(trimmedMean(bVals, TRIM));
+      const subRGB: [number, number, number] = [
+        Math.round(trimmedMean(subR, TRIM)),
+        Math.round(trimmedMean(subG, TRIM)),
+        Math.round(trimmedMean(subB, TRIM)),
+      ];
+      const wRGB: [number, number, number] = [
+        Math.round(trimmedMean(wR, TRIM)),
+        Math.round(trimmedMean(wG, TRIM)),
+        Math.round(trimmedMean(wB, TRIM)),
+      ];
+
+      // Distance to nearest canonical palette in RGB
+      const PALETTE: Array<[number, number, number]> = [
+        [0, 0, 0],
+        [148, 148, 255],
+        [255, 148, 148],
+        [255, 255, 165],
+      ];
+      const nearestDist = (rgb: [number, number, number]): number => {
+        let best = Infinity;
+        for (const p of PALETTE) {
+          const d = (rgb[0] - p[0]) ** 2 + (rgb[1] - p[1]) ** 2 + (rgb[2] - p[2]) ** 2;
+          if (d < best) best = d;
+        }
+        return best;
+      };
+      const chosen = nearestDist(subRGB) <= nearestDist(wRGB) ? subRGB : wRGB;
+
+      output.data[outIdx] = chosen[0];
+      output.data[outIdx + 1] = chosen[1];
+      output.data[outIdx + 2] = chosen[2];
       output.data[outIdx + 3] = 255;
     }
   }
