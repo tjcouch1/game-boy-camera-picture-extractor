@@ -25,9 +25,19 @@ const EXP_TOP = INNER_TOP * SCALE;          // 120 — outer edge of DG strip on
 const EXP_BOT = (INNER_BOT + 1) * SCALE;    // 1032 — outer edge of DG strip on bottom
 const EXP_LEFT = INNER_LEFT * SCALE;        // 120
 const EXP_RIGHT = (INNER_RIGHT + 1) * SCALE; // 1160
-const STRIP_HALF = SCALE / 2;               // 4 — centre of DG strip is half-LCD inward
 const SEARCH_HALF = 3 * SCALE;              // ±24 image-px — comfortably > the user-reported 5-10 px
-const MIN_DROP = 30;                        // minimum luma drop to register a transition
+
+// Detection criteria. Tightened from the previous "any drop ≥ 30" version
+// because that latches onto bright-WH-camera→dark-camera transitions deeper
+// inside the camera area. The real WH→DG transition is ~84 luma drop (WH
+// luma 244, DG luma 160) so 50 is a clear lower bound for an actual border.
+const ABOVE_MIN = 200;     // outer side must read sustained-bright (WH frame)
+const BELOW_MAX = 200;     // inner side must read sustained-dim (in DG strip)
+const MIN_DROP = 50;       // luma drop threshold
+const OUTLIER_MAX_DEV = 6; // image-px — after detection, reject points >OUTLIER_MAX_DEV from the local 5-point median
+
+// Step along the long axis at half-an-LCD-pixel granularity.
+const STEP = SCALE / 2;    // = 4 image-px = sample every 0.5 GB-pixels along each side
 
 type Img = { data: Uint8Array; width: number; height: number; channels: number };
 
@@ -61,69 +71,75 @@ function lumaAt(img: Img, x: number, y: number): number {
 }
 
 /**
- * Find the WH→DG transition by scanning OUTWARD→INWARD along the
- * perpendicular axis. WH frame has high luma (~244), DG strip and any
- * non-WH content past it have lower luma. Returns the sub-pixel position
- * of the strongest luma drop within ±SEARCH_HALF of canonical, where the
- * mean luma in the `outerRun` rows immediately outward is significantly
- * brighter than the mean luma in the `innerRun` rows immediately inward.
+ * Find the WH→DG transition by scanning OUTSIDE → INSIDE along the
+ * perpendicular axis and returning the FIRST position where the criteria
+ * are satisfied:
+ *   - above mean (outer 4 rows) ≥ ABOVE_MIN — must be in the WH frame
+ *   - max(below 4 rows) ≤ BELOW_MAX — must enter sustained-dim region
+ *     (= DG strip, not a single dark camera pixel that bright-WH camera
+ *     content sits on top of)
+ *   - above − below ≥ MIN_DROP — a real transition, not noise
  *
- * This is robust to DG-coloured camera content because we only need to
- * find the FIRST significant drop from sustained-WH-bright to anything
- * darker; what's past the strip doesn't matter.
+ * Why "first satisfying" rather than "max drop": with the wider search
+ * range (±24 px), the largest luma drop in the search window can sit
+ * DEEP IN THE CAMERA AREA at a bright-WH-camera-pixel → dark-camera-pixel
+ * transition (e.g., a BK pixel adjacent to WH content). The user reported
+ * this exact pattern on 213416 LEFT — "three black GB cam image pixels
+ * close to the left edge cause three of the magenta crosses way too far
+ * right". Walking outside-in stops at the OUTERMOST border, which is the
+ * actual DG strip boundary.
  */
 function findWhToDgEdge(
   sample: (t: number) => number,
   canonical: number,
-  direction: 1 | -1, // 1 = outward is smaller t, inward is larger t (= TOP); -1 = reverse
+  direction: 1 | -1, // 1 = outward is smaller t (TOP/LEFT); -1 = reverse (BOT/RIGHT)
 ): { edge: number; drop: number } | null {
   const lo = Math.floor(canonical - SEARCH_HALF);
   const hi = Math.ceil(canonical + SEARCH_HALF);
   // Pre-sample.
   const vals: number[] = [];
   for (let t = lo; t <= hi; t++) vals.push(sample(t));
-  // For each candidate edge position e in [lo+R, hi-R], compute
-  //   above_luma = mean of vals[e-R..e-1] (outer side)
-  //   below_luma = mean of vals[e+1..e+R] (inner side)
-  // The "drop" is above - below (must be positive and ≥ MIN_DROP).
-  // direction = +1 means inner is at higher t (TOP/LEFT); -1 means inner at lower t (BOT/RIGHT).
   const R = 4; // 4-row mean each side
-  let bestE = -1, bestDrop = 0;
-  for (let e = R; e < vals.length - R; e++) {
-    let aboveSum = 0, belowSum = 0;
+  // For each candidate e, compute above (outer) and below (inner) means
+  // PLUS max(below) to enforce sustained-dim.
+  const measure = (e: number) => {
+    let aboveSum = 0, belowSum = 0, belowMax = -Infinity;
     for (let i = 1; i <= R; i++) {
-      // "above" = outer; "below" = inner
-      if (direction === 1) {
-        aboveSum += vals[e - i];
-        belowSum += vals[e + i];
-      } else {
-        aboveSum += vals[e + i];
-        belowSum += vals[e - i];
+      const oi = direction === 1 ? e - i : e + i; // outer index
+      const ii = direction === 1 ? e + i : e - i; // inner index
+      aboveSum += vals[oi];
+      belowSum += vals[ii];
+      if (vals[ii] > belowMax) belowMax = vals[ii];
+    }
+    return { above: aboveSum / R, below: belowSum / R, belowMax };
+  };
+  // Walk outside-in. For direction +1, outer = smaller t, so e walks
+  // low→high. For direction -1, outer = larger t, so e walks high→low.
+  let firstE = -1;
+  if (direction === 1) {
+    for (let e = R; e < vals.length - R; e++) {
+      const m = measure(e);
+      if (m.above >= ABOVE_MIN && m.belowMax <= BELOW_MAX && (m.above - m.below) >= MIN_DROP) {
+        firstE = e; break;
       }
     }
-    const above = aboveSum / R;
-    const below = belowSum / R;
-    // Require outer side to be sustained-bright (≥ 200) — that's the WH frame.
-    if (above < 200) continue;
-    const drop = above - below;
-    if (drop > bestDrop) {
-      bestDrop = drop;
-      bestE = e;
+  } else {
+    for (let e = vals.length - R - 1; e >= R; e--) {
+      const m = measure(e);
+      if (m.above >= ABOVE_MIN && m.belowMax <= BELOW_MAX && (m.above - m.below) >= MIN_DROP) {
+        firstE = e; break;
+      }
     }
   }
-  if (bestE < 0 || bestDrop < MIN_DROP) return null;
-  // Sub-pixel: parabolic refinement around bestE using above-below as the signal.
+  if (firstE < 0) return null;
+  // Sub-pixel: parabolic refinement around firstE using (above-below) signal.
   const f = (e: number): number => {
-    let aboveSum = 0, belowSum = 0;
-    for (let i = 1; i <= R; i++) {
-      if (direction === 1) { aboveSum += vals[e - i]; belowSum += vals[e + i]; }
-      else { aboveSum += vals[e + i]; belowSum += vals[e - i]; }
-    }
-    return (aboveSum - belowSum) / R;
+    const m = measure(e);
+    return m.above - m.below;
   };
   let off = 0;
-  if (bestE > R && bestE < vals.length - R - 1) {
-    const a = f(bestE - 1), b = f(bestE), c = f(bestE + 1);
+  if (firstE > R && firstE < vals.length - R - 1) {
+    const a = f(firstE - 1), b = f(firstE), c = f(firstE + 1);
     const denom = a - 2 * b + c;
     if (Math.abs(denom) > 1e-6) {
       off = 0.5 * (a - c) / denom;
@@ -131,7 +147,8 @@ function findWhToDgEdge(
       if (off > 0.5) off = 0.5;
     }
   }
-  return { edge: lo + bestE + off, drop: bestDrop };
+  const m = measure(firstE);
+  return { edge: lo + firstE + off, drop: m.above - m.below };
 }
 
 /**
@@ -192,9 +209,33 @@ function findStripCentre(
 
 interface BorderCurve { detections: Array<{ pos: number; perp: number; contrast: number }> }
 
+// Local-median outlier rejection. For each detection, compare to the median
+// of its ±2 neighbours (= 5-point window); drop the detection if it deviates
+// by more than OUTLIER_MAX_DEV image-px. This kills isolated spikes (= rows
+// where the detector latches onto a dark camera pixel before the local
+// median can catch up) while preserving smooth curves.
+function rejectOutliers(d: BorderCurve["detections"]): BorderCurve["detections"] {
+  if (d.length < 5) return d;
+  // Detections come in long-axis order already.
+  const out: BorderCurve["detections"] = [];
+  for (let i = 0; i < d.length; i++) {
+    const w: number[] = [];
+    for (let j = Math.max(0, i - 2); j <= Math.min(d.length - 1, i + 2); j++) {
+      if (j !== i) w.push(d[j].perp);
+    }
+    w.sort((a, b) => a - b);
+    const med = w[Math.floor(w.length / 2)];
+    if (Math.abs(d[i].perp - med) <= OUTLIER_MAX_DEV) out.push(d[i]);
+  }
+  return out;
+}
+
 function detectTopBorder(img: Img): BorderCurve {
   const out: BorderCurve["detections"] = [];
-  for (let x = 4; x < img.width; x += 4) {
+  // Scan only WITHIN the actual camera-area extent. Outside this range
+  // there is no DG strip — the WH frame extends all the way and any
+  // luma drop is from camera content elsewhere, not the inner border.
+  for (let x = EXP_LEFT; x < EXP_RIGHT; x += STEP) {
     const sample = (t: number) => {
       const y = Math.round(t);
       if (y < 0 || y >= img.height) return 0;
@@ -210,12 +251,12 @@ function detectTopBorder(img: Img): BorderCurve {
     if (r === null) continue;
     out.push({ pos: x, perp: r.edge, contrast: r.drop });
   }
-  return { detections: out };
+  return { detections: rejectOutliers(out) };
 }
 
 function detectBotBorder(img: Img): BorderCurve {
   const out: BorderCurve["detections"] = [];
-  for (let x = 4; x < img.width; x += 4) {
+  for (let x = EXP_LEFT; x < EXP_RIGHT; x += STEP) {
     const sample = (t: number) => {
       const y = Math.round(t);
       if (y < 0 || y >= img.height) return 0;
@@ -231,12 +272,12 @@ function detectBotBorder(img: Img): BorderCurve {
     if (r === null) continue;
     out.push({ pos: x, perp: r.edge, contrast: r.drop });
   }
-  return { detections: out };
+  return { detections: rejectOutliers(out) };
 }
 
 function detectLeftBorder(img: Img): BorderCurve {
   const out: BorderCurve["detections"] = [];
-  for (let y = 4; y < img.height; y += 4) {
+  for (let y = EXP_TOP; y < EXP_BOT; y += STEP) {
     const sample = (t: number) => {
       const x = Math.round(t);
       if (x < 0 || x >= img.width) return 0;
@@ -251,12 +292,12 @@ function detectLeftBorder(img: Img): BorderCurve {
     if (r === null) continue;
     out.push({ pos: y, perp: r.edge, contrast: r.drop });
   }
-  return { detections: out };
+  return { detections: rejectOutliers(out) };
 }
 
 function detectRightBorder(img: Img): BorderCurve {
   const out: BorderCurve["detections"] = [];
-  for (let y = 4; y < img.height; y += 4) {
+  for (let y = EXP_TOP; y < EXP_BOT; y += STEP) {
     const sample = (t: number) => {
       const x = Math.round(t);
       if (x < 0 || x >= img.width) return 0;
@@ -271,7 +312,7 @@ function detectRightBorder(img: Img): BorderCurve {
     if (r === null) continue;
     out.push({ pos: y, perp: r.edge, contrast: r.drop });
   }
-  return { detections: out };
+  return { detections: rejectOutliers(out) };
 }
 
 function drawLine(
