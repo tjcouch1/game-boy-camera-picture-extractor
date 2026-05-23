@@ -243,6 +243,15 @@ export function sample(
       // Decision rule: nearest canonical distance. The sample that lands
       // closer to one of the 4 palette colors (BK / DG / LG / WH) is more
       // likely the correct reading.
+      // Per-block smear detection. Compute per-channel column profile
+      // across rows [y1, y2). If the R/G/B argmax cols are all within 1
+      // col of each other, the camera+warp have smeared sub-cell distinct-
+      // ness away (typical for 165926-class phone photos): all channels
+      // gradient up to a single bright spot. Use whole-LCD-pixel averaging
+      // — the integrated channel response is robust to smear. If the peaks
+      // are 2+ cols apart, the sub-cells are still distinct (typical for
+      // sharp test photos like thing-1/2/3): use per-sub-cell sampling so
+      // each channel reads its proper sub-cell.
       const wLo = innerStart + offsetInt;
       const wHi = innerEnd + offsetInt;
       const bLo = innerStart + offsetInt;
@@ -252,73 +261,77 @@ export function sample(
       const rLo = innerStart + 2 * subWidth + offsetInt;
       const rHi = rLo + subWidth;
 
-      const subR: number[] = [], subG: number[] = [], subB: number[] = [];
-      const wR: number[] = [], wG: number[] = [], wB: number[] = [];
-
-      for (let dx = wLo; dx < wHi; dx++) {
-        const px = x0 + dx;
+      const colR = new Float32Array(innerW);
+      const colG = new Float32Array(innerW);
+      const colB = new Float32Array(innerW);
+      for (let dx = 0; dx < innerW; dx++) {
+        const px = x0 + wLo + dx;
         if (px < 0 || px >= input.width) continue;
+        let sumR = 0, sumG = 0, sumB = 0, n = 0;
         for (let y = y1; y < y2; y++) {
           const idx = (y * input.width + px) * 4;
-          wR.push(input.data[idx]);
-          wG.push(input.data[idx + 1]);
-          wB.push(input.data[idx + 2]);
+          sumR += input.data[idx];
+          sumG += input.data[idx + 1];
+          sumB += input.data[idx + 2];
+          n++;
+        }
+        if (n > 0) {
+          colR[dx] = sumR / n;
+          colG[dx] = sumG / n;
+          colB[dx] = sumB / n;
         }
       }
-      for (let dx = bLo; dx < bHi; dx++) {
-        const px = x0 + dx;
-        if (px < 0 || px >= input.width) continue;
-        for (let y = y1; y < y2; y++) {
-          subB.push(input.data[(y * input.width + px) * 4 + 2]);
-        }
-      }
-      for (let dx = gLo; dx < gHi; dx++) {
-        const px = x0 + dx;
-        if (px < 0 || px >= input.width) continue;
-        for (let y = y1; y < y2; y++) {
-          subG.push(input.data[(y * input.width + px) * 4 + 1]);
-        }
-      }
-      for (let dx = rLo; dx < rHi; dx++) {
-        const px = x0 + dx;
-        if (px < 0 || px >= input.width) continue;
-        for (let y = y1; y < y2; y++) {
-          subR.push(input.data[(y * input.width + px) * 4]);
-        }
-      }
+      const argmax = (arr: Float32Array): number => {
+        let bi = 0, bv = arr[0];
+        for (let i = 1; i < arr.length; i++) if (arr[i] > bv) { bv = arr[i]; bi = i; }
+        return bi;
+      };
+      const pR = argmax(colR), pG = argmax(colG), pB = argmax(colB);
+      const peakSpread = Math.max(pR, pG, pB) - Math.min(pR, pG, pB);
+      const sharp = peakSpread >= 2;
 
       const TRIM = 0.2;
-      const subRGB: [number, number, number] = [
-        Math.round(trimmedMean(subR, TRIM)),
-        Math.round(trimmedMean(subG, TRIM)),
-        Math.round(trimmedMean(subB, TRIM)),
-      ];
-      const wRGB: [number, number, number] = [
-        Math.round(trimmedMean(wR, TRIM)),
-        Math.round(trimmedMean(wG, TRIM)),
-        Math.round(trimmedMean(wB, TRIM)),
-      ];
-
-      // Distance to nearest canonical palette in RGB
-      const PALETTE: Array<[number, number, number]> = [
-        [0, 0, 0],
-        [148, 148, 255],
-        [255, 148, 148],
-        [255, 255, 165],
-      ];
-      const nearestDist = (rgb: [number, number, number]): number => {
-        let best = Infinity;
-        for (const p of PALETTE) {
-          const d = (rgb[0] - p[0]) ** 2 + (rgb[1] - p[1]) ** 2 + (rgb[2] - p[2]) ** 2;
-          if (d < best) best = d;
+      let rOut: number, gOut: number, bOut: number;
+      if (sharp) {
+        const subR: number[] = [], subG: number[] = [], subB: number[] = [];
+        for (let dx = bLo; dx < bHi; dx++) {
+          const px = x0 + dx;
+          if (px < 0 || px >= input.width) continue;
+          for (let y = y1; y < y2; y++) subB.push(input.data[(y * input.width + px) * 4 + 2]);
         }
-        return best;
-      };
-      const chosen = nearestDist(subRGB) <= nearestDist(wRGB) ? subRGB : wRGB;
+        for (let dx = gLo; dx < gHi; dx++) {
+          const px = x0 + dx;
+          if (px < 0 || px >= input.width) continue;
+          for (let y = y1; y < y2; y++) subG.push(input.data[(y * input.width + px) * 4 + 1]);
+        }
+        for (let dx = rLo; dx < rHi; dx++) {
+          const px = x0 + dx;
+          if (px < 0 || px >= input.width) continue;
+          for (let y = y1; y < y2; y++) subR.push(input.data[(y * input.width + px) * 4]);
+        }
+        rOut = Math.round(trimmedMean(subR, TRIM));
+        gOut = Math.round(trimmedMean(subG, TRIM));
+        bOut = Math.round(trimmedMean(subB, TRIM));
+      } else {
+        const wR: number[] = [], wG: number[] = [], wB: number[] = [];
+        for (let dx = wLo; dx < wHi; dx++) {
+          const px = x0 + dx;
+          if (px < 0 || px >= input.width) continue;
+          for (let y = y1; y < y2; y++) {
+            const idx = (y * input.width + px) * 4;
+            wR.push(input.data[idx]);
+            wG.push(input.data[idx + 1]);
+            wB.push(input.data[idx + 2]);
+          }
+        }
+        rOut = Math.round(trimmedMean(wR, TRIM));
+        gOut = Math.round(trimmedMean(wG, TRIM));
+        bOut = Math.round(trimmedMean(wB, TRIM));
+      }
 
-      output.data[outIdx] = chosen[0];
-      output.data[outIdx + 1] = chosen[1];
-      output.data[outIdx + 2] = chosen[2];
+      output.data[outIdx] = rOut;
+      output.data[outIdx + 1] = gOut;
+      output.data[outIdx + 2] = bOut;
       output.data[outIdx + 3] = 255;
     }
   }
