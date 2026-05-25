@@ -6,6 +6,8 @@ TEST SUMMARY
 
   Test             Matching            Different           Verdict
   ----------------------------------------------------------------
+  bathhouse-1      14254 ( 99.43%)      82 (  0.57%)   FAIL
+  park-1           13735 ( 95.81%)     601 (  4.19%)   FAIL
   thing-1          14261 ( 99.48%)      75 (  0.52%)   FAIL
   thing-2          14090 ( 98.28%)     246 (  1.72%)   FAIL
   thing-3          13990 ( 97.59%)     346 (  2.41%)   FAIL
