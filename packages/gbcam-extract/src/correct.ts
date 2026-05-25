@@ -52,16 +52,6 @@ export interface CorrectOptions {
   polyDegree?: number;
   darkSmooth?: number;
   refinePasses?: number;
-  /**
-   * When true, apply the same per-pixel affine correction to the B channel
-   * that is applied to R/G — but with role-swapped surfaces (frame B is the
-   * *low* target, inner-border B is the *high* target, since after white-
-   * balance the post-WB frame B = 165 and DG.B = 255). Falls back to
-   * passthrough on the inverted-affine pathology (frame B and border B
-   * surfaces overlap, indicating sensor B saturation). Only enable when
-   * raw B is recoverable (raw frame B median < 240).
-   */
-  correctB?: boolean;
   debug?: DebugCollector;
 }
 
@@ -79,7 +69,6 @@ export function correct(
   const polyDegree = options?.polyDegree ?? 2;
   const darkSmooth = options?.darkSmooth ?? 13;
   const refinePasses = options?.refinePasses ?? 1;
-  const correctB = options?.correctB ?? false;
   const dbg = options?.debug;
 
   const expectedW = SCREEN_W * scale;
@@ -104,32 +93,6 @@ export function correct(
     chR[i] = input.data[idx];
     chG[i] = input.data[idx + 1];
     chB[i] = input.data[idx + 2];
-  }
-
-  // ── Diagnostic: raw frame and inner-border medians (pre-correction) ──
-  if (dbg) {
-    const frameMed = rawFrameMedian(chR, chG, chB, W, H, scale);
-    const borderMed = rawInnerBorderMedian(chR, chG, chB, W, scale);
-    dbg.log(
-      `[correct] raw frame median: R=${frameMed.R.toFixed(0)} G=${frameMed.G.toFixed(0)} B=${frameMed.B.toFixed(0)}` +
-        ` (target FFFFA5 = 255 255 165)`,
-    );
-    dbg.log(
-      `[correct] raw inner-border median: R=${borderMed.R.toFixed(0)} G=${borderMed.G.toFixed(0)} B=${borderMed.B.toFixed(0)}` +
-        ` (target 9494FF = 148 148 255)`,
-    );
-    dbg.setMetrics("correct", {
-      rawFrameMedian: {
-        R: Math.round(frameMed.R),
-        G: Math.round(frameMed.G),
-        B: Math.round(frameMed.B),
-      },
-      rawInnerBorderMedian: {
-        R: Math.round(borderMed.R),
-        G: Math.round(borderMed.G),
-        B: Math.round(borderMed.B),
-      },
-    });
   }
 
   // ── Perform per-channel correction ──
@@ -166,57 +129,9 @@ export function correct(
   let darkSurfaceG = buildDarkSurface(leftG, rightG, topG, botG, H, W, scale, darkSmooth);
   let correctedG = applyCorrectionChannel(chG, whiteSurfaceG, darkSurfaceG, W, H, 255, 148);
 
-  // B channel: post-WB frame B sits at target 165, inner-border B sits at
-  // target 255 (DG palette). Per-pixel affine surfaces overlap on every
-  // useB image we've tested (smoothed surfaces don't separate cleanly even
-  // when the median values do), so use a *global scale* model instead:
-  // map medianFrame → 165 and medianBorder → 255 uniformly across the image.
-  // This doesn't model the front-light's residual B gradient — but on
-  // post-WB images that gradient is small (< 20 units), and an unmodelled
-  // gradient is preferable to an inverted gain that destroys the channel.
-  let correctedB: Float32Array = new Float32Array(chB);
-  let correctBApplied = false;
-  let correctBPathology = false;
-  let bScale = 1;
-  let bOffset = 0;
-  if (correctB) {
-    const frameSamplesB = collectWhiteSamples(chB, W, H, scale);
-    const { left: leftB, right: rightB, top: topB, bot: botB } = collectDarkSamples(
-      chB, W, H, scale,
-    );
-    const medianFrameB = median(frameSamplesB.vs);
-    const borderSamples = [...leftB, ...rightB, ...topB, ...botB];
-    const medianBorderB = median(borderSamples);
-
-    if (medianBorderB - medianFrameB < 5) {
-      correctBPathology = true;
-      if (dbg) {
-        dbg.log(
-          `[correct] B global-scale pathology: ` +
-            `median border B=${medianBorderB.toFixed(1)} ` +
-            `not ≥ 5 above median frame B=${medianFrameB.toFixed(1)}; ` +
-            `falling back to passthrough`,
-        );
-      }
-    } else {
-      bScale = (255 - 165) / (medianBorderB - medianFrameB);
-      bOffset = 165 - bScale * medianFrameB;
-      correctedB = new Float32Array(H * W);
-      for (let i = 0; i < H * W; i++) {
-        const v = chB[i] * bScale + bOffset;
-        correctedB[i] = Math.max(0, Math.min(255, v));
-      }
-      correctBApplied = true;
-      if (dbg) {
-        dbg.log(
-          `[correct] B global scale: ` +
-            `medianFrame=${medianFrameB.toFixed(1)}→165, ` +
-            `medianBorder=${medianBorderB.toFixed(1)}→255, ` +
-            `scale=${bScale.toFixed(3)} offset=${bOffset.toFixed(1)}`,
-        );
-      }
-    }
-  }
+  // B channel: white=dark (no correction, both are close to ~200)
+  // For simplicity, keep B as-is or apply light correction
+  let correctedB = new Float32Array(chB);
 
   if (dbg) {
     dbg.log(
@@ -239,38 +154,10 @@ export function correct(
     );
   }
 
-  // Bright-heavy content heuristic: if camera region mean R is very high,
-  // the interior DG calibration is likely to mis-classify and pull the
-  // surfaces. Skip iterative refinement in that case.
-  let cameraMeanR = 0;
-  {
-    const x0 = FRAME_THICK * scale;
-    const y0 = FRAME_THICK * scale;
-    const x1 = (FRAME_THICK + CAM_W) * scale;
-    const y1 = (FRAME_THICK + CAM_H) * scale;
-    let sum = 0;
-    let n = 0;
-    for (let y = y0; y < y1; y++) {
-      for (let x = x0; x < x1; x++) {
-        sum += correctedR[y * W + x];
-        n++;
-      }
-    }
-    cameraMeanR = n > 0 ? sum / n : 0;
-  }
-  const BRIGHT_HEAVY_THRESH = 160;
-  const skipRefinement = cameraMeanR > BRIGHT_HEAVY_THRESH;
-  if (dbg) {
-    dbg.log(
-      `[correct] bright-heavy heuristic: cameraMeanR=${cameraMeanR.toFixed(1)}` +
-        ` skipRefinement=${skipRefinement}`,
-    );
-  }
-
   // ── Iterative refinement (optional: can apply per channel) ──
   let calCountR = 0;
   let calCountG = 0;
-  for (let pass = 0; pass < refinePasses && !skipRefinement; pass++) {
+  for (let pass = 0; pass < refinePasses; pass++) {
     const refinedR = refinePassChannel(
       correctedR,
       chR,
@@ -314,13 +201,7 @@ export function correct(
     );
   }
 
-  // ── Build output ──
-  // The pre-correct white-balance step (white-balance.ts) lands the raw
-  // frame at (255, 255, 165) before correct() runs, so the per-channel
-  // post-correction frame rescale that lived here previously is a no-op
-  // for R/G on every image and only nudges B by a few units. With B
-  // currently passthrough through quantize, that nudge has no effect.
-  // Drop the rescale and use the per-channel corrected values directly.
+  // ── Build output RGBA ──
   const output = createGBImageData(W, H);
   for (let i = 0; i < H * W; i++) {
     const j = i * 4;
@@ -354,24 +235,13 @@ export function correct(
     }
     dbg.addImage("correct_c_dark_surface", renderHeatmap(darkAvg, W, H));
 
+    // Frame post-correction p85 — verifies the correction landed where expected
     const framePost = framePost85(output);
     dbg.log(
       `[correct] frame post-correction p85: ` +
         `R=${framePost.R.toFixed(0)} G=${framePost.G.toFixed(0)} B=${framePost.B.toFixed(0)} ` +
         `(target #FFFFA5 = R255 G255 B165)`,
     );
-    // Drift diagnostic: warn when frame post-correction is off-target.
-    {
-      const TARGET = { R: 255, G: 255, B: 165 };
-      const TOL = 30;
-      const offs: string[] = [];
-      if (Math.abs(framePost.R - TARGET.R) > TOL) offs.push(`R off by ${(framePost.R - TARGET.R).toFixed(0)}`);
-      if (Math.abs(framePost.G - TARGET.G) > TOL) offs.push(`G off by ${(framePost.G - TARGET.G).toFixed(0)}`);
-      if (Math.abs(framePost.B - TARGET.B) > TOL) offs.push(`B off by ${(framePost.B - TARGET.B).toFixed(0)}`);
-      if (offs.length > 0) {
-        dbg.log(`[correct] WARN frame post-correction off-target: ${offs.join("; ")}`);
-      }
-    }
     dbg.log(
       `[correct] camera region mean: ` +
         cameraRegionMean(output, scale)
@@ -394,11 +264,6 @@ export function correct(
         R: Math.round(framePost.R),
         G: Math.round(framePost.G),
         B: Math.round(framePost.B),
-      },
-      bChannel: {
-        requested: correctB,
-        applied: correctBApplied,
-        pathology: correctBPathology,
       },
     });
   }
@@ -430,78 +295,6 @@ function max(arr: Float32Array): number {
 
 function surfRange(arr: Float32Array): string {
   return `${min(arr).toFixed(0)}–${max(arr).toFixed(0)}`;
-}
-
-/**
- * Median raw colour of frame-strip blocks across all 4 strips, per channel.
- * Uses the same block geometry as collectWhiteSamples but takes per-block
- * 50th-percentile values instead of 85th, then medians across all blocks
- * (after dropping blocks below 75% of median per channel — the same
- * dropouts/dashes filter collectWhiteSamples uses). Pre-correction.
- */
-function rawFrameMedian(
-  chR: Float32Array,
-  chG: Float32Array,
-  chB: Float32Array,
-  W: number,
-  _H: number,
-  scale: number,
-): { R: number; G: number; B: number } {
-  const blocks: Array<[number, number]> = [];
-  // Top strip
-  for (let gy = 0; gy < INNER_TOP; gy++) {
-    for (let gx = 10; gx < SCREEN_W - 10; gx++) blocks.push([gy, gx]);
-  }
-  // Bottom strip
-  for (let gy = INNER_BOT + 1; gy < SCREEN_H; gy++) {
-    for (let gx = 10; gx < SCREEN_W - 10; gx++) blocks.push([gy, gx]);
-  }
-  // Left strip
-  for (let gy = 10; gy < SCREEN_H - 10; gy++) {
-    for (let gx = 0; gx < INNER_LEFT; gx++) blocks.push([gy, gx]);
-  }
-  // Right strip
-  for (let gy = 10; gy < SCREEN_H - 10; gy++) {
-    for (let gx = INNER_RIGHT + 1; gx < SCREEN_W; gx++) blocks.push([gy, gx]);
-  }
-
-  const sample = (ch: Float32Array): number => {
-    const vals: number[] = [];
-    for (const [gy, gx] of blocks) {
-      vals.push(gbBlockSample(ch, W, gy, gx, scale, 50));
-    }
-    if (vals.length === 0) return 0;
-    const med = computePercentile(vals, 50);
-    const filtered = vals.filter((v) => v > 0.75 * med);
-    return filtered.length > 0 ? computePercentile(filtered, 50) : med;
-  };
-
-  return { R: sample(chR), G: sample(chG), B: sample(chB) };
-}
-
-/**
- * Median raw colour of the inner-border (one-pixel-thick #9494FF strip) per
- * channel, taken across the 4 sides via collectDarkSamples (which already
- * uses 50th-percentile per block).
- */
-function rawInnerBorderMedian(
-  chR: Float32Array,
-  chG: Float32Array,
-  chB: Float32Array,
-  W: number,
-  scale: number,
-): { R: number; G: number; B: number } {
-  const sample = (ch: Float32Array): number => {
-    const { left, right, top, bot } = collectDarkSamples(ch, W, 0, scale);
-    const vals: number[] = [
-      ...Array.from(left),
-      ...Array.from(right),
-      ...Array.from(top),
-      ...Array.from(bot),
-    ];
-    return vals.length > 0 ? computePercentile(vals, 50) : 0;
-  };
-  return { R: sample(chR), G: sample(chG), B: sample(chB) };
 }
 
 /** Compute p85 of each RGB channel across the top filmstrip strip blocks. */
@@ -600,7 +393,7 @@ function computePercentile(values: number[], percentile: number): number {
 
 // ─── White surface estimation ───
 
-export function collectWhiteSamples(
+function collectWhiteSamples(
   gray: Float32Array,
   W: number,
   H: number,

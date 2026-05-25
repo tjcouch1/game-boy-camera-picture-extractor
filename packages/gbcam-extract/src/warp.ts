@@ -14,7 +14,6 @@
 
 import { type GBImageData, SCREEN_W, SCREEN_H, INNER_TOP, INNER_BOT, INNER_LEFT, INNER_RIGHT } from "./common.js";
 import { getCV, withMats, imageDataToMat, matToImageData } from "./opencv.js";
-import { makeCalibration, undistortBgr } from "./lens-distortion.js";
 import {
   type DebugCollector,
   cloneImage,
@@ -29,18 +28,12 @@ import {
 export interface WarpOptions {
   scale?: number;
   threshold?: number;
-  /**
-   * Estimate and apply per-image radial lens-distortion correction (k1)
-   * before perspective warping. Default true.
-   */
-  correctLens?: boolean;
   debug?: DebugCollector;
 }
 
 export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   const scale = options?.scale ?? 8;
   const threshVal = options?.threshold ?? 180;
-  const correctLens = options?.correctLens ?? true;
   const dbg = options?.debug;
 
   const cv = getCV();
@@ -48,28 +41,9 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   // Convert input to BGR Mat (opencv.js convention)
   // We manage Mat lifetimes manually here because of the iterative refinement loop
   const src = imageDataToMat(input);
-  let bgr = new cv.Mat();
+  const bgr = new cv.Mat();
   cv.cvtColor(src, bgr, cv.COLOR_RGBA2BGR);
   src.delete();
-
-  // pre-a — Lens-distortion correction (k1) search and apply.
-  if (correctLens) {
-    const lens = chooseAndApplyK1(bgr, scale, threshVal);
-    if (dbg) {
-      dbg.log(
-        `[warp] lens-distortion: k1=${lens.k1.toFixed(4)} ` +
-          `score=${lens.score.toFixed(2)} ` +
-          `(searched ${lens.evaluated} candidates)`,
-      );
-      dbg.setMetric("warp", "lensDistortion", {
-        k1: Number(lens.k1.toFixed(4)),
-        score: Number(lens.score.toFixed(3)),
-        evaluated: lens.evaluated,
-      });
-    }
-    bgr.delete();
-    bgr = lens.bgrOut;
-  }
 
   // a — Detect screen corners
   const detection = findScreenCornersWithMetrics(bgr, threshVal);
@@ -129,10 +103,9 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
     currentWarped = result.refined;
   }
 
-  // c — Refine (pass 2: dash-anchored homography over corners + dashes
-  //                + inner-border points; corners weighted higher)
+  // c — Refine (pass 2)
   {
-    const result = refineWarpMultiAnchor(bgr, currentM, currentWarped, scale, corners);
+    const result = refineWarpWithMetrics(bgr, currentM, currentWarped, scale);
     if (dbg) recordRefinementMetrics(dbg, 2, result.metrics);
     currentM.delete();
     currentWarped.delete();
@@ -142,37 +115,6 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
 
   bgr.delete();
   currentM.delete();
-
-  // d — TPS post-correction. Pass-2's homography (8 DOF) cannot fully fit
-  // non-homographic residuals in the dashes. A degree-3 polynomial (20 DOF
-  // total) is rigid: it cannot fit a one-side bow without distorting other
-  // sides or the camera content. Thin-plate spline (TPS) is a scattered
-  // interpolant: each control point's influence falls off with distance, so
-  // per-side bow can be fit independently.
-  //
-  // Iterate up to 3 times: each pass detects dashes on the (now post-TPS)
-  // warp and refits the TPS against the new residuals. Converges to
-  // detected-dash-positions = canonical (within detector noise). If the TPS
-  // ever returns null (= ill-conditioned, too few dashes, or large fit
-  // error), fall back to the polynomial path on the current warp.
-  for (let iter = 0; iter < 3; iter++) {
-    const corrected = applyTPSDashCorrection(currentWarped, scale, iter === 0 ? dbg : undefined);
-    if (corrected === null) {
-      if (iter === 0) {
-        // TPS unusable on this image; try polynomial as a fallback so the
-        // pipeline still benefits from a rigid post-correction.
-        for (let polyIter = 0; polyIter < 3; polyIter++) {
-          const poly = applyPolynomialDashCorrection(currentWarped, scale, polyIter === 0 ? dbg : undefined);
-          if (poly === null) break;
-          currentWarped.delete();
-          currentWarped = poly;
-        }
-      }
-      break;
-    }
-    currentWarped.delete();
-    currentWarped = corrected;
-  }
 
   // Convert back to RGBA ImageData
   const rgba = new cv.Mat();
@@ -191,1317 +133,6 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   return result;
 }
 
-/**
- * Border-detection overlay — visualises *the actual TPS-input detector's
- * predictions* on top of the final post-TPS warp output. The goal is shared
- * ground truth between the detector and the user's eye: every detected point
- * is drawn at its detected (not expected) position, so the user can scan
- * the image and verify whether each magenta dot lands on the visible
- * WH→DG transition.
- *
- * Markers:
- *   • GREEN dashed rectangle — expected outer-edge of the inner DG border
- *     (where detection should land if the warp is perfect).
- *   • MAGENTA 1×1 dots — detected DG-signature outer-edge positions
- *     (= what `detectInnerBorderThresholdCrossings` returned). Each dot is
- *     anchored to the long-axis sample position; deviations from the green
- *     rectangle on the perpendicular axis show detector residual.
- *   • YELLOW 1-px line from detected → expected for points with
- *     |residual| > 1 image-px. Length+direction encodes bias magnitude
- *     and direction.
- *   • CYAN 1-px ticks on the side opposite the perpendicular bias — a
- *     small (~3 image-px) mark showing the detector's contrast. Higher
- *     contrast = more reliable detection. This is a quick visual cue
- *     that low-contrast detections (which are more likely to be wrong)
- *     stand out.
- *
- * The image is post-TPS, so if both detector and TPS are working, every
- * magenta dot should sit on the green dashed rectangle. Magenta dots
- * deviating from green = either detector noise (= harmless if TPS
- * smoothed it away) or genuine residual (= warp still has distortion).
- * Magenta dots falling on visible camera content rather than the actual
- * DG strip = detector false positive (= warp is being pulled by the
- * detector toward wrong positions and needs algorithmic fix).
- */
-function addBorderDetectionImage(
-  dbg: DebugCollector,
-  warpedBgr: any,
-  warpedRgba: GBImageData,
-  scale: number,
-): void {
-  const points = detectInnerBorderThresholdCrossings(warpedBgr, scale);
-
-  const overlay = cloneImage(warpedRgba);
-
-  const green: [number, number, number] = [0, 255, 0];
-  const magenta: [number, number, number] = [255, 0, 220];
-  const yellow: [number, number, number] = [255, 255, 0];
-  const cyan: [number, number, number] = [0, 200, 255];
-
-  const setPx = (x: number, y: number, c: [number, number, number]) => {
-    const xi = Math.round(x);
-    const yi = Math.round(y);
-    if (xi < 0 || xi >= overlay.width || yi < 0 || yi >= overlay.height) return;
-    const idx = (yi * overlay.width + xi) * 4;
-    overlay.data[idx] = c[0];
-    overlay.data[idx + 1] = c[1];
-    overlay.data[idx + 2] = c[2];
-    overlay.data[idx + 3] = 255;
-  };
-
-  // Dashed-line drawer (4-on, 4-off).
-  const dashLine = (
-    x0: number, y0: number, x1: number, y1: number,
-    c: [number, number, number], onLen = 4, offLen = 4,
-  ) => {
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = Math.max(Math.abs(dx), Math.abs(dy));
-    if (len === 0) return;
-    const stepX = dx / len;
-    const stepY = dy / len;
-    const period = onLen + offLen;
-    for (let i = 0; i <= len; i++) {
-      const phase = i % period;
-      if (phase < onLen) setPx(x0 + stepX * i, y0 + stepY * i, c);
-    }
-  };
-
-  // Solid 1-px line.
-  const line1 = (
-    x0: number, y0: number, x1: number, y1: number,
-    c: [number, number, number],
-  ) => {
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = Math.max(Math.abs(dx), Math.abs(dy));
-    if (len === 0) { setPx(x0, y0, c); return; }
-    const stepX = dx / len;
-    const stepY = dy / len;
-    for (let i = 0; i <= len; i++) setPx(x0 + stepX * i, y0 + stepY * i, c);
-  };
-
-  // ── Expected outer-edge rectangle (green dashed) ──
-  // INNER_TOP/LEFT * scale = outer edge of the DG strip on top/left.
-  // (INNER_BOT+1)/(INNER_RIGHT+1) * scale - 1 = outer edge on bottom/right.
-  const expTop = INNER_TOP * scale;                  // 120
-  const expBottom = (INNER_BOT + 1) * scale - 1;     // 1031
-  const expLeft = INNER_LEFT * scale;                // 120
-  const expRight = (INNER_RIGHT + 1) * scale - 1;    // 1159
-  dashLine(expLeft, expTop, expRight, expTop, green);
-  dashLine(expLeft, expBottom, expRight, expBottom, green);
-  dashLine(expLeft, expTop, expLeft, expBottom, green);
-  dashLine(expRight, expTop, expRight, expBottom, green);
-
-  // ── Per-point detected markers + residual lines ──
-  // Bias magnitudes for summary logging.
-  const biases: number[] = [];
-  let maxAbsBias = 0;
-  let nLargeBias = 0; // |bias| > 1 px
-  for (const p of points) {
-    // detectInnerBorderThresholdCrossings returns the OUTER edge of the
-    // DG strip. expectedX/Y is the canonical outer-edge position;
-    // detectedX/Y is the per-point detection result. For top/bottom the
-    // y axis is perpendicular; for left/right the x axis is.
-    setPx(p.detectedX, p.detectedY, magenta);
-    // Reinforce with a 3×3 cross to make detection visible against busy
-    // backgrounds (= the actual border line is only 1-2 px wide, so a
-    // single-pixel marker can be hard to spot).
-    setPx(p.detectedX - 1, p.detectedY, magenta);
-    setPx(p.detectedX + 1, p.detectedY, magenta);
-    setPx(p.detectedX, p.detectedY - 1, magenta);
-    setPx(p.detectedX, p.detectedY + 1, magenta);
-
-    const bias = Math.hypot(p.detectedX - p.expectedX, p.detectedY - p.expectedY);
-    biases.push(bias);
-    if (bias > maxAbsBias) maxAbsBias = bias;
-    if (bias > 1) {
-      nLargeBias++;
-      line1(p.detectedX, p.detectedY, p.expectedX, p.expectedY, yellow);
-    }
-
-    // Contrast tick: small cyan mark whose length encodes log10(contrast).
-    // Contrast values seen in practice: ~60 (threshold floor) to ~200+
-    // (clean DG strip). Map to 1–4 px tick length.
-    const tickLen = Math.max(1, Math.min(4, Math.round(p.contrast / 50)));
-    // Place tick on the "frame side" of the detected point — for top
-    // border that's UP, for bottom DOWN, for left LEFT, for right RIGHT.
-    // We infer side from whether expectedY equals expTop/expBottom or
-    // expectedX equals expLeft/expRight.
-    let dxTick = 0, dyTick = 0;
-    if (Math.abs(p.expectedY - expTop) < 0.5) dyTick = -1;        // top → up
-    else if (Math.abs(p.expectedY - (INNER_BOT + 1) * scale) < 0.5) dyTick = 1; // bottom → down
-    else if (Math.abs(p.expectedX - expLeft) < 0.5) dxTick = -1;  // left → left
-    else if (Math.abs(p.expectedX - (INNER_RIGHT + 1) * scale) < 0.5) dxTick = 1; // right → right
-    for (let k = 1; k <= tickLen; k++) {
-      setPx(p.detectedX + dxTick * k, p.detectedY + dyTick * k, cyan);
-    }
-  }
-
-  dbg.addImage("warp_e_border_detection", overlay);
-
-  // Per-side & per-point metrics — let the JSON capture enough to grep for
-  // specific user-reported positions (e.g., "right border at Y604"). Each
-  // entry holds detected (sub-pixel), expected (canonical), and bias.
-  const expBotOuter = (INNER_BOT + 1) * scale;
-  const expRightOuter = (INNER_RIGHT + 1) * scale;
-  type PerPoint = {
-    side: "top" | "bottom" | "left" | "right";
-    longAxis: number;            // x for top/bottom, y for left/right
-    detected: number;            // y for top/bottom, x for left/right
-    expected: number;
-    bias: number;                // detected - expected (signed; sign meaning depends on side)
-    contrast: number;
-  };
-  const perPoint: PerPoint[] = [];
-  for (const p of points) {
-    let side: PerPoint["side"];
-    let longAxis: number, detected: number, expected: number, bias: number;
-    if (Math.abs(p.expectedY - expTop) < 0.5) {
-      side = "top"; longAxis = p.detectedX; detected = p.detectedY; expected = expTop;
-      bias = detected - expected;
-    } else if (Math.abs(p.expectedY - expBotOuter) < 0.5) {
-      side = "bottom"; longAxis = p.detectedX; detected = p.detectedY; expected = expBotOuter;
-      bias = detected - expected;
-    } else if (Math.abs(p.expectedX - expLeft) < 0.5) {
-      side = "left"; longAxis = p.detectedY; detected = p.detectedX; expected = expLeft;
-      bias = detected - expected;
-    } else {
-      side = "right"; longAxis = p.detectedY; detected = p.detectedX; expected = expRightOuter;
-      bias = detected - expected;
-    }
-    perPoint.push({
-      side,
-      longAxis: Number(longAxis.toFixed(2)),
-      detected: Number(detected.toFixed(2)),
-      expected,
-      bias: Number(bias.toFixed(2)),
-      contrast: Number(p.contrast.toFixed(1)),
-    });
-  }
-
-  const sideStats: Record<string, { n: number; meanBias: number; maxAbsBias: number; missing: number }> = {
-    top:    { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
-    bottom: { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
-    left:   { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
-    right:  { n: 0, meanBias: 0, maxAbsBias: 0, missing: 0 },
-  };
-  for (const pp of perPoint) {
-    const s = sideStats[pp.side];
-    s.n++;
-    s.meanBias += pp.bias;
-    if (Math.abs(pp.bias) > s.maxAbsBias) s.maxAbsBias = Math.abs(pp.bias);
-  }
-  for (const k of Object.keys(sideStats)) {
-    const s = sideStats[k];
-    if (s.n > 0) s.meanBias /= s.n;
-    s.meanBias = Number(s.meanBias.toFixed(3));
-    s.maxAbsBias = Number(s.maxAbsBias.toFixed(3));
-    // Detector samples 33 evenly-spaced points per side; missing = 33 - n.
-    s.missing = Math.max(0, 33 - s.n);
-  }
-
-  const meanAbsBias = biases.length > 0
-    ? biases.reduce((s, v) => s + v, 0) / biases.length
-    : 0;
-  dbg.log(
-    `[warp] borderDetection: ${points.length} points, ` +
-      `meanAbsBias=${meanAbsBias.toFixed(2)} px, maxAbsBias=${maxAbsBias.toFixed(2)} px, ` +
-      `${nLargeBias} with |bias|>1px ` +
-      `(missing: T=${sideStats.top.missing}, B=${sideStats.bottom.missing}, ` +
-      `L=${sideStats.left.missing}, R=${sideStats.right.missing})`,
-  );
-  dbg.setMetric("warp", "borderDetectionPostTps", {
-    n: points.length,
-    meanAbsBias: Number(meanAbsBias.toFixed(3)),
-    maxAbsBias: Number(maxAbsBias.toFixed(3)),
-    nLargeBias,
-    perSide: sideStats,
-    perPoint,
-  });
-}
-
-function addInnerBorderResidualImage(
-  dbg: DebugCollector,
-  warpedBgr: any,
-  warpedRgba: GBImageData,
-  scale: number,
-): void {
-  const cv = getCV();
-  const H = warpedBgr.rows;
-  const W = warpedBgr.cols;
-
-  const rbCh = withMats((track, untrack) => {
-    const rgb = track(new cv.Mat());
-    cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
-    const out = new cv.Mat(H, W, cv.CV_8UC1);
-    const rgbData = rgb.data;
-    const outData = out.data;
-    for (let i = 0; i < H * W; i++) {
-      const r = rgbData[i * 3];
-      const b = rgbData[i * 3 + 2];
-      outData[i] = Math.max(0, Math.min(255, r - b + 128));
-    }
-    return untrack(out);
-  });
-
-  const borderPoints = findBorderPoints(rbCh, scale);
-  const corners = findBorderCorners(rbCh, scale);
-  rbCh.delete();
-
-  const overlay = cloneImage(warpedRgba);
-
-  const expTop = INNER_TOP * scale;
-  const expBottom = INNER_BOT * scale;
-  const expLeft = INNER_LEFT * scale;
-  const expRight = INNER_RIGHT * scale;
-
-  const green: [number, number, number] = [0, 255, 0];
-  drawLine(overlay, expLeft, expTop, expRight, expTop, green, 1);
-  drawLine(overlay, expLeft, expBottom, expRight, expBottom, green, 1);
-  drawLine(overlay, expLeft, expTop, expLeft, expBottom, green, 1);
-  drawLine(overlay, expRight, expTop, expRight, expBottom, green, 1);
-
-  const red: [number, number, number] = [255, 0, 0];
-  for (const [x, y] of [
-    ...borderPoints.top,
-    ...borderPoints.bottom,
-    ...borderPoints.left,
-    ...borderPoints.right,
-  ]) {
-    fillCircle(overlay, x, y, 1, red);
-  }
-
-  const yellow: [number, number, number] = [255, 255, 0];
-  for (const [x, y] of [corners.TL, corners.TR, corners.BR, corners.BL]) {
-    fillCircle(overlay, x, y, 3, yellow);
-  }
-
-  dbg.addImage("warp_b_inner_border_residual", overlay);
-}
-
-/**
- * Comprehensive detection debug overlay. Renders every data point the
- * detector uses on top of the warp output. Most markers are 1×1 image-px
- * so they obscure the underlying pixels minimally.
- *
- * Inner-border (the DG line just inside the WH frame):
- *   • GREEN dashed rectangle — expected inner-border *outer* edge. Drawn
- *     1 image-px wide as a 4-on-4-off dashed line so the actual transition
- *     pixels stay visible underneath. Drawn at (left=120, top=120,
- *     right=1159, bottom=1031) at scale=8 — i.e., the right and bottom
- *     edges include the full DG pixel width.
- *   • RED 1×1 dots — multi-point inner-border R-B detections (9 points
- *     per side). They should sit on the green dashed rectangle if the
- *     warp is correctly aligned.
- *   • Inner-border corners are marked by **the four corners of the 8×8
- *     GB pixel that contains the detected sub-pixel position**:
- *       — MAGENTA 1×1 dot at the GB-pixel TL.
- *       — ORANGE 1×1 dots at the GB-pixel TR/BR/BL.
- *     This lets you see which 8×8 area the detector identified as the
- *     corner. The TL marker establishes orientation.
- *
- * Dash markers:
- *   • CYAN 1×1 rectangles — dash search boxes (the region each dash's
- *     2D dark-mass centroid is computed over). Sized ±4 GB-px on the
- *     dash's long axis (along which dash positions vary) and ±2 GB-px
- *     on the short axis. If the dash isn't entirely inside its box,
- *     the centroid is biased toward the box centre.
- *   • GREEN 1×1 crosshair — expected dash centre (BK-only centroid
- *     from `Frame 02.png`).
- *   • MAGENTA 1×1 hollow square (5×5) — detected dash dark-mass
- *     centroid (2D, weighted by `max(0, 130 − gray)`). 1×1 corners +
- *     center to mark exact sub-pixel position.
- *   • YELLOW line — residual from detected → expected (only when
- *     |residual| > 1 image-px).
- */
-function addDetectionDebugImage(
-  dbg: DebugCollector,
-  warpedBgr: any,
-  warpedRgba: GBImageData,
-  scale: number,
-): void {
-  const cv = getCV();
-  const H = warpedBgr.rows;
-  const W = warpedBgr.cols;
-
-  // R-B channel for inner-border points/corners.
-  const rbCh = withMats((track, untrack) => {
-    const rgb = track(new cv.Mat());
-    cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
-    const out = new cv.Mat(H, W, cv.CV_8UC1);
-    const rgbData = rgb.data;
-    const outData = out.data;
-    for (let i = 0; i < H * W; i++) {
-      const r = rgbData[i * 3];
-      const b = rgbData[i * 3 + 2];
-      outData[i] = Math.max(0, Math.min(255, r - b + 128));
-    }
-    return untrack(out);
-  });
-  const borderPoints = findBorderPoints(rbCh, scale);
-  const corners = findBorderCorners(rbCh, scale);
-  rbCh.delete();
-
-  const dashes = detectDashesOnWarp(warpedBgr, scale);
-
-  const overlay = cloneImage(warpedRgba);
-
-  const green: [number, number, number] = [0, 255, 0];
-  const red: [number, number, number] = [255, 32, 32];
-  const orange: [number, number, number] = [255, 160, 0];
-  const magenta: [number, number, number] = [255, 0, 220];
-  const yellow: [number, number, number] = [255, 255, 0];
-  const cyan: [number, number, number] = [0, 200, 255];
-
-  // ── 1×1 pixel setter (no anti-aliasing, no thickening) ──
-  const setPx = (x: number, y: number, c: [number, number, number]) => {
-    const xi = Math.round(x);
-    const yi = Math.round(y);
-    if (xi < 0 || xi >= overlay.width || yi < 0 || yi >= overlay.height) return;
-    const idx = (yi * overlay.width + xi) * 4;
-    overlay.data[idx] = c[0];
-    overlay.data[idx + 1] = c[1];
-    overlay.data[idx + 2] = c[2];
-    overlay.data[idx + 3] = 255;
-  };
-
-  // ── Dashed line drawer (4-on, 4-off pattern) ──
-  const dashLine = (
-    x0: number, y0: number, x1: number, y1: number,
-    c: [number, number, number], onLen = 4, offLen = 4,
-  ) => {
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = Math.max(Math.abs(dx), Math.abs(dy));
-    if (len === 0) return;
-    const stepX = dx / len;
-    const stepY = dy / len;
-    const period = onLen + offLen;
-    for (let i = 0; i <= len; i++) {
-      const phase = i % period;
-      if (phase < onLen) setPx(x0 + stepX * i, y0 + stepY * i, c);
-    }
-  };
-
-  // ── Inner-border expected rectangle (green dashed, outer edges) ──
-  // Top-left at (120, 120). Right and bottom edges include the full
-  // inner-border DG pixel width (+7 image-px to hit the outer edge).
-  const expTop = INNER_TOP * scale;                       // 120
-  const expBottom = (INNER_BOT + 1) * scale - 1;          // 1031
-  const expLeft = INNER_LEFT * scale;                     // 120
-  const expRight = (INNER_RIGHT + 1) * scale - 1;         // 1159
-  dashLine(expLeft, expTop, expRight, expTop, green);
-  dashLine(expLeft, expBottom, expRight, expBottom, green);
-  dashLine(expLeft, expTop, expLeft, expBottom, green);
-  dashLine(expRight, expTop, expRight, expBottom, green);
-
-  // ── Inner-border multi-point detections (red 1×1 dots) ──
-  // findBorderPoints returns positions at the *inner* edge of the DG
-  // pixel for top/left and at the *outer* edge for bottom/right. To make
-  // the visualization consistent with the green outer-edge rectangle, we
-  // shift the bottom/right detections by `scale - 1` image-px so they
-  // also land on the outer edge of their inner-border pixel.
-  for (const [x, y] of borderPoints.top) setPx(x, y, red);
-  for (const [x, y] of borderPoints.bottom) setPx(x, y + scale - 1, red);
-  for (const [x, y] of borderPoints.left) setPx(x, y, red);
-  for (const [x, y] of borderPoints.right) setPx(x + scale - 1, y, red);
-
-  // ── Inner-border corner detections.
-  //   The detector returns the *outer-low* corner of the inner-border DG
-  //   pixel (the OUTER-frame-facing corner for top/left, the camera-
-  //   facing corner for bottom/right — i.e., the lower-coordinate corner
-  //   of the DG cell on each axis, matching the INNER_* * scale convention).
-  //
-  //   For each of the four detected corners, draw a 1-image-px marker at
-  //   each of the four corners of the 8×8 area extending RIGHT and DOWN
-  //   from the detected sub-pixel position (rounded to nearest image-px):
-  //     - MAGENTA at the detected corner itself (the "TL" of the 8×8 box).
-  //     - ORANGE at the other 3 corners of the 8×8 box.
-  //   The 8×8 box is anchored at the detection — NOT snapped to the GB
-  //   pixel grid — so the magenta dot lands exactly where the detector
-  //   says the corner is. The user can read the magenta position to
-  //   judge the detector's accuracy.
-  //
-  //   Plus a WHITE 1-image-px dot at the geometric centre of that 8×8
-  //   box (= detected position + scale/2) — i.e., where the centre of
-  //   the inner-border DG corner pixel falls per the detector. (The
-  //   user perceives the visual corner at this centroid; comparing the
-  //   white dot's position to the actual visible DG corner gives the
-  //   most direct alignment feedback.)
-  const white: [number, number, number] = [255, 255, 255];
-  const halfDg = scale / 2;
-  const cornerMarkerForDetection = (sub: [number, number]) => {
-    const x0 = Math.round(sub[0]);
-    const y0 = Math.round(sub[1]);
-    const x1 = x0 + scale - 1;
-    const y1 = y0 + scale - 1;
-    setPx(x0, y0, magenta);
-    setPx(x1, y0, orange);
-    setPx(x1, y1, orange);
-    setPx(x0, y1, orange);
-    setPx(sub[0] + halfDg, sub[1] + halfDg, white);
-  };
-  cornerMarkerForDetection(corners.TL);
-  cornerMarkerForDetection(corners.TR);
-  cornerMarkerForDetection(corners.BR);
-  cornerMarkerForDetection(corners.BL);
-
-  // ── Dash search boxes + expected + detected ──
-  // Long axis ±4 GB-px (32 image-px) — fat dashes' BK body is up to 5
-  // source-px = 40 image-px wide along the long axis, so the box must
-  // be wider than that to include some bright frame on either side
-  // (otherwise the centroid is biased toward the box centre).
-  // Short axis ±2 GB-px (16 image-px) — BK body is 2 source-px = 16
-  // image-px in the short direction; box covers it plus ~8 px of
-  // bright frame on each side.
-  const longHalf = Math.max(2, Math.round(scale * 4));
-  const shortHalf = Math.max(2, Math.round(scale * 2));
-
-  const drawCrosshair1 = (x: number, y: number, size: number, c: [number, number, number]) => {
-    const xi = Math.round(x);
-    const yi = Math.round(y);
-    for (let k = -size; k <= size; k++) {
-      setPx(xi + k, yi, c);
-      setPx(xi, yi + k, c);
-    }
-  };
-  const drawSquareMarker = (cx: number, cy: number, half: number, c: [number, number, number]) => {
-    const x = Math.round(cx);
-    const y = Math.round(cy);
-    setPx(x, y, c);
-    setPx(x - half, y - half, c);
-    setPx(x + half, y - half, c);
-    setPx(x - half, y + half, c);
-    setPx(x + half, y + half, c);
-  };
-
-  type DashEntry = {
-    expected: [number, number]; detected: [number, number] | null;
-    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
-  };
-  const drawDashSet = (
-    arr: ReadonlyArray<DashEntry>,
-    side: "top" | "bottom" | "left" | "right",
-  ) => {
-    for (const d of arr) {
-      // Cyan search box: drawn around the BK body CENTROID (= the
-      // actual search area used by the dash detector — it scans for
-      // the dash within ±longHalf × ±shortHalf around the canonical
-      // centroid). The search center is the centroid, NOT the outer
-      // edge that pass-2/polynomial fit to.
-      const [cex, cey] = d.centroidExpected;
-      const isHoriz = side === "top" || side === "bottom";
-      const xHalf = isHoriz ? longHalf : shortHalf;
-      const yHalf = isHoriz ? shortHalf : longHalf;
-      const x0 = Math.floor(cex - xHalf);
-      const y0 = Math.floor(cey - yHalf);
-      const w = Math.ceil(2 * xHalf) + 1;
-      const h = Math.ceil(2 * yHalf) + 1;
-      strokeRect(overlay, x0, y0, w, h, cyan, 1);
-      // Green crosshair: drawn at the canonical OUTER EDGE position
-      // (= what pass-2/polynomial align the detected dash to). For
-      // LEFT/RIGHT this is on the X axis; for TOP/BOTTOM on the Y
-      // axis. The outer edge is 1 GB-pixel from the centroid on the
-      // side toward the screen edge.
-      const [ex, ey] = d.expected;
-      drawCrosshair1(ex, ey, 3, green);
-      // Magenta marker: drawn at the detected outer-edge position
-      // (= what pass-2/polynomial pulls toward the green crosshair).
-      if (d.detected) {
-        const [dx, dy] = d.detected;
-        drawSquareMarker(dx, dy, 2, magenta);
-        const err = Math.hypot(dx - ex, dy - ey);
-        if (err > 1) {
-          drawLine(overlay, dx, dy, ex, ey, yellow, 1);
-        }
-      }
-    }
-  };
-  drawDashSet(dashes.top, "top");
-  drawDashSet(dashes.bottom, "bottom");
-  drawDashSet(dashes.left, "left");
-  drawDashSet(dashes.right, "right");
-
-  dbg.addImage("warp_c_detection_debug", overlay);
-}
-
-// ─── Dash positions ───
-//
-// The frame contains 17 horizontal dashes along top/bottom edges and 14 vertical
-// dashes along left/right edges. Corner dashes are fused with the adjacent edge
-// dashes. We use only the *interior* dashes (skipping corner-fused first/last
-// dashes on each side) as anchor points: 15 + 15 + 12 + 12 = 54 anchors.
-//
-// Centres extracted directly from `supporting-materials/Frame 02.png` and given
-// in image-pixel-edge units, where pixel index N occupies coordinates [N, N+1)
-// and the centre of pixel N is N + 0.5. To map to warp-space coordinates,
-// multiply by `scale`.
-
-/** Interior horizontal dash centres along top/bottom edges. */
-const DASH_INTERIOR_TOP_BOTTOM_X = [
-  12.5, 22.5, 32, 42, 51.5, 60.5, 70.5, 80, 90, 100.5, 110.5, 120, 130, 139.5, 148.5,
-] as const;
-/** Interior vertical dash centres along the left edge. */
-const DASH_INTERIOR_LEFT_Y = [
-  19.5, 29.5, 39.5, 48.5, 58, 68, 77.5, 87.5, 96.5, 106, 116, 125.5,
-] as const;
-/** Interior vertical dash centres along the right edge (asymmetric vs left). */
-const DASH_INTERIOR_RIGHT_Y = [
-  15, 24.5, 35, 45, 55, 64.5, 75, 85, 95, 104.5, 115, 125,
-] as const;
-// Dash centroid positions extracted from `supporting-materials/Frame 02.png`,
-// computed as the dark-mass centroid of pure-BK pixels (gray < 30) only.
-// Each top dash has a DG cap (gray ~82 in source, ~160 in warp) that is
-// brighter than the warp detector's threshold (130) and so contributes
-// weight 0 to the in-pipeline detector. To keep the EXPECTED positions
-// consistent with what the DETECTOR finds, we use BK-only centroids here.
-//
-// BK body of:
-//   - Top dashes: rows 6-7 → centroid Y = 7.0
-//   - Bottom dashes: rows 137-138 → centroid Y = 138.0
-//   - Left dashes: cols 1-2 → centroid X = 2.0
-//   - Right dashes: cols 157-158 → centroid X = 158.0
-
-/** Centroid Y (in pixel-edge units) of horizontal dash BK bodies. */
-const DASH_TOP_Y = 7;
-const DASH_BOTTOM_Y = 138;
-/** Centroid X (in pixel-edge units) of vertical dash BK bodies. */
-const DASH_LEFT_X = 2;
-const DASH_RIGHT_X = 158;
-
-export interface DetectedDashes {
-  // For each dash: `expected` and `detected` use the user-perception
-  // ground truth: the SHORT-axis coordinate is the OUTER edge of the BK
-  // body (= where the eye perceives the dash boundary as a threshold-
-  // crossing in the smoothed gray profile). The LONG-axis coordinate is
-  // the BK body's centroid.
-  //
-  // For TOP dashes: detected = (centroid_x, outer_top_y). expected =
-  //   (expected_centroid_x, canonical_outer_top_y).
-  // For BOTTOM dashes: detected = (centroid_x, outer_bottom_y). expected =
-  //   (expected_centroid_x, canonical_outer_bottom_y).
-  // For LEFT dashes: detected = (outer_left_x, centroid_y). expected =
-  //   (canonical_outer_left_x, expected_centroid_y).
-  // For RIGHT dashes: detected = (outer_right_x, centroid_y). expected =
-  //   (canonical_outer_right_x, expected_centroid_y).
-  //
-  // `centroidDetected` and `centroidExpected` retain the BK-body centroid
-  // (= long-axis-unchanged, short-axis at canonical_centroid). Provided
-  // for diagnostic / debug overlays that want to show the centroid.
-  top: Array<{
-    expected: [number, number]; detected: [number, number] | null;
-    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
-  }>;
-  bottom: Array<{
-    expected: [number, number]; detected: [number, number] | null;
-    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
-  }>;
-  left: Array<{
-    expected: [number, number]; detected: [number, number] | null;
-    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
-  }>;
-  right: Array<{
-    expected: [number, number]; detected: [number, number] | null;
-    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
-  }>;
-}
-
-/**
- * Detect interior dash centres on a warped image. Returns expected and detected
- * positions in *warp-space coordinates* (GB pixel × scale).
- *
- * Detection: for each side, dashes are pure black (lowest grayscale value) on
- * a frame strip that is otherwise white (#FFFFA5) or dark gray (#9494FF).
- * Each dash is detected as a 2D dark-weighted centroid in a small box
- * centred on the expected position. The 2D centroid is unbiased w.r.t. BGR
- * sub-pixel layout (dashes are pure-black with no DG/WH involvement) and
- * therefore gives a clean residual signal in *both* dimensions of the
- * dash's position.
- */
-export function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
-  const cv = getCV();
-
-  // Pre-blur the BGR image horizontally before converting to gray (same
-  // BGR sub-cell fix as for source-corner / inner-border / pass-1+2
-  // border detectors). The WH frame's gray value varies strongly across
-  // sub-cells (B sub-cell ~18, G sub-cell ~150, R sub-cell ~76 because
-  // only one of R/G/B is emitted per sub-cell at scale=8). Without the
-  // pre-blur, the dark-mass centroid that locates each dash is biased
-  // toward whichever sub-cell happens to be in the search box — pulling
-  // the centroid toward the LEFT of each LCD pixel where the B sub-cell
-  // (dimmest, "darkest", thus highest weight in the centroid) sits.
-  // After pre-blur, each LCD pixel's three sub-cells average to a
-  // uniform per-pixel gray, so the dash centroid lands at the real
-  // BK body centre instead of a sub-cell-biased position. Vertical σ
-  // kept at 0 — sub-cell variation is horizontal only.
-  const blurred = new cv.Mat();
-  const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
-  cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
-  const gray = new cv.Mat();
-  cv.cvtColor(blurred, gray, cv.COLOR_BGR2GRAY);
-  blurred.delete();
-
-  // Flat-field the gray channel: subtract a wide-gaussian-blurred version
-  // (the slow brightness "background") and re-centre at 128. This cancels
-  // the GBA SP front-light banding (which can shift a "BK" pixel from
-  // gray ~10 at the top of the screen to gray ~150 at the bottom in the
-  // same image) so the dash detector sees uniformly dark BK regardless
-  // of its location. σ = 4 GB-px (32 image-px at scale=8) is wide enough
-  // to average out individual dashes (16-40 px wide) but narrow enough
-  // to track the per-region front-light gradient.
-  //
-  // We work on a dedicated buffer; the original `gray` is preserved for
-  // later code paths that need the raw warp.
-  const gaussSigma = scale * 4;
-  const ksize = 2 * Math.ceil(gaussSigma * 2) + 1;
-  const flat = new cv.Mat();
-  withMats((track, _untrack) => {
-    const bg = track(new cv.Mat());
-    cv.GaussianBlur(gray, bg, new cv.Size(ksize, ksize), gaussSigma, gaussSigma);
-    // out = gray - bg + 128, clamped to [0, 255].
-    const grayData = gray.data;
-    const bgData = bg.data;
-    const outData = new Uint8Array(grayData.length);
-    for (let i = 0; i < grayData.length; i++) {
-      const v = grayData[i] - bgData[i] + 128;
-      outData[i] = v < 0 ? 0 : v > 255 ? 255 : v;
-    }
-    flat.create(gray.rows, gray.cols, cv.CV_8UC1);
-    flat.data.set(outData);
-  });
-  // Keep `gray` (raw, un-flat-fielded) for outer-edge detection — the
-  // user perceives the warp output as raw gray, and the harness measures
-  // threshold-crossings on raw gray. Use `flat` (flat-fielded) for
-  // centroid finding (= robust under front-light banding).
-  const grayRaw = gray;
-  const gray2 = flat;
-
-  // Dash centres are given in image-pixel-edge units; multiply by scale to
-  // map into warp-space coordinates.
-  const toImg = (p: number): number => p * scale;
-
-  // Search box: ±4 GB pixels along the dash's "long" axis (the axis the
-  // dash position varies along on each side), and ±2 GB pixels along the
-  // "short" axis.
-  //
-  // The BK body of a "fat" interior dash is up to 5 source-px on its long
-  // axis (= 40 image-px at scale=8) per `Frame 02.png`. The box must be
-  // *wider* than the BK body so it includes some bright frame on either
-  // side; otherwise the centroid is pinned to the box centre rather than
-  // the dash's actual centre. ±4 GB-px gives a 65-px box on the long
-  // axis = 40 BK + 12 frame on each side. Adjacent dash centres are
-  // 9-10 GB-px apart, so ±4 GB-px boxes don't overlap their neighbours.
-  //
-  // On the short axis (perpendicular), the BK body is 2 source-px wide
-  // (= 16 image-px). ±2 GB-px = 33-px box covers it plus 8 px of bright
-  // frame on each side. The DG inner border (grayscale ~160 in the warp,
-  // above the 130 detector threshold) is 13+ GB-px away from any dash so
-  // doesn't enter the box.
-  const longHalf = Math.max(2, Math.round(scale * 4));  // ±4 GB pixels
-  const shortHalf = Math.max(2, Math.round(scale * 2)); // ±2 GB pixels
-
-  const topImgY = toImg(DASH_TOP_Y);
-  const bottomImgY = toImg(DASH_BOTTOM_Y);
-  const leftImgX = toImg(DASH_LEFT_X);
-  const rightImgX = toImg(DASH_RIGHT_X);
-  // Canonical OUTER-edge positions in image-px (= where the user wants
-  // the visible dash edge to land in the warp output). BK body extends
-  // ±1 GB-pixel from centroid (= ±scale image-px) on the SHORT axis.
-  // Outer = centroid coordinate ± 1 GB-pixel on the side toward the
-  // screen edge.
-  const topOuterY = toImg(DASH_TOP_Y - 1);      // 48
-  const bottomOuterY = toImg(DASH_BOTTOM_Y + 1); // 1112
-  const leftOuterX = toImg(DASH_LEFT_X - 1);     // 8
-  const rightOuterX = toImg(DASH_RIGHT_X + 1);   // 1272
-
-  const top: DetectedDashes["top"] = [];
-  for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
-    const expectedX = toImg(gbx);
-    const r = findDarkCentroid2D(
-      gray2, expectedX, topImgY, longHalf, shortHalf, scale, -1, grayRaw,
-    );
-    if (r === null || r.outerEdge === null) {
-      top.push({
-        expected: [expectedX, topOuterY], detected: null,
-        centroidExpected: [expectedX, topImgY], centroidDetected: r?.centroid ?? null,
-      });
-    } else {
-      top.push({
-        expected: [expectedX, topOuterY], detected: [r.centroid[0], r.outerEdge],
-        centroidExpected: [expectedX, topImgY], centroidDetected: r.centroid,
-      });
-    }
-  }
-
-  const bottom: DetectedDashes["bottom"] = [];
-  for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
-    const expectedX = toImg(gbx);
-    const r = findDarkCentroid2D(
-      gray2, expectedX, bottomImgY, longHalf, shortHalf, scale, +1, grayRaw,
-    );
-    if (r === null || r.outerEdge === null) {
-      bottom.push({
-        expected: [expectedX, bottomOuterY], detected: null,
-        centroidExpected: [expectedX, bottomImgY], centroidDetected: r?.centroid ?? null,
-      });
-    } else {
-      bottom.push({
-        expected: [expectedX, bottomOuterY], detected: [r.centroid[0], r.outerEdge],
-        centroidExpected: [expectedX, bottomImgY], centroidDetected: r.centroid,
-      });
-    }
-  }
-
-  const left: DetectedDashes["left"] = [];
-  for (const gby of DASH_INTERIOR_LEFT_Y) {
-    const expectedY = toImg(gby);
-    // For vertical-axis dashes, swap: long axis is Y, short axis is X.
-    const r = findDarkCentroid2D(
-      gray2, leftImgX, expectedY, shortHalf, longHalf, scale, -1, grayRaw,
-    );
-    if (r === null || r.outerEdge === null) {
-      left.push({
-        expected: [leftOuterX, expectedY], detected: null,
-        centroidExpected: [leftImgX, expectedY], centroidDetected: r?.centroid ?? null,
-      });
-    } else {
-      left.push({
-        expected: [leftOuterX, expectedY], detected: [r.outerEdge, r.centroid[1]],
-        centroidExpected: [leftImgX, expectedY], centroidDetected: r.centroid,
-      });
-    }
-  }
-
-  const right: DetectedDashes["right"] = [];
-  for (const gby of DASH_INTERIOR_RIGHT_Y) {
-    const expectedY = toImg(gby);
-    const r = findDarkCentroid2D(
-      gray2, rightImgX, expectedY, shortHalf, longHalf, scale, +1, grayRaw,
-    );
-    if (r === null || r.outerEdge === null) {
-      right.push({
-        expected: [rightOuterX, expectedY], detected: null,
-        centroidExpected: [rightImgX, expectedY], centroidDetected: r?.centroid ?? null,
-      });
-    } else {
-      right.push({
-        expected: [rightOuterX, expectedY], detected: [r.outerEdge, r.centroid[1]],
-        centroidExpected: [rightImgX, expectedY], centroidDetected: r.centroid,
-      });
-    }
-  }
-
-  gray2.delete();
-  grayRaw.delete();
-  return { top, bottom, left, right };
-}
-
-/**
- * 2D dash centre detection using a *bbox-of-row-means / col-means* approach.
- *
- * Why not a darkness-weighted 2D centroid: BK pixels in a real warp are
- * not uniformly dark. On `zelda-poster-3` the bottom-left dash's BK body
- * has gray ~110-130 with a vertical gradient — the upper rows are AA-
- * brighter (gray ~140-160), the middle is ~120, the lower rows are dark
- * (~110). A weighted centroid biases ~3-4 px toward the dark end.
- *
- * The bbox approach is unbiased w.r.t. internal gradients: for each row in
- * the search box compute the row-mean gray; for each col compute col-mean
- * gray; threshold both at the local dynamic-range midpoint; the geometric
- * centre of the contiguous below-threshold rows/cols is the dash centre.
- *
- * Algorithm:
- *  1. Find local min/max in box. Abort if contrast < 30.
- *  2. Compute row-mean gray (1D along Y) and col-mean gray (1D along X).
- *  3. Threshold each 1D profile at its own midpoint:
- *       rowThresh = rowMin + 0.5 × (rowMax − rowMin)
- *  4. Find the largest contiguous run of below-threshold rows. The dash's
- *     vertical extent is from the first to the last row in that run.
- *     (Largest-contiguous handles cases where DG caps create separate
- *     dark bands above/below the BK body — we want the BK body.)
- *  5. Same for cols.
- *  6. Centre = midpoint of the row run, midpoint of the col run.
- */
-const DASH_BK_MIN_CONTRAST = 30;
-// Threshold fraction for the largest-below-threshold run on the LONG axis
-// of the dash (Y for vertical, X for horizontal). 0.5 = midpoint of profile
-// min/max; the bbox includes the full dash body plus its AA transition.
-const DASH_BK_PROFILE_THRESH_FRAC_LONG = 0.5;
-// Threshold fraction for the SHORT-axis profile. Tighter than the long
-// axis (0.3 vs 0.5) because the dash body's perpendicular edges are
-// adjacent to a DG cap (one side) or a BGR-asymmetric WH frame, and the
-// looser 0.5 threshold extends the bbox into the AA transition tail by
-// 2-3 image-px on the cap side, biasing the X-centroid toward the cap.
-// 0.3 keeps the bbox focused on cols where the profile has dropped 70% of
-// the way toward the dash-body floor, excluding most of the AA tail.
-const DASH_BK_PROFILE_THRESH_FRAC_SHORT = 0.3;
-
-/**
- * @param outerSide  +1 / -1 / 0. If +1, also return the SHORT-axis outer-
- *                   edge position by scanning the smoothed short-axis
- *                   profile from the centroid toward the higher-index end
- *                   and finding the sub-pixel threshold-crossing where
- *                   the profile rises to the midpoint of (BK floor, WH
- *                   baseline). If -1, scan toward lower-index end. If 0,
- *                   no outer-edge computation.
- *                   Returns 2 extra fields when set: outerEdgeShort
- *                   (sub-pixel position in image-pixel-edge coords on the
- *                   short axis) and a flag indicating success.
- */
-function findDarkCentroid2D(
-  gray: any,
-  expectedX: number,
-  expectedY: number,
-  xHalf: number,
-  yHalf: number,
-  scale: number,
-  outerSide: -1 | 0 | 1 = 0,
-  rawGray: any = null,
-): { centroid: [number, number]; outerEdge: number | null } | null {
-  const xLo = Math.max(0, Math.floor(expectedX - xHalf));
-  const xHi = Math.min(gray.cols, Math.ceil(expectedX + xHalf) + 1);
-  const yLo = Math.max(0, Math.floor(expectedY - yHalf));
-  const yHi = Math.min(gray.rows, Math.ceil(expectedY + yHalf) + 1);
-  if (xLo >= xHi || yLo >= yHi) return null;
-  const W = xHi - xLo;
-  const H = yHi - yLo;
-
-  // Pass 1: row means, col means, overall min/max. Also compute means of
-  // the raw (un-flat-fielded) gray channel if provided, for outer-edge
-  // detection that should match the user's perception (the user sees the
-  // raw warp output, not the flat-fielded version).
-  const rowSum = new Float64Array(H);
-  const colSum = new Float64Array(W);
-  const rowSumRaw = rawGray ? new Float64Array(H) : null;
-  const colSumRaw = rawGray ? new Float64Array(W) : null;
-  let minVal = 255;
-  let maxVal = 0;
-  for (let y = yLo; y < yHi; y++) {
-    const ry = y - yLo;
-    for (let x = xLo; x < xHi; x++) {
-      const v = gray.ucharAt(y, x);
-      if (v < minVal) minVal = v;
-      if (v > maxVal) maxVal = v;
-      rowSum[ry] += v;
-      colSum[x - xLo] += v;
-      if (rowSumRaw && colSumRaw) {
-        const vr = rawGray.ucharAt(y, x);
-        rowSumRaw[ry] += vr;
-        colSumRaw[x - xLo] += vr;
-      }
-    }
-  }
-  if (maxVal - minVal < DASH_BK_MIN_CONTRAST) return null;
-  const rowMean = new Float64Array(H);
-  for (let i = 0; i < H; i++) rowMean[i] = rowSum[i] / W;
-  const colMean = new Float64Array(W);
-  for (let i = 0; i < W; i++) colMean[i] = colSum[i] / H;
-  const rowMeanRaw = rowSumRaw ? new Float64Array(H) : null;
-  const colMeanRaw = colSumRaw ? new Float64Array(W) : null;
-  if (rowMeanRaw && rowSumRaw) {
-    for (let i = 0; i < H; i++) rowMeanRaw[i] = rowSumRaw[i] / W;
-  }
-  if (colMeanRaw && colSumRaw) {
-    for (let i = 0; i < W; i++) colMeanRaw[i] = colSumRaw[i] / H;
-  }
-
-  // Smooth BOTH 1D profiles by one LCD-pixel period (`scale` image-px).
-  //
-  // LONG axis: a long dash (40 image-px) shows internal periodic bright/
-  // dark sub-bands (LCD inter-row gaps + sub-pixel bleed) that the
-  // largest-contiguous-run logic would otherwise lock onto, picking a
-  // sub-band instead of the whole dash.
-  //
-  // SHORT axis: the perpendicular profile has a periodic BGR sub-pixel
-  // pattern in the surrounding WH frame (B sub-cells appearing dim,
-  // ~19 gray) that contaminates colMean values at boundary cols. Without
-  // smoothing, the bbox-of-below-threshold extends into the WH B-sub
-  // region, biasing the centroid 1-3 image-px toward the WH side. Box-
-  // smoothing by `scale` (= 1 LCD pixel period) averages the BGR pattern
-  // out, giving a clean BK→WH transition that the threshold can latch
-  // onto symmetrically.
-  const boxSmoothInPlace = (arr: Float64Array, w: number) => {
-    if (w <= 1) return;
-    const odd = w % 2 === 0 ? w + 1 : w;
-    const half = Math.floor(odd / 2);
-    const tmp = arr.slice();
-    for (let i = 0; i < arr.length; i++) {
-      let s = 0;
-      for (let k = -half; k <= half; k++) {
-        let j = i + k;
-        if (j < 0) j = -j;
-        if (j >= arr.length) j = 2 * arr.length - 2 - j;
-        if (j < 0) j = 0;
-        if (j >= arr.length) j = arr.length - 1;
-        s += tmp[j];
-      }
-      arr[i] = s / odd;
-    }
-  };
-  // Smooth both axes by `scale` (= 1 LCD pixel period) once. Save a copy
-  // of the SHORT-axis profile after this single pass — the outer-edge
-  // detector uses the once-smoothed profile to match the user's
-  // perception (which corresponds to a similar single-pass smoothing
-  // amount). Then apply a second smoothing pass on the SHORT axis for
-  // centroid finding (= triangular kernel of width ~ 2 LCD periods),
-  // which removes residual BGR sub-pixel periodicity that the argmin-
-  // of-smoothed-profile would otherwise lock onto.
-  boxSmoothInPlace(rowMean, scale);
-  boxSmoothInPlace(colMean, scale);
-  // Save once-smoothed copies of the SHORT-axis profile for outer-edge
-  // detection (= matches harness/user perception smoothing).
-  const isVerticalForSmoothing = yHalf >= xHalf;
-  // For OUTER-EDGE detection, use the RAW (un-flat-fielded) gray means
-  // if available. The harness computes threshold-crossings on raw gray,
-  // and the user perceives the warp output as raw gray. Flat-fielding
-  // in the centroid path is needed for stable argmin under front-light
-  // banding, but it shifts the threshold-crossing position differently
-  // from raw gray, causing a systematic harness bias.
-  const shortProfileForOuterEdgeSrc = isVerticalForSmoothing
-    ? (colMeanRaw ?? colMean).slice()
-    : (rowMeanRaw ?? rowMean).slice();
-  // Smooth this once with the same kernel as the harness (= box-9 = scale+1
-  // wide, applied with reflect-clamp boundaries).
-  boxSmoothInPlace(shortProfileForOuterEdgeSrc, scale);
-  // Apply additional gauss σ=1 smoothing to match the harness's smoothing
-  // exactly (= box-9 + gauss σ=1). This eliminates systematic biases
-  // between detector-reported outer-edge and harness/user-perceived
-  // edge that arise from slight kernel differences.
-  const gauss1d = (arr: Float64Array, sigma: number): Float64Array => {
-    const radius = Math.max(1, Math.ceil(3 * sigma));
-    const k = new Float64Array(2 * radius + 1);
-    let sum = 0;
-    for (let i = -radius; i <= radius; i++) {
-      const v = Math.exp(-(i * i) / (2 * sigma * sigma));
-      k[i + radius] = v; sum += v;
-    }
-    for (let i = 0; i < k.length; i++) k[i] /= sum;
-    const out = new Float64Array(arr.length);
-    for (let i = 0; i < arr.length; i++) {
-      let s = 0;
-      for (let j = -radius; j <= radius; j++) {
-        const idx = Math.max(0, Math.min(arr.length - 1, i + j));
-        s += arr[idx] * k[j + radius];
-      }
-      out[i] = s;
-    }
-    return out;
-  };
-  const shortProfileForOuterEdge = gauss1d(shortProfileForOuterEdgeSrc, 1.0);
-  if (yHalf >= xHalf) {
-    boxSmoothInPlace(colMean, scale);
-  } else {
-    boxSmoothInPlace(rowMean, scale);
-  }
-
-  // Helper: largest "gap-bridged" run of indices where profile[i] is
-  // mostly < threshold. Allow up to gapTol consecutive above-threshold
-  // samples within a run; this stitches across the small bright inter-
-  // LCD-pixel gap between two LCD-rows of a dash (a dash is 16-px tall
-  // = 2 LCD rows, with a ~2-3-px brighter strip between them on the
-  // GBA SP, which would otherwise split the dash into two separate runs
-  // with neither being the full dash).
-  //
-  // Use gap-bridging *only on the Y axis*. On Y, the gap is a real LCD-
-  // row separator within the dash. On X, there's no analogous "intra-
-  // dash gap" — what looks like a gap on X is actually the DG cap of
-  // the adjacent dash, which the bridging would erroneously include
-  // and pull the X centroid toward the cap. (Empirically: bridging X
-  // adds ~+3 image-px bias on LEFT/RIGHT dashes by extending the run
-  // through DG into the next-out-frame structure.)
-  // Gap tolerances for bridging brief above-threshold samples within a
-  // contiguous below-threshold run.
-  //
-  // LONG axis: scale/2 (= 4 image-px at scale=8). The dash body is two
-  // LCD pixels long along the long axis; between them sits a ~2-3-px
-  // brighter inter-LCD-pixel gap. Smoothing reduces this but doesn't
-  // always fully bridge it, so explicit bridging at scale/2 catches it.
-  //
-  // SHORT axis: smaller (= 2 image-px at scale=8). Bridges:
-  //   - small screen scratches/dust on the dash body (1-3 px wide bright
-  //     spots that would otherwise split the run);
-  //   - the LCD inter-pixel gap on the perpendicular axis (~1-2 px).
-  // Stays small enough to NOT bridge into adjacent structures (e.g.,
-  // a DG cap separated from the body by a 5+ px bright frame band) —
-  // those gaps are wider than this tolerance.
-  const LONG_AXIS_GAP_TOL = Math.max(1, Math.floor(scale / 2));
-  const SHORT_AXIS_GAP_TOL = Math.max(1, Math.floor(scale / 4));
-
-  const largestRun = (
-    profile: Float64Array,
-    gapTol: number,
-    threshFrac: number,
-  ): [number, number] | null => {
-    let pMin = Infinity;
-    let pMax = -Infinity;
-    for (const v of profile) {
-      if (v < pMin) pMin = v;
-      if (v > pMax) pMax = v;
-    }
-    if (pMax - pMin < DASH_BK_MIN_CONTRAST) return null;
-    const threshold = pMin + (pMax - pMin) * threshFrac;
-    let bestLen = 0;
-    let bestRun: [number, number] | null = null;
-    let curStart = -1;
-    let curEnd = -1;
-    let aboveCount = 0;
-    for (let i = 0; i < profile.length; i++) {
-      if (profile[i] < threshold) {
-        if (curStart < 0) curStart = i;
-        curEnd = i;
-        aboveCount = 0;
-        const len = curEnd - curStart + 1;
-        if (len > bestLen) {
-          bestLen = len;
-          bestRun = [curStart, curEnd];
-        }
-      } else {
-        aboveCount++;
-        if (aboveCount > gapTol) {
-          curStart = -1;
-          curEnd = -1;
-          aboveCount = 0;
-        }
-      }
-    }
-    return bestRun;
-  };
-
-  // Find the BK body's centre on each axis.
-  //
-  // LONG axis: bbox-of-below-threshold + centroid-of-bbox. The dash body
-  // is much longer than its width on this axis; the bbox cleanly spans
-  // the dash's full extent (BK rows 6-7 for top; cols 1-2 for left, etc),
-  // and the bbox's geometric centre is the dash's long-axis position.
-  //
-  // SHORT axis: argmin-of-smoothed-profile + quadratic sub-pixel interp.
-  // The dash body is only 2 GB-pixels (16 image-px) wide on this axis,
-  // and the bbox approach has known asymmetric biases (one boundary
-  // transitions to WH frame, the other to DG cap; with periodic BGR
-  // sub-pixel rendering the bbox extends differently on each side,
-  // biasing the centroid 1-3 px toward whichever frame is dimmer in
-  // its sub-pixel rendering at the BK boundary). Argmin of the
-  // smoothed profile, restricted to ±2 LCD-px around the canonical
-  // centroid, finds the position where the profile is darkest — i.e.,
-  // the BK body's geometric centre — without depending on threshold-
-  // crossing positions that are subject to the BGR asymmetry.
-  const isVertical = yHalf >= xHalf;
-  const rowFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_LONG : DASH_BK_PROFILE_THRESH_FRAC_SHORT;
-  const colFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_SHORT : DASH_BK_PROFILE_THRESH_FRAC_LONG;
-  const rowGap = isVertical ? LONG_AXIS_GAP_TOL : SHORT_AXIS_GAP_TOL;
-  const colGap = isVertical ? SHORT_AXIS_GAP_TOL : LONG_AXIS_GAP_TOL;
-
-  // Argmin within ±2 LCD-px of the canonical centroid. Returns sub-pixel
-  // index (= integer index + quadratic delta).
-  const argminAround = (
-    profile: Float64Array,
-    canonicalIdx: number,
-  ): number | null => {
-    if (profile.length === 0) return null;
-    const lo = Math.max(0, Math.floor(canonicalIdx - 2 * scale));
-    const hi = Math.min(profile.length - 1, Math.ceil(canonicalIdx + 2 * scale));
-    if (lo > hi) return null;
-    let mi = lo, mv = profile[lo];
-    for (let i = lo + 1; i <= hi; i++) {
-      if (profile[i] < mv) { mv = profile[i]; mi = i; }
-    }
-    let delta = 0;
-    if (mi > 0 && mi < profile.length - 1) {
-      const v0 = profile[mi - 1], v1 = profile[mi], v2 = profile[mi + 1];
-      const den = v0 - 2 * v1 + v2;
-      if (Math.abs(den) > 1e-10) {
-        delta = Math.max(-1, Math.min(1, 0.5 * (v0 - v2) / den));
-      }
-    }
-    return mi + delta;
-  };
-
-  const expectedColIdx = expectedX - xLo;
-  const expectedRowIdx = expectedY - yLo;
-
-  // Find the sub-pixel position where the SMOOTHED short-axis profile
-  // crosses (floor + 0.5*(baseline - floor)), going outward from the BK
-  // body in `direction`. Returns the sub-pixel index in the profile, or
-  // null if no crossing found.
-  //
-  // The `baseline` is sampled at 1.5 LCD-pixels outward from the BK body
-  // floor — this lands in the FIRST adjacent feature outward of the BK
-  // body (= DG cap for TOP dashes, WH frame for LEFT/RIGHT/BOTTOM). The
-  // user perceives the visible dash boundary as the BK→{adjacent feature}
-  // transition, whichever feature is adjacent. Using a fixed-offset local
-  // baseline (vs the max of the entire outward window) keeps the
-  // threshold near the BK→DG transition for TOP dashes (where DG cap
-  // baseline ~50 in real photos), rather than placing it deep in the WH
-  // frame baseline (~190) which would push the crossing far past the
-  // user-perceived edge.
-  const findOuterCrossing = (
-    profile: Float64Array,
-    centroidIdx: number,
-    direction: -1 | 1,
-  ): number | null => {
-    // Floor: argmin within ±0.5 LCD-px of centroid (= deep BK).
-    const floorLo = Math.max(0, Math.floor(centroidIdx - scale / 2));
-    const floorHi = Math.min(profile.length - 1, Math.ceil(centroidIdx + scale / 2));
-    if (floorLo >= floorHi) return null;
-    let floorIdx = floorLo, floorVal = profile[floorLo];
-    for (let i = floorLo + 1; i <= floorHi; i++) {
-      if (profile[i] < floorVal) { floorVal = profile[i]; floorIdx = i; }
-    }
-    // Baseline: smoothed value 1.5 LCD-px outward from centroid (= within
-    // the first adjacent feature, not the bright WH frame past it).
-    const baselineIdx = Math.max(0, Math.min(
-      profile.length - 1,
-      Math.round(centroidIdx + direction * 1.5 * scale),
-    ));
-    const baselineVal = profile[baselineIdx];
-    if (baselineVal - floorVal < 20) return null;
-    const threshold = floorVal + 0.5 * (baselineVal - floorVal);
-    let i = floorIdx;
-    while (i + direction >= 0 && i + direction < profile.length) {
-      const a = profile[i];
-      const b = profile[i + direction];
-      if (a < threshold && b >= threshold) {
-        const t = (threshold - a) / (b - a);
-        return i + direction * Math.max(0, Math.min(1, t));
-      }
-      i += direction;
-    }
-    return null;
-  };
-
-  let cx: number;
-  let cy: number;
-  let outerEdge: number | null = null;
-  if (isVertical) {
-    // Vertical dash: rowMean is LONG axis (bbox), colMean is SHORT axis.
-    const rowRun = largestRun(rowMean, rowGap, rowFrac);
-    if (!rowRun) return null;
-    cy = yLo + (rowRun[0] + rowRun[1] + 1) / 2;
-    const colRun = largestRun(colMean, colGap, colFrac);
-    const colArgmin = argminAround(colMean, expectedColIdx);
-    if (!colRun && colArgmin === null) return null;
-    const colBboxCentre = colRun ? (colRun[0] + colRun[1] + 1) / 2 : null;
-    const colArgminCentre = colArgmin !== null ? colArgmin + 0.5 : null;
-    const colCombined = colBboxCentre !== null && colArgminCentre !== null
-      ? (colBboxCentre + colArgminCentre) / 2
-      : (colBboxCentre ?? colArgminCentre)!;
-    cx = xLo + colCombined;
-    if (outerSide !== 0) {
-      // For vertical dash, outer is on the X axis (= short axis). Scan
-      // the box-9 + gauss-σ-1 smoothed profile (matching harness/user
-      // perception kernel exactly).
-      const centroidColIdx = colCombined - 0.5;
-      const cross = findOuterCrossing(shortProfileForOuterEdge, centroidColIdx, outerSide);
-      if (cross !== null) outerEdge = xLo + cross;
-    }
-  } else {
-    // Horizontal dash: colMean is LONG axis (bbox), rowMean is SHORT axis.
-    const colRun = largestRun(colMean, colGap, colFrac);
-    if (!colRun) return null;
-    cx = xLo + (colRun[0] + colRun[1] + 1) / 2;
-    const rowRun = largestRun(rowMean, rowGap, rowFrac);
-    const rowArgmin = argminAround(rowMean, expectedRowIdx);
-    if (!rowRun && rowArgmin === null) return null;
-    const rowBboxCentre = rowRun ? (rowRun[0] + rowRun[1] + 1) / 2 : null;
-    const rowArgminCentre = rowArgmin !== null ? rowArgmin + 0.5 : null;
-    const rowCombined = rowBboxCentre !== null && rowArgminCentre !== null
-      ? (rowBboxCentre + rowArgminCentre) / 2
-      : (rowBboxCentre ?? rowArgminCentre)!;
-    cy = yLo + rowCombined;
-    if (outerSide !== 0) {
-      // For horizontal dash, outer is on the Y axis (= short axis). Scan
-      // the box-9 + gauss-σ-1 smoothed profile (matching harness/user
-      // perception kernel exactly).
-      const centroidRowIdx = rowCombined - 0.5;
-      const cross = findOuterCrossing(shortProfileForOuterEdge, centroidRowIdx, outerSide);
-      if (cross !== null) outerEdge = yLo + cross;
-    }
-  }
-  return { centroid: [cx, cy], outerEdge };
-}
-
-/**
- * Threshold (grayscale 0–255) below which a sample contributes weight to the
- * dash centroid. Empirically: dash interiors are < 100, frame ≥ 150.
- */
-const DASH_DARK_THRESHOLD = 130;
-
-/**
- * Compute the dark-weighted centroid of a 1D profile, treating values below
- * `threshold` as the "dark region" with weight = (threshold - value). This is
- * robust to argmin instability when the dash interior is approximately flat.
- * Returns the sub-pixel index in profile coordinates, or null if no sample
- * falls below threshold.
- */
-function darkCentroid(profile: number[], threshold: number): number | null {
-  let sumW = 0;
-  let sumWI = 0;
-  for (let i = 0; i < profile.length; i++) {
-    const w = Math.max(0, threshold - profile[i]);
-    sumW += w;
-    sumWI += w * i;
-  }
-  if (sumW < 1) return null;
-  return sumWI / sumW;
-}
-
-/**
- * Search for the dash centre along a column-direction profile (vary x, mean
- * over a row band). Returns sub-pixel x position, or null on failure.
- */
-function findArgminAlongCol(
-  gray: any,
-  rowStart: number,
-  rowEnd: number,
-  expectedCol: number,
-  halfWindow: number,
-): number | null {
-  const colStart = Math.max(0, Math.floor(expectedCol - halfWindow));
-  const colEnd = Math.min(gray.cols, Math.ceil(expectedCol + halfWindow) + 1);
-  if (colStart >= colEnd || rowStart >= rowEnd) return null;
-  const profile: number[] = [];
-  for (let c = colStart; c < colEnd; c++) {
-    let sum = 0;
-    let n = 0;
-    for (let r = rowStart; r < rowEnd; r++) {
-      sum += gray.ucharAt(r, c);
-      n++;
-    }
-    profile.push(n > 0 ? sum / n : 0);
-  }
-  const idx = darkCentroid(profile, DASH_DARK_THRESHOLD);
-  return idx === null ? null : colStart + idx;
-}
-
-/**
- * Search for the dash centre along a row-direction profile (vary y, mean over
- * a column band). Returns sub-pixel y position, or null on failure.
- */
-function findArgminAlongRow(
-  gray: any,
-  colStart: number,
-  colEnd: number,
-  expectedRow: number,
-  halfWindow: number,
-): number | null {
-  const rowStart = Math.max(0, Math.floor(expectedRow - halfWindow));
-  const rowEnd = Math.min(gray.rows, Math.ceil(expectedRow + halfWindow) + 1);
-  if (rowStart >= rowEnd || colStart >= colEnd) return null;
-  const profile: number[] = [];
-  for (let r = rowStart; r < rowEnd; r++) {
-    let sum = 0;
-    let n = 0;
-    for (let c = colStart; c < colEnd; c++) {
-      sum += gray.ucharAt(r, c);
-      n++;
-    }
-    profile.push(n > 0 ? sum / n : 0);
-  }
-  const idx = darkCentroid(profile, DASH_DARK_THRESHOLD);
-  return idx === null ? null : rowStart + idx;
-}
-
 // ─── Refinement metrics recorder ───
 
 interface RefineMetrics {
@@ -1512,25 +143,7 @@ interface RefineMetrics {
     BR: [number, number];
     BL: [number, number];
   };
-  residual: { maxCornerErr: number; meanEdgeCurv: number };
   refined: boolean;
-  /**
-   * Per-edge mean dash residuals (image-pixels in warp space). For
-   * top/bottom edges this is mean(detectedY - expectedY); for left/right
-   * it is mean(detectedX - expectedX). `count` is how many of the
-   * expected dashes were detected (out of 15/15/12/12 for top/bot/L/R).
-   * Dashes are pure black on the white frame and thus immune to BGR
-   * sub-pixel bias, so these residuals are an unbiased ground-truth
-   * signal for warp alignment quality.
-   */
-  dashResiduals?: {
-    top: { mean: number; count: number };
-    bottom: { mean: number; count: number };
-    left: { mean: number; count: number };
-    right: { mean: number; count: number };
-    /** All per-dash position errors (detected - expected), flattened. */
-    all: Array<{ side: "top" | "bottom" | "left" | "right"; expected: [number, number]; detected: [number, number]; err: [number, number] }>;
-  };
 }
 
 function recordRefinementMetrics(
@@ -1553,28 +166,10 @@ function recordRefinementMetrics(
       `BR=(${ce.BR[0].toFixed(1)},${ce.BR[1].toFixed(1)}) ` +
       `BL=(${ce.BL[0].toFixed(1)},${ce.BL[1].toFixed(1)})`,
   );
-  const r = m.residual;
-  dbg.log(
-    `[warp] pass${passNum} residual: ` +
-      `maxCornerErr=${r.maxCornerErr.toFixed(2)} ` +
-      `meanEdgeCurv=${r.meanEdgeCurv.toFixed(2)}`,
-  );
-  if (m.dashResiduals) {
-    const d = m.dashResiduals;
-    dbg.log(
-      `[warp] pass${passNum} dash residuals (image-px, det-exp): ` +
-        `top=${d.top.mean.toFixed(2)}(${d.top.count}/15) ` +
-        `bot=${d.bottom.mean.toFixed(2)}(${d.bottom.count}/15) ` +
-        `left=${d.left.mean.toFixed(2)}(${d.left.count}/12) ` +
-        `right=${d.right.mean.toFixed(2)}(${d.right.count}/12)`,
-    );
-  }
   dbg.setMetric("warp", `pass${passNum}`, {
     edgeCurvatures: ec,
     cornerErrors: ce,
-    residual: r,
     refined: m.refined,
-    dashResiduals: m.dashResiduals,
   });
 }
 
@@ -1603,38 +198,6 @@ function gaussianFilter1d(input: number[], sigma: number): number[] {
       val += input[j] * kernel[k];
     }
     output[i] = val;
-  }
-  return output;
-}
-
-/**
- * Box-filter a 1D signal with kernel width `width`. A box of width=scale
- * (= one LCD-pixel period at the warp output's `scale`) cancels the
- * sub-pixel BGR oscillation in the R-B+128 channel: within a single LCD
- * pixel, R-B varies as B-bright-on-left → R-bright-on-right, but averaging
- * over a full pixel period yields a single per-LCD-pixel value. This makes
- * inter-LCD-pixel transitions (the actual frame/border edges) the only
- * surviving signal in the smoothed profile. Reflects at boundaries to match
- * `gaussianFilter1d`.
- */
-function boxSmooth(input: number[], width: number): number[] {
-  if (width <= 1) return input.slice();
-  // Use an odd-width window centred on each index. Even widths would bias by
-  // half a sample; round up to the next odd width to keep the centre exact.
-  const w = width % 2 === 0 ? width + 1 : width;
-  const half = Math.floor(w / 2);
-  const n = input.length;
-  const output: number[] = new Array(n);
-  for (let i = 0; i < n; i++) {
-    let sum = 0;
-    for (let k = -half; k <= half; k++) {
-      let j = i + k;
-      if (j < 0) j = -j;
-      if (j >= n) j = 2 * n - 2 - j;
-      j = Math.max(0, Math.min(n - 1, j));
-      sum += input[j];
-    }
-    output[i] = sum / w;
   }
   return output;
 }
@@ -1709,48 +272,16 @@ function findScreenCornersWithMetrics(bgr: any, threshVal: number): CornerDetect
   const cv = getCV();
 
   return withMats((track, _untrack) => {
-    const grayRaw = track(new cv.Mat());
-    cv.cvtColor(bgr, grayRaw, cv.COLOR_BGR2GRAY);
-    const imgH = grayRaw.rows;
-    const imgW = grayRaw.cols;
-
-    // Pre-blur the gray channel HORIZONTALLY before thresholding. Same
-    // root cause as the inner-border BGR fix in 9d53237: the LCD's BGR
-    // sub-cell layout (B left, G middle, R right) makes the WH frame's
-    // leftmost bright sub-cell its G sub-cell, sitting in the MIDDLE of
-    // the WH frame's leftmost LCD pixel rather than at the actual screen
-    // edge. The threshold-then-contour detector lands on the G sub-cell
-    // → detected corners are ~3 phone-px INWARD of the true screen edge
-    // on the LEFT side; the right side has its R sub-cell at the
-    // rightmost position so it's not biased. Top/bottom borders run
-    // horizontally so they don't have this asymmetry.
-    //
-    // Horizontal Gaussian blur with σ ≈ half-an-LCD-pixel (estimated as
-    // image-width / 400 = 1/(2*200), conservative vs the typical 160
-    // LCD pixels per screen width and ~80% of photo width = 5 phone-px
-    // per LCD pixel; sigma = 2.5 phone-px = ~1 sub-cell width) averages
-    // sub-cell emissions of each LCD pixel together. After blurring,
-    // the WH frame's leftmost gray value rises consistently across the
-    // entire pixel width, and the threshold-crossing contour lands at
-    // the actual LCD-pixel boundary. Vertical blur kept at 0 — top/
-    // bottom don't have the BGR asymmetry, and any Y-blur would smear
-    // dashes and inner features.
     const gray = track(new cv.Mat());
-    const sigmaX = Math.max(1.5, imgW / 400);
-    const kx = Math.max(3, Math.floor(2 * Math.ceil(3 * sigmaX) / 2) * 2 + 1);
-    cv.GaussianBlur(grayRaw, gray, new cv.Size(kx, 1), sigmaX, 0);
+    cv.cvtColor(bgr, gray, cv.COLOR_BGR2GRAY);
+    const imgH = gray.rows;
+    const imgW = gray.cols;
 
     const kernel = track(cv.Mat.ones(7, 7, cv.CV_8U));
 
     let best: { score: number; ordered: Corners; thresh: number; area: number; aspect: number } | null = null;
 
-    // Try thresholds from very high (220) down to 114. The screen frame is
-    // typically the brightest contiguous region in the photo (gray ~200-245),
-    // but on overexposed photos a low threshold like 180 can include both the
-    // WH frame AND the WH camera content, which fuses into one giant contour
-    // that spans most of the image. Start higher to isolate just the frame
-    // when those low thresholds give a poor quad fit.
-    for (let thresh = 220; thresh > 114; thresh -= 5) {
+    for (let thresh = threshVal; thresh > 114; thresh -= 5) {
       const binary = track(new cv.Mat());
       cv.threshold(gray, binary, thresh, 255, cv.THRESH_BINARY);
 
@@ -1864,176 +395,14 @@ function initialWarp(bgr: any, corners: Corners, scale: number): WarpResult {
 
 // ─── Sub-pixel inner-border edge detection ───
 
-function firstDarkFromFrame(
-  profile: number[],
-  smoothSigma = 1.5,
-  /**
-   * Width (in samples) of a box pre-smoothing pass that removes
-   * sub-pixel BGR oscillation from the R-B+128 channel. Pass `scale` (the
-   * image-pixels-per-LCD-pixel factor used for the warp output) so a full
-   * BGR period is averaged before the gaussian + argmin gradient detection.
-   * Default 0 disables the box pre-pass for backwards compat.
-   */
-  periodSmooth = 0,
-): number {
-  const prepped = periodSmooth > 1 ? boxSmooth(profile, periodSmooth) : profile;
-  const p = gaussianFilter1d(prepped, smoothSigma);
-  return argminOfDerivative(p);
-}
-
-/**
- * Find the *outer-low edge* of the inner-border DG strip in a 1D profile of
- * the R-B+128 channel.
- *
- * Algorithm: locate the DG strip's *centre* (= DG floor position) by finding
- * the minimum of the smoothed profile within a tight ±scale window around
- * the expected centre, then subtract `scale/2 - 0.5` to get the outer-low
- * edge.
- *
- * The legacy `firstDarkFromFrame` returns the position of steepest descent
- * on the WH→DG transition, which sits ~scale/2 image-px *outward* of where
- * the eye places the visible DG corner pixel (because the descent midpoint
- * lies at the WH-side of the DG strip, not at the DG-strip centre). The
- * floor-based detector returns a position that lands directly at the
- * visually perceived DG corner pixel.
- *
- * Fallback: in some images the camera content immediately adjacent to the
- * inner-border is itself DG-coloured (e.g. thing-1 / 213443's TL has a DG
- * camera region right inside the inner-border). The smoothed profile then
- * has no clear minimum at the strip centre — the floor extends through the
- * camera area too — and the floor-search wanders. To stay robust, if the
- * floor-based result differs from the legacy descent-midpoint result by more
- * than `scale/2` image-px, the legacy result is returned instead. The
- * floor-based detector improves accuracy when it can; the legacy detector
- * keeps things from getting worse when it can't.
- */
-function dgStripOuterLow1D(
-  profile: number[],
-  scale: number,
-  expectedCentreIdx: number,
-  minContrast = 25,
-): number {
-  // Always compute the legacy descent-midpoint as a fallback.
-  const legacy = firstDarkFromFrame(profile, 1.5, scale);
-  if (profile.length < scale + 2) return legacy;
-  const smoothed = boxSmooth(profile, scale);
-  const p = gaussianFilter1d(smoothed, 1.0);
-  const N = p.length;
-  const tLo = Math.max(0, Math.floor(expectedCentreIdx - scale));
-  const tHi = Math.min(N - 1, Math.ceil(expectedCentreIdx + scale));
-  let mi = tLo, mv = p[tLo];
-  for (let i = tLo + 1; i <= tHi; i++) if (p[i] < mv) { mv = p[i]; mi = i; }
-  let baseline = -Infinity;
-  for (let i = 0; i < N; i++) if (p[i] > baseline) baseline = p[i];
-  if (baseline - mv < minContrast) return legacy;
-  let delta = 0;
-  if (mi > 0 && mi < N - 1) {
-    const v0 = p[mi - 1], v1 = p[mi], v2 = p[mi + 1];
-    const den = v0 - 2 * v1 + v2;
-    if (Math.abs(den) > 1e-10) delta = Math.max(-1, Math.min(1, 0.5 * (v0 - v2) / den));
-  }
-  // Strip centre, in pixel-edge coords, is at (mi+delta) + 0.5 (pixel N's
-  // centre is at edge N+0.5). Outer-low edge = strip_centre - scale/2.
-  const newOuterLow = (mi + delta) + 0.5 - scale / 2;
-  // If the new detector wanders far from the legacy descent-midpoint result,
-  // fall back. The two should agree within scale/2 on a clean transition;
-  // larger disagreement means camera content is fooling the floor search.
-  if (Math.abs(newOuterLow - legacy) > scale / 2) return legacy;
-  return newOuterLow;
-}
-
-/**
- * Find the inner-border DG strip in a 1D profile of the R-B+128 channel
- * and return one of its edges or its centre.
- *
- * Algorithm:
- *  1. Smooth profile by `scale` (one LCD-pixel period) to remove
- *     within-LCD-pixel BGR oscillation.
- *  2. Threshold = midpoint of (smoothed_min, smoothed_max).
- *  3. Find the contiguous below-threshold run *closest* to expectedIdx
- *     (in case there are spurious dark regions in the search band).
- *  4. Return the requested edge of the run with sub-pixel precision via
- *     linear interpolation between the threshold-crossing samples.
- *
- * `which`:
- *  - "outer-low":  returns the LOW-coordinate edge of the run (= the
- *                  WH→DG transition for top/left, = the camera→DG
- *                  transition for bottom/right). This is the
- *                  INNER_* * scale convention.
- *  - "outer-high": returns the HIGH-coordinate edge (= the opposite
- *                  edge of the DG strip).
- *  - "centre":     returns the geometric centre of the run.
- */
-function innerBorderEdge1D(
-  profile: number[],
-  scale: number,
-  expectedIdx: number,
-  which: "outer-low" | "outer-high" | "centre",
-): number {
-  if (profile.length < 2) return expectedIdx;
-  const smoothed = boxSmooth(profile, scale);
-  const p = gaussianFilter1d(smoothed, 1.0);
-  let pMin = Infinity;
-  let pMax = -Infinity;
-  for (const v of p) {
-    if (v < pMin) pMin = v;
-    if (v > pMax) pMax = v;
-  }
-  if (pMax - pMin < 20) return expectedIdx;
-  const threshold = pMin + (pMax - pMin) * 0.5;
-
-  const runs: Array<[number, number]> = [];
-  let curStart = -1;
-  for (let i = 0; i < p.length; i++) {
-    if (p[i] < threshold) {
-      if (curStart < 0) curStart = i;
-    } else {
-      if (curStart >= 0) {
-        runs.push([curStart, i - 1]);
-        curStart = -1;
-      }
-    }
-  }
-  if (curStart >= 0) runs.push([curStart, p.length - 1]);
-  if (runs.length === 0) return expectedIdx;
-
-  let best = runs[0];
-  let bestDist = Math.abs((best[0] + best[1]) / 2 - expectedIdx);
-  for (let i = 1; i < runs.length; i++) {
-    const c = (runs[i][0] + runs[i][1]) / 2;
-    const d = Math.abs(c - expectedIdx);
-    if (d < bestDist) {
-      bestDist = d;
-      best = runs[i];
-    }
-  }
-
-  if (which === "centre") return (best[0] + best[1] + 1) / 2;
-
-  // Sub-pixel edge: linear interpolation between the bright sample just
-  // outside the run and the dark sample at the run's edge.
-  if (which === "outer-low") {
-    const i = best[0];
-    if (i === 0) return i;
-    const above = p[i - 1];
-    const below = p[i];
-    const t = above > below ? (above - threshold) / (above - below) : 0.5;
-    return (i - 1) + Math.max(0, Math.min(1, t));
-  } else {
-    // outer-high
-    const i = best[1];
-    if (i >= p.length - 1) return i + 1;
-    const below = p[i];
-    const above = p[i + 1];
-    const t = above > below ? (above - threshold) / (above - below) : 0.5;
-    return i + Math.max(0, Math.min(1, 1 - t)) + 1;
-  }
-}
-
-function argminOfDerivative(p: number[]): number {
-  if (p.length < 2) return 0;
+function firstDarkFromFrame(profile: number[], smoothSigma = 1.5): number {
+  const p = gaussianFilter1d(profile, smoothSigma);
+  // Compute diff
   const d: number[] = [];
-  for (let i = 0; i < p.length - 1; i++) d.push(p[i + 1] - p[i]);
+  for (let i = 0; i < p.length - 1; i++) {
+    d.push(p[i + 1] - p[i]);
+  }
+  // Find argmin
   let k = 0;
   let minVal = d[0];
   for (let i = 1; i < d.length; i++) {
@@ -2042,6 +411,7 @@ function argminOfDerivative(p: number[]): number {
       k = i;
     }
   }
+  // Quadratic interpolation
   let delta = 0.0;
   if (k > 0 && k < d.length - 1) {
     const d0 = d[k - 1];
@@ -2109,26 +479,12 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
   const rTop: [number, number] = [Math.max(0, 10 * scale), midRow];
   const rBot: [number, number] = [midRow, Math.min(H, (SCREEN_H - 10) * scale)];
 
-  // Each side detector finds the DG strip's centre via dgStripCentre1D, then
-  // converts to outer-low edge by subtracting scale/2 - 0.5 (the strip
-  // centre is at index k whose pixel centre is at edge k+0.5; outer-low edge
-  // of an 8-wide strip centred there is at edge k+0.5 - scale/2).
-
-  // dgStripOuterLow1D's legacy fallback assumes the WH frame is at the
-  // LOW-coord side of the profile (it scans for "first dark from frame").
-  // For TOP/LEFT, the natural-order profile has WH at low coord ✓.
-  // For BOT/RIGHT, the profile must be REVERSED so WH is at low coord;
-  // the result is then mapped back to original coords (inverting the
-  // reversal AND shifting by -(scale-1) to convert outer-high → outer-low,
-  // matching the legacy detector's BOT/RIGHT convention).
-
   function topY(c0: number, c1: number): number {
     const exp = INNER_TOP * scale;
     const r1 = Math.max(0, exp - srch);
     const r2 = Math.min(H, exp + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
-    const expCentre = (exp + scale / 2) - r1;
-    return r1 + dgStripOuterLow1D(profile, scale, expCentre);
+    return r1 + firstDarkFromFrame(profile);
   }
 
   function botY(c0: number, c1: number): number {
@@ -2136,13 +492,8 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const r1 = Math.max(0, expFrame - srch);
     const r2 = Math.min(H, expFrame + srch);
     const profile = rowMeans(channel, r1, r2, c0, c1);
-    const reversed = profile.slice().reverse();
-    // DG strip centre in reversed coords:
-    //   original strip centre = INNER_BOT*scale + scale/2.
-    //   reversed idx = (profile.length - 1) - (orig idx - r1).
-    const stripCentreOrig = INNER_BOT * scale + scale / 2;
-    const expCentreRev = (profile.length - 1) - (stripCentreOrig - r1);
-    const idx = dgStripOuterLow1D(reversed, scale, expCentreRev);
+    const reversed = [...profile].reverse();
+    const idx = firstDarkFromFrame(reversed);
     return (r2 - 1) - idx - (scale - 1);
   }
 
@@ -2151,8 +502,7 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const c1 = Math.max(0, exp - srch);
     const c2 = Math.min(W, exp + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
-    const expCentre = (exp + scale / 2) - c1;
-    return c1 + dgStripOuterLow1D(profile, scale, expCentre);
+    return c1 + firstDarkFromFrame(profile);
   }
 
   function rightX(r0: number, r1_: number): number {
@@ -2160,10 +510,8 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
     const c1 = Math.max(0, expFrame - srch);
     const c2 = Math.min(W, expFrame + srch);
     const profile = colMeans(channel, r0, r1_, c1, c2);
-    const reversed = profile.slice().reverse();
-    const stripCentreOrig = INNER_RIGHT * scale + scale / 2;
-    const expCentreRev = (profile.length - 1) - (stripCentreOrig - c1);
-    const idx = dgStripOuterLow1D(reversed, scale, expCentreRev);
+    const reversed = [...profile].reverse();
+    const idx = firstDarkFromFrame(reversed);
     return (c2 - 1) - idx - (scale - 1);
   }
 
@@ -2215,16 +563,6 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     return result;
   };
 
-  // findBorderPoints uses a single-column (or single-row) 1D profile per
-  // sample point. The DG-floor detector that findBorderCorners uses is too
-  // noisy here: a single column is much more sensitive to camera content
-  // than the multi-column averages used for corners. So findBorderPoints
-  // keeps using the legacy descent-midpoint detector, which is robust on
-  // 1D profiles even when the inner-border isn't visually distinct from
-  // adjacent camera content. The slight bias in the descent-midpoint
-  // result is uniform across all 9 sample points per side and cancels out
-  // in the edge-curvature calculation downstream.
-
   // Top edge at 9 points
   for (const colFrac of linspace(0, 1, 9)) {
     let col = Math.floor(expLeft + (expRight - expLeft) * colFrac);
@@ -2236,7 +574,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
       for (let r = r1; r < r2; r++) {
         profile.push(channel.ucharAt(r, col));
       }
-      const yPos = r1 + firstDarkFromFrame(profile, 1.5, scale);
+      const yPos = r1 + firstDarkFromFrame(profile);
       points.top.push([col, yPos]);
     }
   }
@@ -2253,7 +591,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
         profile.push(channel.ucharAt(r, col));
       }
       const reversed = [...profile].reverse();
-      const idx = firstDarkFromFrame(reversed, 1.5, scale);
+      const idx = firstDarkFromFrame(reversed);
       const yPos = (r2 - 1) - idx - (scale - 1);
       points.bottom.push([col, yPos]);
     }
@@ -2270,7 +608,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
       for (let c = c1; c < c2; c++) {
         profile.push(channel.ucharAt(row, c));
       }
-      const xPos = c1 + firstDarkFromFrame(profile, 1.5, scale);
+      const xPos = c1 + firstDarkFromFrame(profile);
       points.left.push([xPos, row]);
     }
   }
@@ -2287,7 +625,7 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
         profile.push(channel.ucharAt(row, c));
       }
       const reversed = [...profile].reverse();
-      const idx = firstDarkFromFrame(reversed, 1.5, scale);
+      const idx = firstDarkFromFrame(reversed);
       const xPos = (c2 - 1) - idx - (scale - 1);
       points.right.push([xPos, row]);
     }
@@ -2331,22 +669,12 @@ function refineWarpWithMetrics(
   const H = warped.rows;
   const W = warped.cols;
 
-  // Compute R-B channel from a BGR-pre-blurred warp output. Same root
-  // cause as the inner-border (9d53237) and source-corner (9a1dbfa)
-  // pre-blur fixes: the BGR sub-cell layout in the LCD source puts B
-  // (165 for WH, 255 for DG) at the left of each LCD pixel, so the
-  // R-B+128 channel peaks at the B sub-cell rather than at the actual
-  // pixel boundary. Horizontal Gaussian blur (σ ≈ scale/3) averages
-  // each LCD pixel's sub-cell emissions together; the channel then
-  // transitions at the pixel boundary. Pass-1 / pass-2 then refine the
-  // homography based on actually-pixel-boundary edges rather than
-  // sub-cell-skewed ones.
+  // Compute R-B channel: warm frame (#FFFFA5) -> HIGH; cool border (#9494FF) -> LOW
+  // In BGR: frame is (165,255,255) so R=255, B=165 → R-B=90 + 128 = HIGH
+  //         border is (255,148,148) so R=148, B=255 → R-B=-107 + 128 = LOW
   const rbCh = withMats((track, untrack) => {
-    const blurred = track(new cv.Mat());
-    const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
-    cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
     const rgb = track(new cv.Mat());
-    cv.cvtColor(blurred, rgb, cv.COLOR_BGR2RGB);
+    cv.cvtColor(warped, rgb, cv.COLOR_BGR2RGB);
 
     // Create single-channel Mat for R-B+128
     const result = new cv.Mat(H, W, cv.CV_8UC1);
@@ -2394,20 +722,6 @@ function refineWarpWithMetrics(
     TR: [corners.TR[0] - expRight, corners.TR[1] - expTop] as [number, number],
     BR: [corners.BR[0] - expRight, corners.BR[1] - expBottom] as [number, number],
     BL: [corners.BL[0] - expLeft, corners.BL[1] - expBottom] as [number, number],
-  };
-
-  const maxCornerErr = Math.max(
-    ...Object.values(cornerErrors).flat().map(Math.abs),
-  );
-  const meanEdgeCurv =
-    (Math.abs(edgeCurvatures.top) +
-      Math.abs(edgeCurvatures.bottom) +
-      Math.abs(edgeCurvatures.left) +
-      Math.abs(edgeCurvatures.right)) /
-    4;
-  const residual = {
-    maxCornerErr: Number(maxCornerErr.toFixed(3)),
-    meanEdgeCurv: Number(meanEdgeCurv.toFixed(3)),
   };
 
   // Adjust corners for edge curvature
@@ -2525,7 +839,6 @@ function refineWarpWithMetrics(
           BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
           BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
         },
-        residual,
         refined: true,
       },
     };
@@ -2549,370 +862,170 @@ function refineWarpWithMetrics(
           BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
           BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
         },
-        residual,
         refined: false,
       },
     };
   }
 }
 
-// ─── Lens distortion search ───
+// ─── Diagnostic functions and constants ported from current branch ───
 
-// Range covers -0.30..+0.10 to handle aggressive barrel distortion
-// (= -0.10 to -0.20) on certain photos that have fish-eye-style screen
-// curvature. Coarse step 0.02 and fine step 0.005 give 21 + 11 = 32
-// k1 candidates per image.
-const LENS_K1_RANGE: [number, number] = [-0.30, 0.10];
-const LENS_COARSE_STEP = 0.02;
-const LENS_FINE_STEP = 0.005;
-const LENS_FINE_HALF_RANGE = 0.025;
+const DASH_INTERIOR_TOP_BOTTOM_X = [
+  21, 29, 37, 45, 53, 61, 69, 77, 85, 93, 101, 109, 117, 125, 133, 141, 149,
+];
+const DASH_INTERIOR_LEFT_Y = [
+  26, 34, 42, 50, 58, 66, 74, 82, 90, 98, 106, 114, 122, 130,
+];
+const DASH_INTERIOR_RIGHT_Y = [
+  26, 34, 42, 50, 58, 66, 74, 82, 90, 98, 106, 114, 122, 130,
+];
+const DASH_TOP_Y = 7;
+const DASH_BOTTOM_Y = 138;
+const DASH_LEFT_X = 2;
+const DASH_RIGHT_X = 158;
 
-interface LensResult {
-  bgrOut: any;
-  k1: number;
-  score: number;
-  evaluated: number;
-}
+const DASH_BK_MIN_CONTRAST = 30;
+const DASH_BK_PROFILE_THRESH_FRAC_LONG = 0.5;
+const DASH_BK_PROFILE_THRESH_FRAC_SHORT = 0.3;
+const DASH_DARK_THRESHOLD = 130;
 
-function chooseAndApplyK1(bgr: any, scale: number, threshVal: number): LensResult {
-  const W = bgr.cols;
-  const H = bgr.rows;
-  const { K } = makeCalibration(W, H);
+function addBorderDetectionImage(
+  dbg: DebugCollector,
+  warpedBgr: any,
+  warpedRgba: GBImageData,
+  scale: number,
+): void {
+  const points = detectInnerBorderThresholdCrossings(warpedBgr, scale);
 
-  let evaluated = 0;
-  let bestK1 = 0;
-  let bestScore = Infinity;
-  let bestQuadScore = Infinity;
+  const overlay = cloneImage(warpedRgba);
 
-  const evalAt = (k1: number): { score: number; quadScore: number } | null => {
-    evaluated++;
-    let undistorted: any = null;
-    try {
-      undistorted = undistortBgr(bgr, K, k1);
-      let detection: CornerDetection;
-      try {
-        detection = findScreenCornersWithMetrics(undistorted, threshVal);
-      } catch {
-        undistorted.delete();
-        return null;
-      }
-      const score = scoreUndistortedFrame(undistorted, scale, threshVal);
-      undistorted.delete();
-      if (score === null) return null;
-      return { score, quadScore: detection.score };
-    } catch {
-      if (undistorted) undistorted.delete();
-      return null;
+  const green: [number, number, number] = [0, 255, 0];
+  const magenta: [number, number, number] = [255, 0, 220];
+  const yellow: [number, number, number] = [255, 255, 0];
+  const cyan: [number, number, number] = [0, 200, 255];
+
+  const setPx = (x: number, y: number, c: [number, number, number]) => {
+    const idx = (Math.round(y) * overlay.width + Math.round(x)) * 4;
+    if (idx >= 0 && idx < overlay.data.length - 3) {
+      overlay.data[idx] = c[0];
+      overlay.data[idx + 1] = c[1];
+      overlay.data[idx + 2] = c[2];
+      overlay.data[idx + 3] = 255;
     }
   };
 
-  for (let k1 = LENS_K1_RANGE[0]; k1 <= LENS_K1_RANGE[1] + 1e-9; k1 += LENS_COARSE_STEP) {
-    const r = evalAt(k1);
-    if (r !== null && r.score < bestScore) {
-      bestScore = r.score;
-      bestQuadScore = r.quadScore;
-      bestK1 = k1;
-    }
-  }
-
-  const fineLo = Math.max(LENS_K1_RANGE[0], bestK1 - LENS_FINE_HALF_RANGE);
-  const fineHi = Math.min(LENS_K1_RANGE[1], bestK1 + LENS_FINE_HALF_RANGE);
-  for (let k1 = fineLo; k1 <= fineHi + 1e-9; k1 += LENS_FINE_STEP) {
-    const r = evalAt(k1);
-    if (r !== null && r.score < bestScore) {
-      bestScore = r.score;
-      bestQuadScore = r.quadScore;
-      bestK1 = k1;
-    }
-  }
-
-  const QUAD_FALLBACK_THRESH = 0.3;
-  if (bestQuadScore > QUAD_FALLBACK_THRESH) {
-    bestK1 = 0;
-  }
-
-  const bgrOut = Number.isFinite(bestScore) ? undistortBgr(bgr, K, bestK1) : bgr.clone();
-  K.delete();
-  return { bgrOut, k1: bestK1, score: bestScore, evaluated };
-}
-
-function scoreUndistortedFrame(bgr: any, scale: number, threshVal: number): number | null {
-  let detection: CornerDetection;
-  try {
-    detection = findScreenCornersWithMetrics(bgr, threshVal);
-  } catch {
-    return null;
-  }
-
-  // If the quad detection itself is poor (e.g., contour fell back to the
-  // image bounding box because the source photo's frame couldn't be
-  // separated by brightness threshold), no value of k1 will produce a
-  // meaningful warp. Penalise the score heavily so a less-distorted k1
-  // (closer to 0) is preferred — over-correcting lens distortion on a
-  // fundamentally bad detection only makes the warp worse. quadScore
-  // > 0.15 is the existing "low quality" warning threshold; we add
-  // 100 × that to the score so a bad detection at any k1 dominates
-  // over the dash-residual term.
-  const quadPenalty = 100 * detection.score;
-
-  const initial = initialWarp(bgr, detection.ordered, scale);
-  let score: number | null = null;
-  try {
-    // Score the lens-corrected warp by the sum of dash residual magnitudes.
-    //
-    // Why dashes (vs the inner-border curvature this used to score):
-    //  • The 17 horizontal × 14 vertical interior dashes are pure-black
-    //    BK on the WH/DG frame, with no BGR sub-pixel asymmetry — their
-    //    detected centroids are unbiased ground truth in both axes.
-    //  • The inner-border R-B+128 detector has a documented ~2-3-px bias
-    //    (per the corner-detector work in the previous commit) that
-    //    propagated into the lens score, biasing k1 toward values that
-    //    cancelled that bias rather than the true lens distortion.
-    //  • Dashes are 54 sample points distributed around the perimeter,
-    //    far better-conditioned than 4 averaged side-deviation numbers
-    //    when fitting a single radial-distortion parameter.
-    //
-    // Missing dashes (detector returned null) are penalised by a large
-    // fixed cost so a k1 that loses dash detection is always worse than
-    // one that keeps all 54 dashes detected even with several-px residuals.
-    const dashes = detectDashesOnWarp(initial.warped, scale);
-    let residualSum = 0;
-    let missing = 0;
-    for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
-      for (const d of arr) {
-        if (d.detected === null) {
-          missing++;
-        } else {
-          const dx = d.detected[0] - d.expected[0];
-          const dy = d.detected[1] - d.expected[1];
-          residualSum += Math.hypot(dx, dy);
-        }
-      }
-    }
-    const MISSING_DASH_PENALTY = 30; // image-px equivalent per missing dash
-    score = residualSum + missing * MISSING_DASH_PENALTY + quadPenalty;
-  } finally {
-    initial.warped.delete();
-    initial.M.delete();
-  }
-  return score;
-}
-
-// ─── Pass 2: multi-anchor homography refinement ───
-//
-// Builds (src, dst) anchor pairs from:
-//   - 4 source corners → canvas corners (weighted 5×)
-//   - 36 inner-border points → expected positions (weighted 2×)
-//   - 54 detected dashes → expected positions (weighted 1×)
-// Weights are implemented by point-repetition in the input matrices, since
-// cv.findHomography doesn't expose a weight parameter. Uses cv.RANSAC with a
-// 3-image-pixel reprojection threshold to reject mis-detections.
-//
-// All anchors except corners are detected on the warp-space output of pass 1
-// (where residuals are < 1 GB pixel) and back-mapped to source via M_pass1^-1.
-
-// Pass-2 anchors: dashes only (corners and inner-border are biased).
-//
-// The source-corner contour detection is biased by ~3 phone-px on the
-// LEFT screen edge because the leftmost bright sub-pixel of WH frame is
-// the G sub-pixel (B sub-pixel of WH is dim because WH.B=165 vs G/R=255),
-// placing the detected contour ~3 phone-px rightward of the true screen
-// edge. The inner-border R-B detection is also biased by within-LCD-pixel
-// BGR sub-pixel structure on the right edge (DG inner border has a
-// bright B sub-pixel on the LEFT side of the pixel).
-//
-// Dashes, by contrast, are pure-black squares on the WH frame and have
-// no DG/WH sub-pixel asymmetry; their detected positions are unbiased
-// truth. So pass-2 uses ONLY dashes, with corners as a low-weight
-// fallback to keep the homography from degenerating in case of bad dash
-// detection on a heavily distorted image.
-const MULTI_ANCHOR_RANSAC_THRESHOLD = 15.0;
-const CORNER_WEIGHT = 0;
-// Inner-border points constrain the camera-area outer frame to
-// canonical. Without this constraint, pass-2's homography fits the
-// dashes at the screen-edge perimeter but lets the inner-border drift
-// in the camera-area interior; the user perceives this as "camera-
-// area corners shifted inward by 1-3 px". Weight 1 (= dashes also at
-// 1) gives the best aggregate accuracy empirically — higher weights
-// over-constrain pass-2's homography against dashes' detected positions.
-const BORDER_POINT_WEIGHT = 1;
-const DASH_WEIGHT = 1;
-
-function refineWarpMultiAnchor(
-  img: any,
-  currentM: any,
-  warped: any,
-  scale: number,
-  sourceCorners: Corners,
-): RefineResultWithMetrics {
-  const cv = getCV();
-  const Wc = warped.cols;
-  const Hc = warped.rows;
-
-  // 1. Detect dashes on the pass-1 warped output.
-  const dashes = detectDashesOnWarp(warped, scale);
-
-  // 2. Detect inner-border points on the pass-1 warped output using the
-  // legacy R-B+128 + argmin-of-derivative detector. Compute on a
-  // BGR-pre-blurred warp output (σ ≈ scale/3) so the R-B+128 channel
-  // transitions at the actual pixel boundary instead of at the sub-cell
-  // (same fix as in refineWarpWithMetrics + detectInnerBorderThreshold
-  // Crossings: BGR sub-cell layout skews the channel peak away from the
-  // pixel boundary on left/right borders).
-  const rb = withMats((track, untrack) => {
-    const blurred = track(new cv.Mat());
-    const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
-    cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
-    const rgb = track(new cv.Mat());
-    cv.cvtColor(blurred, rgb, cv.COLOR_BGR2RGB);
-    const out = new cv.Mat(Hc, Wc, cv.CV_8UC1);
-    const rgbData = rgb.data;
-    const outData = out.data;
-    for (let i = 0; i < Hc * Wc; i++) {
-      const r = rgbData[i * 3];
-      const b = rgbData[i * 3 + 2];
-      outData[i] = Math.max(0, Math.min(255, r - b + 128));
-    }
-    return untrack(out);
-  });
-  const borderPoints = findBorderPoints(rb, scale);
-  rb.delete();
-
   const expTop = INNER_TOP * scale;
-  const expBot = INNER_BOT * scale;
+  const expBot = (INNER_BOT + 1) * scale;
   const expLeft = INNER_LEFT * scale;
-  const expRight = INNER_RIGHT * scale;
+  const expRight = (INNER_RIGHT + 1) * scale;
 
-  // 3. Build (warpDetected, warpExpected) pairs for dashes + inner-border.
-  const detectedXY: number[] = [];
-  const expectedXY: number[] = [];
-
-  for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
-    for (const d of arr) {
-      if (d.detected !== null) {
-        detectedXY.push(d.detected[0], d.detected[1]);
-        expectedXY.push(d.expected[0], d.expected[1]);
-      }
+  // Draw canonical rectangle (green dashed)
+  const step = Math.max(2, Math.round(scale / 2));
+  for (let x = expLeft; x <= expRight; x += step * 2) {
+    for (let i = 0; i < step; i++) {
+      setPx(x + i, expTop, green);
+      setPx(x + i, expBot, green);
     }
   }
-  const dashCount = detectedXY.length / 2;
-
-  for (const [x, y] of borderPoints.top) {
-    detectedXY.push(x, y);
-    expectedXY.push(x, expTop);
-  }
-  for (const [x, y] of borderPoints.bottom) {
-    detectedXY.push(x, y);
-    expectedXY.push(x, expBot);
-  }
-  for (const [x, y] of borderPoints.left) {
-    detectedXY.push(x, y);
-    expectedXY.push(expLeft, y);
-  }
-  for (const [x, y] of borderPoints.right) {
-    detectedXY.push(x, y);
-    expectedXY.push(expRight, y);
-  }
-  const borderCount = detectedXY.length / 2 - dashCount;
-
-  // 4. Map detected warp positions back to source coords.
-  const totalNonCorner = detectedXY.length / 2;
-  let sourceXY: number[] = [];
-  if (totalNonCorner > 0) {
-    const MInv = new cv.Mat();
-    cv.invert(currentM, MInv);
-    const detMat = cv.matFromArray(totalNonCorner, 1, cv.CV_32FC2, detectedXY);
-    const srcMat = new cv.Mat();
-    cv.perspectiveTransform(detMat, srcMat, MInv);
-    sourceXY = Array.from(srcMat.data32F as Float32Array).slice(0, totalNonCorner * 2);
-    detMat.delete();
-    srcMat.delete();
-    MInv.delete();
-  }
-
-  // 5. Build weighted anchor pairs by point repetition.
-  const srcPts: number[] = [];
-  const dstPts: number[] = [];
-  // Corners (×CORNER_WEIGHT)
-  const cornerSrc: [number, number][] = sourceCorners;
-  const cornerDst: [number, number][] = [
-    [0, 0], [Wc - 1, 0], [Wc - 1, Hc - 1], [0, Hc - 1],
-  ];
-  for (let i = 0; i < 4; i++) {
-    for (let r = 0; r < CORNER_WEIGHT; r++) {
-      srcPts.push(cornerSrc[i][0], cornerSrc[i][1]);
-      dstPts.push(cornerDst[i][0], cornerDst[i][1]);
+  for (let y = expTop; y <= expBot; y += step * 2) {
+    for (let i = 0; i < step; i++) {
+      setPx(expLeft, y + i, green);
+      setPx(expRight, y + i, green);
     }
   }
-  // Dashes (×DASH_WEIGHT) — first dashCount entries
-  for (let i = 0; i < dashCount; i++) {
-    for (let r = 0; r < DASH_WEIGHT; r++) {
-      srcPts.push(sourceXY[i * 2], sourceXY[i * 2 + 1]);
-      dstPts.push(expectedXY[i * 2], expectedXY[i * 2 + 1]);
+
+  let sumAbsBias = 0;
+  let maxAbsBias = 0;
+  let nLargeBias = 0;
+
+  const sideStats = {
+    top: { n: 0, mean: 0, missing: 0 },
+    bottom: { n: 0, mean: 0, missing: 0 },
+    left: { n: 0, mean: 0, missing: 0 },
+    right: { n: 0, mean: 0, missing: 0 },
+  };
+
+  const perPoint: Array<{ x: number; y: number; bias: number; side: string }> = [];
+
+  for (const p of points) {
+    const dx = p.detectedX - p.expectedX;
+    const dy = p.detectedY - p.expectedY;
+    const bias = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    const absBias = Math.abs(bias);
+    sumAbsBias += absBias;
+    if (absBias > maxAbsBias) maxAbsBias = absBias;
+    if (absBias > 1) nLargeBias++;
+
+    let side = "";
+    if (Math.abs(p.expectedY - expTop) < 0.5) side = "top";
+    else if (Math.abs(p.expectedY - expBot) < 0.5) side = "bottom";
+    else if (Math.abs(p.expectedX - expLeft) < 0.5) side = "left";
+    else if (Math.abs(p.expectedX - expRight) < 0.5) side = "right";
+
+    if (side) {
+      sideStats[side as keyof typeof sideStats].n++;
+      sideStats[side as keyof typeof sideStats].mean += bias;
+      perPoint.push({ x: p.expectedX, y: p.expectedY, bias, side });
+    }
+
+    // Magenta cross at detected position
+    for (let i = -1; i <= 1; i++) {
+      setPx(p.detectedX + i, p.detectedY, magenta);
+      setPx(p.detectedX, p.detectedY + i, magenta);
+    }
+
+    // Yellow line if bias > 1px
+    if (absBias > 1) {
+      drawLine(overlay, p.expectedX, p.expectedY, p.detectedX, p.detectedY, yellow);
+
+    }
+
+    // Cyan tick for contrast
+    const tickLen = Math.max(1, Math.round(p.contrast / 50));
+    const dir = Math.abs(p.expectedY - expTop) < 0.5 || Math.abs(p.expectedX - expLeft) < 0.5 ? 1 : -1;
+    if (Math.abs(p.expectedY - expTop) < 0.5 || Math.abs(p.expectedY - expBot) < 0.5) {
+      for (let i = 1; i <= tickLen; i++) setPx(p.expectedX, p.expectedY + dir * i, cyan);
+    } else {
+      for (let i = 1; i <= tickLen; i++) setPx(p.expectedX + dir * i, p.expectedY, cyan);
     }
   }
-  // Inner-border points (×BORDER_POINT_WEIGHT)
-  for (let i = 0; i < borderCount; i++) {
-    const j = dashCount + i;
-    for (let r = 0; r < BORDER_POINT_WEIGHT; r++) {
-      srcPts.push(sourceXY[j * 2], sourceXY[j * 2 + 1]);
-      dstPts.push(expectedXY[j * 2], expectedXY[j * 2 + 1]);
-    }
-  }
-  const totalPairs = srcPts.length / 2;
 
-  // 6. RANSAC homography fit.
-  const srcMat = cv.matFromArray(totalPairs, 1, cv.CV_32FC2, srcPts);
-  const dstMat = cv.matFromArray(totalPairs, 1, cv.CV_32FC2, dstPts);
-  const inliersMask = new cv.Mat();
-  let Hnew: any = null;
-  let inlierCount = 0;
-  let refinedOk = false;
-  try {
-    Hnew = cv.findHomography(
-      srcMat, dstMat, cv.RANSAC, MULTI_ANCHOR_RANSAC_THRESHOLD, inliersMask,
-    );
-    if (Hnew && Hnew.rows === 3 && Hnew.cols === 3) {
-      for (let i = 0; i < inliersMask.rows; i++) {
-        if (inliersMask.ucharAt(i, 0) > 0) inlierCount++;
-      }
-      refinedOk = true;
-    }
-  } catch {
-    refinedOk = false;
-  }
-  srcMat.delete();
-  dstMat.delete();
-  inliersMask.delete();
-
-  let refined: any;
-  let MOut: any;
-  if (refinedOk) {
-    refined = new cv.Mat();
-    cv.warpPerspective(img, refined, Hnew, new cv.Size(Wc, Hc), cv.INTER_LANCZOS4);
-    MOut = Hnew;
-  } else {
-    if (Hnew) Hnew.delete();
-    refined = warped.clone();
-    MOut = currentM.clone();
+  for (const s of Object.values(sideStats)) {
+    if (s.n > 0) s.mean /= s.n;
+    s.missing = 33 - s.n; // N_POINTS = 33
   }
 
-  // 7. Compute final metrics on refined output.
-  const metrics = computeBorderMetrics(refined, scale, refinedOk);
+  dbg.addImage("warp_e_border_detection", overlay);
 
-  return { refined, M: MOut, metrics };
+  const meanAbsBias = points.length > 0 ? sumAbsBias / points.length : 0;
+  dbg.log(
+    `[warp] border detection: n=${points.length}, ` +
+      `meanAbsBias=${meanAbsBias.toFixed(2)} px, maxAbsBias=${maxAbsBias.toFixed(2)} px, ` +
+      `${nLargeBias} with |bias|>1px ` +
+      `(missing: T=${sideStats.top.missing}, B=${sideStats.bottom.missing}, ` +
+      `L=${sideStats.left.missing}, R=${sideStats.right.missing})`,
+  );
+  dbg.setMetric("warp", "borderDetectionPostTps", {
+    n: points.length,
+    meanAbsBias: Number(meanAbsBias.toFixed(3)),
+    maxAbsBias: Number(maxAbsBias.toFixed(3)),
+    nLargeBias,
+    perSide: sideStats,
+    perPoint,
+  });
 }
 
-function computeBorderMetrics(
+function addInnerBorderResidualImage(
+  dbg: DebugCollector,
   warpedBgr: any,
+  warpedRgba: GBImageData,
   scale: number,
-  refinedOk: boolean,
-): RefineMetrics {
+): void {
   const cv = getCV();
   const H = warpedBgr.rows;
   const W = warpedBgr.cols;
 
-  const rb = withMats((track, untrack) => {
+  const rbCh = withMats((track, untrack) => {
     const rgb = track(new cv.Mat());
     cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
     const out = new cv.Mat(H, W, cv.CV_8UC1);
@@ -2925,157 +1038,135 @@ function computeBorderMetrics(
     }
     return untrack(out);
   });
-  const borderPoints = findBorderPoints(rb, scale);
-  const corners = findBorderCorners(rb, scale);
-  rb.delete();
+
+  const borderPoints = findBorderPoints(rbCh, scale);
+  const corners = findBorderCorners(rbCh, scale);
+  rbCh.delete();
+
+  const overlay = cloneImage(warpedRgba);
+  const magenta: [number, number, number] = [255, 0, 255];
+  const yellow: [number, number, number] = [255, 255, 0];
+  const green: [number, number, number] = [0, 255, 0];
 
   const expTop = INNER_TOP * scale;
   const expBot = INNER_BOT * scale;
   const expLeft = INNER_LEFT * scale;
   const expRight = INNER_RIGHT * scale;
 
-  const edgeCurvatures = {
-    top: borderPoints.top.length > 0
-      ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) / borderPoints.top.length : 0,
-    bottom: borderPoints.bottom.length > 0
-      ? borderPoints.bottom.reduce((s, [, y]) => s + (y - expBot), 0) / borderPoints.bottom.length : 0,
-    left: borderPoints.left.length > 0
-      ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) / borderPoints.left.length : 0,
-    right: borderPoints.right.length > 0
-      ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length : 0,
-  };
-  const cornerErrors = {
-    TL: [corners.TL[0] - expLeft, corners.TL[1] - expTop] as [number, number],
-    TR: [corners.TR[0] - expRight, corners.TR[1] - expTop] as [number, number],
-    BR: [corners.BR[0] - expRight, corners.BR[1] - expBot] as [number, number],
-    BL: [corners.BL[0] - expLeft, corners.BL[1] - expBot] as [number, number],
-  };
-  const maxCornerErr = Math.max(...Object.values(cornerErrors).flat().map(Math.abs));
-  const meanEdgeCurv = (Math.abs(edgeCurvatures.top) + Math.abs(edgeCurvatures.bottom) +
-    Math.abs(edgeCurvatures.left) + Math.abs(edgeCurvatures.right)) / 4;
+  // Draw expected inner border (green)
+  strokeRect(overlay, expLeft, expTop, expRight - expLeft, expBot - expTop, green);
 
-  // Dash residuals on the final refined warp.
-  const dashes = detectDashesOnWarp(warpedBgr, scale);
-  const aggregateDash = (
-    arr: DetectedDashes["top"],
-    axis: 0 | 1,
-  ): { mean: number; count: number } => {
-    let s = 0;
-    let n = 0;
-    for (const d of arr) {
-      if (d.detected !== null) {
-        s += d.detected[axis] - d.expected[axis];
-        n++;
-      }
+  // Draw detected corners (magenta)
+  for (const pt of [corners.TL, corners.TR, corners.BR, corners.BL]) {
+    fillCircle(overlay, pt[0], pt[1], 4, magenta);
+  }
+
+  // Draw border points (magenta dots) and residuals (yellow lines)
+  const allPoints = [...borderPoints.top, ...borderPoints.right, ...borderPoints.bottom, ...borderPoints.left];
+  for (const [x, y] of allPoints) {
+    fillCircle(overlay, x, y, 2, magenta);
+    // Find expected position
+    let ex = x, ey = y;
+    if (Math.abs(y - expTop) < 10 * scale) ey = expTop;
+    else if (Math.abs(y - expBot) < 10 * scale) ey = expBot;
+    else if (Math.abs(x - expLeft) < 10 * scale) ex = expLeft;
+    else if (Math.abs(x - expRight) < 10 * scale) ex = expRight;
+
+    if (Math.hypot(x - ex, y - ey) > 1) {
+      drawLine(overlay, x, y, ex, ey, yellow);
     }
-    return { mean: n > 0 ? Number((s / n).toFixed(3)) : 0, count: n };
-  };
-  const allDashResid: NonNullable<RefineMetrics["dashResiduals"]>["all"] = [];
-  for (const [side, arr] of [["top", dashes.top], ["bottom", dashes.bottom], ["left", dashes.left], ["right", dashes.right]] as const) {
-    for (const d of arr) {
-      if (d.detected !== null) {
-        allDashResid.push({
-          side,
-          expected: [Number(d.expected[0].toFixed(2)), Number(d.expected[1].toFixed(2))],
-          detected: [Number(d.detected[0].toFixed(2)), Number(d.detected[1].toFixed(2))],
-          err: [Number((d.detected[0] - d.expected[0]).toFixed(3)), Number((d.detected[1] - d.expected[1]).toFixed(3))],
-        });
+  }
+
+  dbg.addImage("warp_b_inner_border_residual", overlay);
+}
+
+function addDetectionDebugImage(
+  dbg: DebugCollector,
+  warpedBgr: any,
+  warpedRgba: GBImageData,
+  scale: number,
+): void {
+  const cv = getCV();
+  const H = warpedBgr.rows;
+  const W = warpedBgr.cols;
+
+  const rbCh = withMats((track, untrack) => {
+    const rgb = track(new cv.Mat());
+    cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
+    const out = new cv.Mat(H, W, cv.CV_8UC1);
+    const rgbData = rgb.data;
+    const outData = out.data;
+    for (let i = 0; i < H * W; i++) {
+      const r = rgbData[i * 3];
+      const b = rgbData[i * 3 + 2];
+      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+    }
+    return untrack(out);
+  });
+
+  const corners = findBorderCorners(rbCh, scale);
+  rbCh.delete();
+
+  const dashes = detectDashesOnWarp(warpedBgr, scale);
+
+  const overlay = cloneImage(warpedRgba);
+  const green: [number, number, number] = [0, 255, 0];
+  const magenta: [number, number, number] = [255, 0, 255];
+  const yellow: [number, number, number] = [255, 255, 0];
+  const cyan: [number, number, number] = [0, 255, 255];
+
+  const expTop = INNER_TOP * scale;
+  const expBot = INNER_BOT * scale;
+  const expLeft = INNER_LEFT * scale;
+  const expRight = INNER_RIGHT * scale;
+
+  // Inner border corners
+  for (const pt of [corners.TL, corners.TR, corners.BR, corners.BL]) {
+    fillCircle(overlay, pt[0], pt[1], 5, magenta);
+  }
+  strokeRect(overlay, expLeft, expTop, expRight - expLeft, expBot - expTop, green);
+
+  // Dashes
+  const longHalf = Math.max(2, Math.round(scale * 4));
+  const shortHalf = Math.max(2, Math.round(scale * 2));
+
+  const allDashes = [...dashes.top, ...dashes.bottom, ...dashes.left, ...dashes.right];
+  for (const d of allDashes) {
+    const [ex, ey] = d.centroidExpected;
+    // Expected (green cross)
+    drawLine(overlay, ex - 3, ey, ex + 3, ey, green);
+    drawLine(overlay, ex, ey - 3, ex, ey + 3, green);
+
+    // Search box (cyan)
+    const isVert = Math.abs(ex - expLeft) < 10 * scale || Math.abs(ex - expRight) < 10 * scale;
+    const xh = isVert ? shortHalf : longHalf;
+    const yh = isVert ? longHalf : shortHalf;
+    strokeRect(overlay, ex - xh, ey - yh, xh * 2, yh * 2, cyan);
+
+    if (d.centroidDetected) {
+      const [dx, dy] = d.centroidDetected;
+      // Detected (magenta box)
+      strokeRect(overlay, dx - 2, dy - 2, 4, 4, magenta);
+      fillCircle(overlay, dx, dy, 1, magenta);
+
+      if (Math.hypot(dx - ex, dy - ey) > 1) {
+        drawLine(overlay, ex, ey, dx, dy, yellow);
       }
     }
   }
-  const dashResiduals = {
-    top: aggregateDash(dashes.top, 1),
-    bottom: aggregateDash(dashes.bottom, 1),
-    left: aggregateDash(dashes.left, 0),
-    right: aggregateDash(dashes.right, 0),
-    all: allDashResid,
-  };
 
-  return {
-    dashResiduals,
-    edgeCurvatures: {
-      top: Number(edgeCurvatures.top.toFixed(3)),
-      bottom: Number(edgeCurvatures.bottom.toFixed(3)),
-      left: Number(edgeCurvatures.left.toFixed(3)),
-      right: Number(edgeCurvatures.right.toFixed(3)),
-    },
-    cornerErrors: {
-      TL: [Number(cornerErrors.TL[0].toFixed(2)), Number(cornerErrors.TL[1].toFixed(2))],
-      TR: [Number(cornerErrors.TR[0].toFixed(2)), Number(cornerErrors.TR[1].toFixed(2))],
-      BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
-      BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
-    },
-    residual: {
-      maxCornerErr: Number(maxCornerErr.toFixed(3)),
-      meanEdgeCurv: Number(meanEdgeCurv.toFixed(3)),
-    },
-    refined: refinedOk,
-  };
+  dbg.addImage("warp_c_detection_debug", overlay);
 }
 
-/**
- * Detect inner-border DG-line positions via threshold-crossing on raw
- * grayscale of the warp output. Same detection style as the dash-distance
- * harness (= matches the user's perceived edge):
- *   - 1D profile perpendicular to the side, in a narrow band.
- *   - Smooth (box-9 + gauss σ=1).
- *   - Find the DG strip's argmin within ±0.5 LCD-px of canonical strip
- *     centre (= tightly within the DG strip).
- *   - Sample baseline at 1.5 LCD-px outward from canonical edge (= within
- *     the WH frame for all sides).
- *   - Threshold = 0.5 × (baseline − floor) + floor.
- *   - Sub-pixel crossing where smoothed profile rises to threshold,
- *     scanning from strip centre toward frame side.
- *
- * Returns an array of (expected, detected) pairs at the canonical OUTER
- * edge of the DG strip (= where the user perceives the inner-border).
- * Convention:
- *   - top: expectedY = INNER_TOP * scale (= 120). detectedY ≈ 120.
- *   - bottom: expectedY = (INNER_BOT+1) * scale (= 1032). detectedY ≈ 1032.
- *   - left: expectedX = INNER_LEFT * scale (= 120).
- *   - right: expectedX = (INNER_RIGHT+1) * scale (= 1160).
- */
-interface InnerBorderXing {
-  expectedX: number;
-  expectedY: number;
-  detectedX: number;
-  detectedY: number;
-  /** Contrast = baseline - floor of the smoothed profile. Higher means
-   *  more reliable (= clean WH→DG transition). */
-  contrast: number;
-}
 function detectInnerBorderThresholdCrossings(
   warpedBgr: any, scale: number,
 ): InnerBorderXing[] {
   const cv = getCV();
   const W = warpedBgr.cols;
   const H = warpedBgr.rows;
-  // Pre-blur the BGR image horizontally to integrate sub-cell-emitted
-  // light into LCD-pixel-level RGB. Without this, the DG-signature
-  // (2B-R-G) peaks at each LCD pixel's B sub-cell (= LEFT third of the
-  // pixel), not at the pixel centre, so the half-peak threshold-crossing
-  // on left/right borders lands ~(kernel_half − sub_cell_half) image-px
-  // outward of the actual pixel boundary — exactly the 1-3 px outward
-  // bias the user observed on left/right magenta crosses. A horizontal
-  // Gaussian σ ≈ scale/3 (= ~1 sub-cell width) blurs the sub-cells of
-  // each LCD pixel together, after which the DG-signature transitions
-  // at the actual pixel boundary the user perceives. Vertical σ = 0
-  // (no vertical blur) — top/bottom borders don't have BGR asymmetry on
-  // the Y axis, and a vertical blur would smear dashes and other
-  // horizontal features the rest of the pipeline relies on. This blur is
-  // local to detector use only (a separate Mat); the warp output itself
-  // stays untouched.
   const blurredBgr = new cv.Mat();
   const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
   cv.GaussianBlur(warpedBgr, blurredBgr, new cv.Size(kx, 1), scale / 3, 0);
-  // Build a DG-signature channel: clip(2B - R - G, 0, 255). DG = (148, 148,
-  // 255) → 2*255 - 148 - 148 = 214. WH = (255, 255, 165) → 2*165 - 510 < 0
-  // → 0. BK = 0 - 0 = 0. LG = 296 - 255 - 148 = -107 → 0. So this channel
-  // is HIGH only for DG-coloured pixels and 0 for the rest. This is much
-  // more selective than gray: in 165926-class images where the WH frame at
-  // corners is dim (= similar gray to DG), gray-threshold detection picks
-  // up the WH→camera transition instead of the actual DG strip; the DG
-  // signature stays specific to DG.
   const gray = new cv.Mat(H, W, cv.CV_8UC1);
   const bgrData = blurredBgr.data as Uint8Array;
   const gData = gray.data as Uint8Array;
@@ -3130,34 +1221,11 @@ function detectInnerBorderThresholdCrossings(
     return out;
   };
 
-  // For the DG-signature channel: the DG strip is HIGH-valued (~100-200);
-  // surrounding WH frame and camera content are LOW (~0-30). We find the
-  // strip's PEAK (argmax), then the OUTER edge as the sub-pixel position
-  // where signature crosses 0.5 * peak going from the peak toward the
-  // outer screen edge.
-  //
-  // "Floor" here is the OUTER-side baseline (= LOW DG signature in WH
-  // frame). Contrast = peakValue - baselineValue. Wide search to capture
-  // user-reported 5-7 px corner-area distortions where the DG strip can
-  // be far from canonical position.
   const findEdge = (
     profile: Float64Array, canonOuterIdx: number, frameDir: 1 | -1,
   ): { edge: number; contrast: number } | null => {
     const sm = gauss(symBox(profile, scale + 1), 1.0);
-    // Strip-centre canonical (= half-LCD-px inward of canonical outer).
     const stripCentreIdx = canonOuterIdx - frameDir * (scale / 2);
-    // Wide peak search: ±3 LCD-px (= ±3*scale image-px). User-reported
-    // 5-7 px corner-area shifts on 165926 / ~2-EDIT can extend to 15-20
-    // image-px in the top-left quadrant per the border-curve-overlay
-    // diagnostic. The previous ±scale (±8 image-px) search missed those
-    // peaks entirely, so TPS received no anchor for the deviated regions
-    // and left them uncorrected. Widening to ±3*scale lets us find the
-    // actual DG strip even when it has shifted far from canonical.
-    //
-    // Risk: wider search may catch DG-toned CAMERA content as a spurious
-    // peak. Mitigated by the contrast filter (peak >= baseline+60) and
-    // by sampling baseline 1.5 LCD-px outward (still in the WH frame
-    // even when the strip has shifted by up to 2 LCD-px).
     const peakHalf = Math.max(1, 3 * scale);
     const peakLo = Math.max(0, Math.floor(stripCentreIdx - peakHalf));
     const peakHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + peakHalf));
@@ -3166,27 +1234,14 @@ function detectInnerBorderThresholdCrossings(
     for (let i = peakLo + 1; i <= peakHi; i++) {
       if (sm[i] > peakVal) { peakVal = sm[i]; peakIdx = i; }
     }
-    // Baseline = signature 3 LCD-px OUTWARD (= deep in WH frame, where
-    // DG signature should be near 0). The previous 1.5·scale put baseline
-    // INSIDE the shifted strip when the strip itself has moved outward
-    // by 12+ image-px (165926 LEFT shifts the strip to X≈101 vs canonical
-    // 120, so baseline at canonical−12 = X=108 lands inside the shifted
-    // strip → contrast ≈ 0 → detector returns null and TPS loses the
-    // anchor at exactly the most-deviated columns). 3·scale = 24 image-px
-    // outward stays in the WH frame even for the worst observed shifts.
     const baselineIdx = Math.max(0, Math.min(
       sm.length - 1,
       Math.round(canonOuterIdx + frameDir * 3 * scale),
     ));
     const baselineVal = sm[baselineIdx];
     const contrast = peakVal - baselineVal;
-    // Require a clear DG peak. DG signature of ~100+ at peak with
-    // baseline near 0 → contrast ≥ 60 means a real DG strip; below this
-    // is detector noise or a non-DG-coloured screen.
     if (contrast < 60) return null;
     const threshold = baselineVal + 0.5 * contrast;
-    // Scan from the peak in frameDir direction (= toward outer screen
-    // edge) until the signature drops below threshold.
     let i = peakIdx;
     while (i + frameDir >= 0 && i + frameDir < sm.length) {
       const a = sm[i];
@@ -3205,13 +1260,6 @@ function detectInnerBorderThresholdCrossings(
     for (let i = 0; i < n; i++) r.push(start + (end - start) * i / (n - 1));
     return r;
   };
-  // Sample 33 points per side, spanning 0%–100% of each side (= include
-  // the corner positions). User-reported "top-left corner X px too far
-  // left" distortions are at the side endpoints; rejecting them via a
-  // non-zero CORNER_FRAC was missing those signal positions. The
-  // contrast filter drops any corner samples that the detector can't
-  // resolve reliably. Tried 65 — over-fits detection noise on
-  // clean images (thing-2: 100 → 200 diff px); 33 is the sweet spot.
   const N_POINTS = 33;
   const CORNER_FRAC = 0;
 
@@ -3311,477 +1359,404 @@ function detectInnerBorderThresholdCrossings(
   return points;
 }
 
-// ─── Polynomial post-correction ───
-//
-// Fits a 2D degree-2 polynomial that maps canonical (expected) dash positions
-// to detected positions. Applies the polynomial via cv.remap to redistribute
-// the warp's pixels so the dashes land at canonical positions.
-//
-// Why a polynomial: pass-2's RANSAC fits a single homography (8 DOF) to
-// 54 dash constraints. The remaining residuals reflect non-homographic
-// distortion (lens curvature beyond what k1 corrects, screen non-flatness,
-// etc.). A degree-2 polynomial adds 4 DOF per axis (8 total) on top of
-// the homography's affine-ish part, capturing the residual.
-//
-// The polynomial is fit on (expected, detected) pairs in WARP-SPACE
-// coordinates so the remap is applied in warp-space — no need to back-
-// project to source coords.
-//
-// Returns null if the fit can't be performed safely (too few inliers,
-// numerical issues), in which case the caller keeps the un-corrected warp.
-function applyPolynomialDashCorrection(
-  warpedBgr: any,
-  scale: number,
-  dbg: DebugCollector | undefined,
-): any {
-  const cv = getCV();
-  const W = warpedBgr.cols;
-  const H = warpedBgr.rows;
+interface InnerBorderXing {
+  expectedX: number;
+  expectedY: number;
+  detectedX: number;
+  detectedY: number;
+  contrast: number;
+}
 
-  // Detect dashes; collect (expected, detected) pairs.
-  const dashes = detectDashesOnWarp(warpedBgr, scale);
-  const ex: number[] = [];
-  const ey: number[] = [];
-  const dx: number[] = [];
-  const dy: number[] = [];
-  for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
-    for (const d of arr) {
-      if (d.detected !== null) {
-        ex.push(d.expected[0]);
-        ey.push(d.expected[1]);
-        dx.push(d.detected[0]);
-        dy.push(d.detected[1]);
+interface DetectedDashes {
+  top: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
+  bottom: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
+  left: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
+  right: Array<{
+    expected: [number, number]; detected: [number, number] | null;
+    centroidExpected: [number, number]; centroidDetected: [number, number] | null;
+  }>;
+}
+
+function detectDashesOnWarp(warped: any, scale: number): DetectedDashes {
+  const cv = getCV();
+  const H = warped.rows;
+  const W = warped.cols;
+
+  const blurred = new cv.Mat();
+  const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+  cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
+  const gray = new cv.Mat();
+  cv.cvtColor(blurred, gray, cv.COLOR_BGR2GRAY);
+  blurred.delete();
+
+  const gaussSigma = scale * 4;
+  const ksize = 2 * Math.ceil(gaussSigma * 2) + 1;
+  const flat = new cv.Mat();
+  withMats((track, _untrack) => {
+    const bg = track(new cv.Mat());
+    cv.GaussianBlur(gray, bg, new cv.Size(ksize, ksize), gaussSigma, gaussSigma);
+    const grayData = gray.data;
+    const bgData = bg.data;
+    const outData = new Uint8Array(grayData.length);
+    for (let i = 0; i < grayData.length; i++) {
+      const v = grayData[i] - bgData[i] + 128;
+      outData[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    flat.create(gray.rows, gray.cols, cv.CV_8UC1);
+    flat.data.set(outData);
+  });
+  const grayRaw = gray;
+  const gray2 = flat;
+
+  const toImg = (p: number): number => p * scale;
+  const longHalf = Math.max(2, Math.round(scale * 4));
+  const shortHalf = Math.max(2, Math.round(scale * 2));
+
+  const topImgY = toImg(DASH_TOP_Y);
+  const bottomImgY = toImg(DASH_BOTTOM_Y);
+  const leftImgX = toImg(DASH_LEFT_X);
+  const rightImgX = toImg(DASH_RIGHT_X);
+  const topOuterY = toImg(DASH_TOP_Y - 1);
+  const bottomOuterY = toImg(DASH_BOTTOM_Y + 1);
+  const leftOuterX = toImg(DASH_LEFT_X - 1);
+  const rightOuterX = toImg(DASH_RIGHT_X + 1);
+
+  const top: DetectedDashes["top"] = [];
+  for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
+    const expectedX = toImg(gbx);
+    const r = findDarkCentroid2D(gray2, expectedX, topImgY, longHalf, shortHalf, scale, -1, grayRaw);
+    if (r === null || r.outerEdge === null) {
+      top.push({
+        expected: [expectedX, topOuterY], detected: null,
+        centroidExpected: [expectedX, topImgY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      top.push({
+        expected: [expectedX, topOuterY], detected: [r.centroid[0], r.outerEdge],
+        centroidExpected: [expectedX, topImgY], centroidDetected: r.centroid,
+      });
+    }
+  }
+
+  const bottom: DetectedDashes["bottom"] = [];
+  for (const gbx of DASH_INTERIOR_TOP_BOTTOM_X) {
+    const expectedX = toImg(gbx);
+    const r = findDarkCentroid2D(gray2, expectedX, bottomImgY, longHalf, shortHalf, scale, +1, grayRaw);
+    if (r === null || r.outerEdge === null) {
+      bottom.push({
+        expected: [expectedX, bottomOuterY], detected: null,
+        centroidExpected: [expectedX, bottomImgY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      bottom.push({
+        expected: [expectedX, bottomOuterY], detected: [r.centroid[0], r.outerEdge],
+        centroidExpected: [expectedX, bottomImgY], centroidDetected: r.centroid,
+      });
+    }
+  }
+
+  const left: DetectedDashes["left"] = [];
+  for (const gby of DASH_INTERIOR_LEFT_Y) {
+    const expectedY = toImg(gby);
+    const r = findDarkCentroid2D(gray2, leftImgX, expectedY, shortHalf, longHalf, scale, -1, grayRaw);
+    if (r === null || r.outerEdge === null) {
+      left.push({
+        expected: [leftOuterX, expectedY], detected: null,
+        centroidExpected: [leftImgX, expectedY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      left.push({
+        expected: [leftOuterX, expectedY], detected: [r.outerEdge, r.centroid[1]],
+        centroidExpected: [leftImgX, expectedY], centroidDetected: r.centroid,
+      });
+    }
+  }
+
+  const right: DetectedDashes["right"] = [];
+  for (const gby of DASH_INTERIOR_RIGHT_Y) {
+    const expectedY = toImg(gby);
+    const r = findDarkCentroid2D(gray2, rightImgX, expectedY, shortHalf, longHalf, scale, +1, grayRaw);
+    if (r === null || r.outerEdge === null) {
+      right.push({
+        expected: [rightOuterX, expectedY], detected: null,
+        centroidExpected: [rightImgX, expectedY], centroidDetected: r?.centroid ?? null,
+      });
+    } else {
+      right.push({
+        expected: [rightOuterX, expectedY], detected: [r.outerEdge, r.centroid[1]],
+        centroidExpected: [rightImgX, expectedY], centroidDetected: r.centroid,
+      });
+    }
+  }
+
+  gray2.delete();
+  grayRaw.delete();
+  return { top, bottom, left, right };
+}
+
+function findDarkCentroid2D(
+  gray: any,
+  expectedX: number,
+  expectedY: number,
+  xHalf: number,
+  yHalf: number,
+  scale: number,
+  outerSide: -1 | 0 | 1 = 0,
+  rawGray: any = null,
+): { centroid: [number, number]; outerEdge: number | null } | null {
+  const xLo = Math.max(0, Math.floor(expectedX - xHalf));
+  const xHi = Math.min(gray.cols, Math.ceil(expectedX + xHalf) + 1);
+  const yLo = Math.max(0, Math.floor(expectedY - yHalf));
+  const yHi = Math.min(gray.rows, Math.ceil(expectedY + yHalf) + 1);
+  if (xLo >= xHi || yLo >= yHi) return null;
+  const W = xHi - xLo;
+  const H = yHi - yLo;
+
+  const rowSum = new Float64Array(H);
+  const colSum = new Float64Array(W);
+  const rowSumRaw = rawGray ? new Float64Array(H) : null;
+  const colSumRaw = rawGray ? new Float64Array(W) : null;
+  let minVal = 255;
+  let maxVal = 0;
+  for (let y = yLo; y < yHi; y++) {
+    const ry = y - yLo;
+    for (let x = xLo; x < xHi; x++) {
+      const v = gray.ucharAt(y, x);
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+      rowSum[ry] += v;
+      colSum[x - xLo] += v;
+      if (rowSumRaw && colSumRaw) {
+        const vr = rawGray.ucharAt(y, x);
+        rowSumRaw[ry] += vr;
+        colSumRaw[x - xLo] += vr;
       }
     }
   }
-  const dashCount = ex.length;
-
-  // Anchor the polynomial to identity at the warp's outer corners and
-  // mid-edges. Without these anchors, the cubic terms swing wildly far
-  // from the dash perimeter (camera content gets distorted by 3-4
-  // image-px in the centre of the warp). Adding 8 "no-motion" constraints
-  // at the warp's outer edge keeps the polynomial near-identity in the
-  // camera area while still fitting the dash residuals at the perimeter.
-  const anchors: Array<[number, number]> = [
-    [0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1],
-    [(W - 1) / 2, 0], [W - 1, (H - 1) / 2],
-    [(W - 1) / 2, H - 1], [0, (H - 1) / 2],
-  ];
-  for (const [ax, ay] of anchors) {
-    ex.push(ax); ey.push(ay);
-    dx.push(ax); dy.push(ay);
+  if (maxVal - minVal < DASH_BK_MIN_CONTRAST) return null;
+  const rowMean = new Float64Array(H);
+  for (let i = 0; i < H; i++) rowMean[i] = rowSum[i] / W;
+  const colMean = new Float64Array(W);
+  for (let i = 0; i < W; i++) colMean[i] = colSum[i] / H;
+  const rowMeanRaw = rowSumRaw ? new Float64Array(H) : null;
+  const colMeanRaw = colSumRaw ? new Float64Array(W) : null;
+  if (rowMeanRaw && rowSumRaw) {
+    for (let i = 0; i < H; i++) rowMeanRaw[i] = rowSumRaw[i] / W;
   }
-  const N = ex.length;
-  // Degree-3 polynomial: 10 coefficients per axis (1, u, v, u², uv, v²,
-  // u³, u²v, uv², v³). Captures keystone, barrel, fan shear, and cubic
-  // residuals. Degree-2 was tried but couldn't fit thing-2's residual
-  // pattern (aggregate regressed ~1300 px on that image). Degree-3 fits
-  // 54 dashes well-overdetermined (54 vs 20 DOF). Need ≥ 20 dashes.
-  const NUM_COEFFS = 10;
-  if (N < NUM_COEFFS * 2) return null;
-
-  // Normalize coordinates to roughly [-1, 1] for numerical stability.
-  const cx = W / 2;
-  const cy = H / 2;
-  const sx = W / 2;
-  const sy = H / 2;
-  const u = ex.map((v) => (v - cx) / sx); // normalized expected x
-  const v = ey.map((vv) => (vv - cy) / sy); // normalized expected y
-
-  const polyTerms = (un: number, vn: number): number[] => {
-    const u2 = un * un;
-    const v2 = vn * vn;
-    return [
-      1, un, vn, u2, un * vn, v2,
-      u2 * un, u2 * vn, un * v2, v2 * vn,
-    ];
-  };
-
-  // Design matrix A (N × NUM_COEFFS).
-  const A = cv.matFromArray(
-    N, NUM_COEFFS, cv.CV_64F,
-    Array.from({ length: N }, (_, i) => polyTerms(u[i], v[i])).flat(),
-  );
-  const bX = cv.matFromArray(N, 1, cv.CV_64F, dx);
-  const bY = cv.matFromArray(N, 1, cv.CV_64F, dy);
-  const cX = new cv.Mat();
-  const cY = new cv.Mat();
-  let ok = false;
-  try {
-    ok = cv.solve(A, bX, cX, cv.DECOMP_NORMAL) && cv.solve(A, bY, cY, cv.DECOMP_NORMAL);
-  } catch {
-    ok = false;
-  }
-  A.delete();
-  bX.delete();
-  bY.delete();
-  if (!ok) {
-    cX.delete();
-    cY.delete();
-    return null;
+  if (colMeanRaw && colSumRaw) {
+    for (let i = 0; i < W; i++) colMeanRaw[i] = colSumRaw[i] / H;
   }
 
-  const coefX: number[] = [];
-  const coefY: number[] = [];
-  for (let i = 0; i < NUM_COEFFS; i++) {
-    coefX.push(cX.doubleAt(i, 0));
-    coefY.push(cY.doubleAt(i, 0));
-  }
-  cX.delete();
-  cY.delete();
-
-  const evalPoly = (coef: number[], un: number, vn: number): number => {
-    const t = polyTerms(un, vn);
-    let s = 0;
-    for (let i = 0; i < NUM_COEFFS; i++) s += coef[i] * t[i];
-    return s;
-  };
-
-  // Sanity-check the polynomial fit: maximum |poly(expected) − detected|
-  // should be small. If much larger, the fit is bad and applying it
-  // would warp the image unpredictably; skip in that case.
-  //
-  // Dashes track user-perceived outer-edges (= threshold-crossings). On
-  // barrel-distorted screens, the threshold-crossing positions follow
-  // the curved screen surface, which a degree-3 polynomial can fit but
-  // with larger residuals than rigid centroids. Allow up to 10 image-px
-  // of residual to handle these images.
-  let maxFitError = 0;
-  for (let i = 0; i < dashCount; i++) {
-    const xPred = evalPoly(coefX, u[i], v[i]);
-    const yPred = evalPoly(coefY, u[i], v[i]);
-    const e = Math.hypot(xPred - dx[i], yPred - dy[i]);
-    if (e > maxFitError) maxFitError = e;
-  }
-  if (maxFitError > 10) {
-    if (dbg) dbg.log(`[warp] polyCorrection: skipped (maxFitError=${maxFitError.toFixed(2)} > 10)`);
-    return null;
-  }
-
-  if (dbg) {
-    dbg.log(
-      `[warp] polyCorrection: fit on ${N} dashes, maxFitError=${maxFitError.toFixed(2)} px, ` +
-        `coefX=[${coefX.map((c) => c.toFixed(3)).join(", ")}], ` +
-        `coefY=[${coefY.map((c) => c.toFixed(3)).join(", ")}]`,
-    );
-    dbg.setMetric("warp", "polyCorrection", {
-      n: N,
-      maxFitError: Number(maxFitError.toFixed(3)),
-      coefX: coefX.map((c) => Number(c.toFixed(5))),
-      coefY: coefY.map((c) => Number(c.toFixed(5))),
-    });
-  }
-
-  // Build remap: for each output pixel (x, y), the input pixel that maps
-  // there is at poly(x, y). cv.remap pulls input[mapX(x,y), mapY(x,y)] to
-  // output[x, y].
-  const mapX = new cv.Mat(H, W, cv.CV_32FC1);
-  const mapY = new cv.Mat(H, W, cv.CV_32FC1);
-  const mxData = mapX.data32F as Float32Array;
-  const myData = mapY.data32F as Float32Array;
-  for (let y = 0; y < H; y++) {
-    const vn = (y - cy) / sy;
-    for (let x = 0; x < W; x++) {
-      const un = (x - cx) / sx;
-      mxData[y * W + x] = evalPoly(coefX, un, vn);
-      myData[y * W + x] = evalPoly(coefY, un, vn);
+  const boxSmoothInPlace = (arr: Float64Array, w: number) => {
+    if (w <= 1) return;
+    const odd = w % 2 === 0 ? w + 1 : w;
+    const half = Math.floor(odd / 2);
+    const tmp = arr.slice();
+    for (let i = 0; i < arr.length; i++) {
+      let s = 0;
+      for (let k = -half; k <= half; k++) {
+        let j = i + k;
+        if (j < 0) j = -j;
+        if (j >= arr.length) j = 2 * arr.length - 2 - j;
+        if (j < 0) j = 0;
+        if (j >= arr.length) j = arr.length - 1;
+        s += tmp[j];
+      }
+      arr[i] = s / odd;
     }
+  };
+
+  const gauss1d = (arr: Float64Array, sigma: number): Float64Array => {
+    const radius = Math.max(1, Math.ceil(3 * sigma));
+    const k = new Float64Array(2 * radius + 1);
+    let sum = 0;
+    for (let i = -radius; i <= radius; i++) {
+      const v = Math.exp(-(i * i) / (2 * sigma * sigma));
+      k[i + radius] = v; sum += v;
+    }
+    for (let i = 0; i < k.length; i++) k[i] /= sum;
+    const out = new Float64Array(arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      let s = 0;
+      for (let j = -radius; j <= radius; j++) {
+        const idx = Math.max(0, Math.min(arr.length - 1, i + j));
+        s += arr[idx] * k[j + radius];
+      }
+      out[i] = s;
+    }
+    return out;
+  };
+
+  boxSmoothInPlace(rowMean, scale);
+  boxSmoothInPlace(colMean, scale);
+  const isVerticalForSmoothing = yHalf >= xHalf;
+  const shortProfileForOuterEdgeSrc = isVerticalForSmoothing
+    ? (colMeanRaw ?? colMean).slice()
+    : (rowMeanRaw ?? rowMean).slice();
+  boxSmoothInPlace(shortProfileForOuterEdgeSrc, scale);
+  const shortProfileForOuterEdge = gauss1d(shortProfileForOuterEdgeSrc, 1.0);
+
+  if (yHalf >= xHalf) {
+    boxSmoothInPlace(colMean, scale);
+  } else {
+    boxSmoothInPlace(rowMean, scale);
   }
 
-  const out = new cv.Mat();
-  try {
-    cv.remap(warpedBgr, out, mapX, mapY, cv.INTER_LANCZOS4, cv.BORDER_REFLECT_101);
-  } catch {
-    out.delete();
-    mapX.delete();
-    mapY.delete();
-    return null;
-  }
-  mapX.delete();
-  mapY.delete();
-  return out;
-}
+  const LONG_AXIS_GAP_TOL = Math.max(1, Math.floor(scale / 2));
+  const SHORT_AXIS_GAP_TOL = Math.max(1, Math.floor(scale / 4));
 
-// ─── Thin-plate spline (TPS) post-correction ───
-//
-// Replaces the polynomial post-correction for cases where the residual is
-// non-polynomial. The polynomial is a global rigid degree-3 fit (10 DOF per
-// axis) and cannot model bow-shaped residuals on one side without distorting
-// the others. TPS is a scattered interpolant: each control point has more
-// local influence and less far-field influence, so per-side bow can be fit
-// without distorting the camera content or the other sides.
-//
-// Math:
-//   - Control points P_i in normalized coords (= (image-px - centre)/halfsize),
-//     target values Y_i.
-//   - U(r²) = r²·log(r²) is the TPS basis function.
-//   - Build L = [[K + λI, P], [P^T, 0]] where K[i][j] = U(|P_i-P_j|²),
-//     P[i] = [1, x_i, y_i].
-//   - Solve L·[w; a] = [Y; 0] for both X and Y axes.
-//   - Evaluate f(p) = a₀ + a₁·x + a₂·y + Σ wᵢ·U(|p - Pᵢ|²).
-//
-// Why λ > 0: pure interpolation (λ=0) passes exactly through every detected
-// dash position, including detector noise. A small λ regularizes by trading
-// fit error for smoothness — the surface bends less per unit of fit error.
-// We use λ = 0.001 (in normalized units), giving sub-pixel residuals on
-// the dashes while smoothing through detector noise.
-//
-// Performance: full evaluation at 1.5M output pixels × 62 control points
-// would be ~93M ops per axis. We evaluate TPS on a coarse grid (every TPS_CELL
-// pixels) then bilinearly interpolate to the full grid. With CELL=8 that's
-// ~12M ops per axis — fast enough for 3 iterations × 12 images.
-//
-// Returns null if the fit can't be performed safely (too few points,
-// ill-conditioned, large residual), in which case the caller keeps the
-// un-corrected warp.
-function applyTPSDashCorrection(
-  warpedBgr: any,
-  scale: number,
-  dbg: DebugCollector | undefined,
-): any {
-  const cv = getCV();
-  const W = warpedBgr.cols;
-  const H = warpedBgr.rows;
-
-  // Detect dashes; collect (expected, detected) pairs.
-  const dashes = detectDashesOnWarp(warpedBgr, scale);
-  const ex: number[] = [];
-  const ey: number[] = [];
-  const dx: number[] = [];
-  const dy: number[] = [];
-  for (const arr of [dashes.top, dashes.bottom, dashes.left, dashes.right]) {
-    for (const d of arr) {
-      if (d.detected !== null) {
-        ex.push(d.expected[0]);
-        ey.push(d.expected[1]);
-        dx.push(d.detected[0]);
-        dy.push(d.detected[1]);
+  const largestRun = (
+    profile: Float64Array,
+    gapTol: number,
+    threshFrac: number,
+  ): [number, number] | null => {
+    let pMin = Infinity;
+    let pMax = -Infinity;
+    for (const v of profile) {
+      if (v < pMin) pMin = v;
+      if (v > pMax) pMax = v;
+    }
+    if (pMax - pMin < DASH_BK_MIN_CONTRAST) return null;
+    const threshold = pMin + (pMax - pMin) * threshFrac;
+    let bestLen = 0;
+    let bestRun: [number, number] | null = null;
+    let curStart = -1;
+    let curEnd = -1;
+    let aboveCount = 0;
+    for (let i = 0; i < profile.length; i++) {
+      if (profile[i] < threshold) {
+        if (curStart < 0) curStart = i;
+        curEnd = i;
+        aboveCount = 0;
+        const len = curEnd - curStart + 1;
+        if (len > bestLen) {
+          bestLen = len;
+          bestRun = [curStart, curEnd];
+        }
+      } else {
+        aboveCount++;
+        if (aboveCount > gapTol) {
+          curStart = -1;
+          curEnd = -1;
+          aboveCount = 0;
+        }
       }
     }
-  }
-  const dashCount = ex.length;
-
-  // Detect inner-border outer-edge points. Without these, the TPS leaves
-  // the area between dashes and the inner border (= ~14 GB-pixels of
-  // frame) unconstrained — the warp can bow by several image-px in that
-  // region. No outlier filter: the user's round-5 feedback indicates
-  // real, large local distortions (e.g., 165926 top-left has 7-px bump
-  // at X=285) that a MAD filter would falsely flag as noise.
-  const allBorder = detectInnerBorderThresholdCrossings(warpedBgr, scale);
-  for (const p of allBorder) {
-    ex.push(p.expectedX);
-    ey.push(p.expectedY);
-    dx.push(p.detectedX);
-    dy.push(p.detectedY);
-  }
-  const borderCount = allBorder.length;
-
-  // Anchor points at warp's outer corners + mid-edges + inner-border
-  // corners. Without anchors, the TPS extrapolates beyond the perimeter
-  // unpredictably (camera content could distort by several pixels). The
-  // 8 outer-screen anchors keep the warp near-identity at the screen
-  // edges; the 4 inner-border-corner anchors constrain the warp at the
-  // corners of the inner DG border (= where mid-side border points
-  // can't reach due to low contrast). Inner-border corner positions are
-  // taken as canonical (identity); the GBA SP screen is rigid enough
-  // that the inner border corners sit at fixed offsets from the outer
-  // screen corners.
-  const anchors: Array<[number, number]> = [
-    [0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1],
-    [(W - 1) / 2, 0], [W - 1, (H - 1) / 2],
-    [(W - 1) / 2, H - 1], [0, (H - 1) / 2],
-  ];
-  for (const [ax, ay] of anchors) {
-    ex.push(ax); ey.push(ay);
-    dx.push(ax); dy.push(ay);
-  }
-  const N = ex.length;
-  // Need a reasonable minimum: 3 affine coeffs + ~enough scattered points
-  // for the TPS to be informative. 20 dashes + 8 anchors = 28 is comfortable.
-  if (dashCount < 20) return null;
-
-  // Normalize coordinates to [-1, 1] for numerical stability of the linear
-  // solve and for a sensible λ scale.
-  const cx = W / 2;
-  const cy = H / 2;
-  const sx = W / 2;
-  const sy = H / 2;
-  const u = ex.map((v) => (v - cx) / sx);
-  const v = ey.map((vv) => (vv - cy) / sy);
-  const tx = dx.map((v) => (v - cx) / sx);
-  const ty = dy.map((v) => (v - cy) / sy);
-
-  // U(r²) = r² · log(r²). Clamp r²<1e-12 to 0.
-  const U = (r2: number): number => (r2 < 1e-12 ? 0 : r2 * Math.log(r2));
-
-  // Smoothing parameter. Higher λ trades fit error for smoothness; the
-  // DG-signature border detector is more accurate than the previous gray-
-  // channel version so we can run with relatively low lambda without
-  // amplifying detector noise too much.
-  const LAMBDA = 0.05;
-
-  // Build augmented system L (M × M) where M = N + 3.
-  const M = N + 3;
-  const L = cv.matFromArray(M, M, cv.CV_64F, new Array(M * M).fill(0));
-  const Ldata = L.data64F as Float64Array;
-  for (let i = 0; i < N; i++) {
-    for (let j = 0; j < N; j++) {
-      const ddx = u[i] - u[j];
-      const ddy = v[i] - v[j];
-      Ldata[i * M + j] = U(ddx * ddx + ddy * ddy);
-    }
-    Ldata[i * M + i] += LAMBDA;
-  }
-  for (let i = 0; i < N; i++) {
-    Ldata[i * M + N] = 1;
-    Ldata[i * M + N + 1] = u[i];
-    Ldata[i * M + N + 2] = v[i];
-    Ldata[N * M + i] = 1;
-    Ldata[(N + 1) * M + i] = u[i];
-    Ldata[(N + 2) * M + i] = v[i];
-  }
-
-  const bxArr = new Array(M).fill(0);
-  const byArr = new Array(M).fill(0);
-  for (let i = 0; i < N; i++) {
-    bxArr[i] = tx[i];
-    byArr[i] = ty[i];
-  }
-  const bX = cv.matFromArray(M, 1, cv.CV_64F, bxArr);
-  const bY = cv.matFromArray(M, 1, cv.CV_64F, byArr);
-  const wX = new cv.Mat();
-  const wY = new cv.Mat();
-  let ok = false;
-  try {
-    ok = cv.solve(L, bX, wX, cv.DECOMP_LU) && cv.solve(L, bY, wY, cv.DECOMP_LU);
-  } catch {
-    ok = false;
-  }
-  L.delete();
-  bX.delete();
-  bY.delete();
-  if (!ok) {
-    wX.delete();
-    wY.delete();
-    return null;
-  }
-
-  // Extract weights into typed arrays for fast inner-loop access.
-  const wxArr = new Float64Array(M);
-  const wyArr = new Float64Array(M);
-  for (let i = 0; i < M; i++) {
-    wxArr[i] = wX.doubleAt(i, 0);
-    wyArr[i] = wY.doubleAt(i, 0);
-  }
-  wX.delete();
-  wY.delete();
-  const uArr = new Float64Array(u);
-  const vArr = new Float64Array(v);
-
-  // Evaluate TPS at (un, vn). Returns normalized result.
-  const evalTPS = (w: Float64Array, un: number, vn: number): number => {
-    let s = w[N] + w[N + 1] * un + w[N + 2] * vn;
-    for (let i = 0; i < N; i++) {
-      const ddx = un - uArr[i];
-      const ddy = vn - vArr[i];
-      const r2 = ddx * ddx + ddy * ddy;
-      if (r2 >= 1e-12) s += w[i] * (r2 * Math.log(r2));
-    }
-    return s;
+    return bestRun;
   };
 
-  // Sanity-check fit on dashes + border points (anchors identity by construction).
-  let maxFitError = 0;
-  const measuredCount = dashCount + borderCount;
-  for (let i = 0; i < measuredCount; i++) {
-    const xPred = evalTPS(wxArr, u[i], v[i]) * sx + cx;
-    const yPred = evalTPS(wyArr, u[i], v[i]) * sy + cy;
-    const e = Math.hypot(xPred - dx[i], yPred - dy[i]);
-    if (e > maxFitError) maxFitError = e;
-  }
-  if (maxFitError > 10) {
-    if (dbg) dbg.log(`[warp] tpsCorrection: skipped (maxFitError=${maxFitError.toFixed(2)} > 10)`);
+  const argminAround = (
+    profile: Float64Array,
+    canonicalIdx: number,
+  ): number | null => {
+    if (profile.length === 0) return null;
+    const lo = Math.max(0, Math.floor(canonicalIdx - 2 * scale));
+    const hi = Math.min(profile.length - 1, Math.ceil(canonicalIdx + 2 * scale));
+    if (lo > hi) return null;
+    let mi = lo, mv = profile[lo];
+    for (let i = lo + 1; i <= hi; i++) {
+      if (profile[i] < mv) { mv = profile[i]; mi = i; }
+    }
+    let delta = 0;
+    if (mi > 0 && mi < profile.length - 1) {
+      const v0 = profile[mi - 1], v1 = profile[mi], v2 = profile[mi + 1];
+      const den = v0 - 2 * v1 + v2;
+      if (Math.abs(den) > 1e-10) {
+        delta = Math.max(-1, Math.min(1, 0.5 * (v0 - v2) / den));
+      }
+    }
+    return mi + delta;
+  };
+
+  const findOuterCrossing = (
+    profile: Float64Array,
+    centroidIdx: number,
+    direction: -1 | 1,
+  ): number | null => {
+    const floorLo = Math.max(0, Math.floor(centroidIdx - scale / 2));
+    const floorHi = Math.min(profile.length - 1, Math.ceil(centroidIdx + scale / 2));
+    if (floorLo >= floorHi) return null;
+    let floorIdx = floorLo, floorVal = profile[floorLo];
+    for (let i = floorLo + 1; i <= floorHi; i++) {
+      if (profile[i] < floorVal) { floorVal = profile[i]; floorIdx = i; }
+    }
+    const baselineIdx = Math.max(0, Math.min(
+      profile.length - 1,
+      Math.round(centroidIdx + direction * 1.5 * scale),
+    ));
+    const baselineVal = profile[baselineIdx];
+    if (baselineVal - floorVal < 20) return null;
+    const threshold = floorVal + 0.5 * (baselineVal - floorVal);
+    let i = floorIdx;
+    while (i + direction >= 0 && i + direction < profile.length) {
+      const a = profile[i];
+      const b = profile[i + direction];
+      if (a < threshold && b >= threshold) {
+        const t = (threshold - a) / (b - a);
+        return i + direction * Math.max(0, Math.min(1, t));
+      }
+      i += direction;
+    }
     return null;
-  }
+  };
 
-  if (dbg) {
-    dbg.log(
-      `[warp] tpsCorrection: fit on ${N} pts (${dashCount} dashes + ${borderCount} border + ${anchors.length} anchors), ` +
-        `λ=${LAMBDA}, maxFitError=${maxFitError.toFixed(3)} px`,
-    );
-    dbg.setMetric("warp", "tpsCorrection", {
-      n: N,
-      dashes: dashCount,
-      borderPoints: borderCount,
-      anchors: anchors.length,
-      lambda: LAMBDA,
-      maxFitError: Number(maxFitError.toFixed(4)),
-    });
-  }
+  const isVertical = yHalf >= xHalf;
+  const rowFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_LONG : DASH_BK_PROFILE_THRESH_FRAC_SHORT;
+  const colFrac = isVertical ? DASH_BK_PROFILE_THRESH_FRAC_SHORT : DASH_BK_PROFILE_THRESH_FRAC_LONG;
+  const rowGap = isVertical ? LONG_AXIS_GAP_TOL : SHORT_AXIS_GAP_TOL;
+  const colGap = isVertical ? SHORT_AXIS_GAP_TOL : LONG_AXIS_GAP_TOL;
 
-  // Build remap on a coarse grid then bilinearly interpolate to full grid.
-  // Cell size 8 image-px (= 1 GB-px). The TPS function is C² smooth so
-  // bilinear interpolation over 8-px cells introduces sub-0.001-px error
-  // away from control points and remains <0.05-px even right at control
-  // points (control points are at the perimeter; cell-grid-corner-to-CP
-  // distance is bounded by cell size).
-  const CELL = 8;
-  const gW = Math.ceil(W / CELL) + 1;
-  const gH = Math.ceil(H / CELL) + 1;
-  const coarseX = new Float32Array(gW * gH);
-  const coarseY = new Float32Array(gW * gH);
-  for (let gy = 0; gy < gH; gy++) {
-    const y = gy * CELL;
-    const vn = (y - cy) / sy;
-    for (let gx = 0; gx < gW; gx++) {
-      const x = gx * CELL;
-      const un = (x - cx) / sx;
-      coarseX[gy * gW + gx] = evalTPS(wxArr, un, vn) * sx + cx;
-      coarseY[gy * gW + gx] = evalTPS(wyArr, un, vn) * sy + cy;
+  const expectedColIdx = expectedX - xLo;
+  const expectedRowIdx = expectedY - yLo;
+
+  let cx: number;
+  let cy: number;
+  let outerEdge: number | null = null;
+  if (isVertical) {
+    const rowRun = largestRun(rowMean, rowGap, rowFrac);
+    if (!rowRun) return null;
+    cy = yLo + (rowRun[0] + rowRun[1] + 1) / 2;
+    const colRun = largestRun(colMean, colGap, colFrac);
+    const colArgmin = argminAround(colMean, expectedColIdx);
+    if (!colRun && colArgmin === null) return null;
+    const colBboxCentre = colRun ? (colRun[0] + colRun[1] + 1) / 2 : null;
+    const colArgminCentre = colArgmin !== null ? colArgmin + 0.5 : null;
+    const colCombined = colBboxCentre !== null && colArgminCentre !== null
+      ? (colBboxCentre + colArgminCentre) / 2
+      : (colBboxCentre ?? colArgminCentre)!;
+    cx = xLo + colCombined;
+    if (outerSide !== 0) {
+      const centroidColIdx = colCombined - 0.5;
+      const cross = findOuterCrossing(shortProfileForOuterEdge, centroidColIdx, outerSide);
+      if (cross !== null) outerEdge = xLo + cross;
+    }
+  } else {
+    const colRun = largestRun(colMean, colGap, colFrac);
+    if (!colRun) return null;
+    cx = xLo + (colRun[0] + colRun[1] + 1) / 2;
+    const rowRun = largestRun(rowMean, rowGap, rowFrac);
+    const rowArgmin = argminAround(rowMean, expectedRowIdx);
+    if (!rowRun && rowArgmin === null) return null;
+    const rowBboxCentre = rowRun ? (rowRun[0] + rowRun[1] + 1) / 2 : null;
+    const rowArgminCentre = rowArgmin !== null ? rowArgmin + 0.5 : null;
+    const rowCombined = rowBboxCentre !== null && rowArgminCentre !== null
+      ? (rowBboxCentre + rowArgminCentre) / 2
+      : (rowBboxCentre ?? rowArgminCentre)!;
+    cy = yLo + rowCombined;
+    if (outerSide !== 0) {
+      const centroidRowIdx = rowCombined - 0.5;
+      const cross = findOuterCrossing(shortProfileForOuterEdge, centroidRowIdx, outerSide);
+      if (cross !== null) outerEdge = yLo + cross;
     }
   }
-
-  const mapX = new cv.Mat(H, W, cv.CV_32FC1);
-  const mapY = new cv.Mat(H, W, cv.CV_32FC1);
-  const mxData = mapX.data32F as Float32Array;
-  const myData = mapY.data32F as Float32Array;
-  const invCell = 1 / CELL;
-  for (let y = 0; y < H; y++) {
-    const fy = y * invCell;
-    const gy0 = Math.floor(fy);
-    const ay = fy - gy0;
-    const gy1 = gy0 + 1;
-    for (let x = 0; x < W; x++) {
-      const fx = x * invCell;
-      const gx0 = Math.floor(fx);
-      const ax = fx - gx0;
-      const gx1 = gx0 + 1;
-      const i00 = gy0 * gW + gx0;
-      const i01 = gy0 * gW + gx1;
-      const i10 = gy1 * gW + gx0;
-      const i11 = gy1 * gW + gx1;
-      const w00 = (1 - ax) * (1 - ay);
-      const w01 = ax * (1 - ay);
-      const w10 = (1 - ax) * ay;
-      const w11 = ax * ay;
-      mxData[y * W + x] =
-        w00 * coarseX[i00] + w01 * coarseX[i01] + w10 * coarseX[i10] + w11 * coarseX[i11];
-      myData[y * W + x] =
-        w00 * coarseY[i00] + w01 * coarseY[i01] + w10 * coarseY[i10] + w11 * coarseY[i11];
-    }
-  }
-
-  const out = new cv.Mat();
-  try {
-    cv.remap(warpedBgr, out, mapX, mapY, cv.INTER_LANCZOS4, cv.BORDER_REFLECT_101);
-  } catch {
-    out.delete();
-    mapX.delete();
-    mapY.delete();
-    return null;
-  }
-  mapX.delete();
-  mapY.delete();
-  return out;
+  return { centroid: [cx, cy], outerEdge };
 }
-
