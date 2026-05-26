@@ -29,7 +29,7 @@ const SEARCH_HALF = 3 * SCALE;              // ±24 image-px — comfortably > t
 
 // Detection criteria. Adaptive to handle dim images and sub-pixel noise.
 const ABOVE_MIN_LUMA = 40;   // Very low to handle dimmest top regions
-const MIN_DG_RISE = 35;      // Minimum jump in (Luma Drop + DG Rise)
+const MIN_DG_RISE = 20;      // Minimum jump in (Luma Drop + DG Rise)
 const OUTLIER_MAX_DEV = 15;  // image-px
 
 // Step along the long axis at half-an-LCD-pixel granularity.
@@ -77,6 +77,7 @@ interface DetectionPoint {
   aboveD: number;   // DG on outer side
   belowD: number;   // DG on inner side
   score: number;    // combined signal strength
+  outerVariance: number;
 }
 
 interface BorderCurve {
@@ -125,6 +126,7 @@ function findWhToDgEdge(
   const measure = (e: number) => {
     let aboveSumL = 0, belowSumL = 0;
     let aboveSumD = 0, belowSumD = 0;
+    const aboveVals: number[] = [];
     for (let i = 1; i <= R; i++) {
       const oi = direction === 1 ? e - i : e + i; // outer index
       const ii = direction === 1 ? e + i : e - i; // inner index
@@ -132,6 +134,7 @@ function findWhToDgEdge(
       belowSumL += valsLuma[ii];
       aboveSumD += valsDg[oi];
       belowSumD += valsDg[ii];
+      aboveVals.push(valsLuma[oi]);
     }
     const aboveL = aboveSumL / R;
     const belowL = belowSumL / R;
@@ -141,8 +144,12 @@ function findWhToDgEdge(
     const drop = aboveL - belowL;
     const dgRise = belowD - aboveD;
     const score = drop + dgRise;
+
+    let v = 0;
+    for (const val of aboveVals) v += (val - aboveL) ** 2;
+    const outerVariance = Math.sqrt(v / R);
     
-    return { aboveL, belowL, aboveD, belowD, drop, dgRise, score };
+    return { aboveL, belowL, aboveD, belowD, drop, dgRise, score, outerVariance };
   };
 
   let firstE = -1;
@@ -179,14 +186,21 @@ function findWhToDgEdge(
   const m = measure(firstE);
 
   /**
-   * Biases (Move INWARD in image-pixels)
-   * Calibrated based on hand-edited ground-truth points.
+   * Adaptive Biases (Move INWARD in image-pixels)
+   * Accounts for spatially varying blur using local outer variance.
+   * Calibrated against hand-edited ground truth.
    */
   let bias = 0;
-  if (side === "TOP") bias = 5.75;
-  if (side === "BOT") bias = 7.60;
-  if (side === "LEFT") bias = 6.95;
-  if (side === "RIGHT") bias = 8.26;
+  const v = m.outerVariance;
+  if (side === "TOP") {
+    bias = Math.max(2.5, 9.0 - 6.3 * v);
+  } else if (side === "BOT") {
+    bias = Math.max(4.0, 10.3 - 4.0 * v);
+  } else if (side === "LEFT") {
+    bias = Math.max(5.0, 12.1 - 1.2 * v);
+  } else if (side === "RIGHT") {
+    bias = Math.max(6.0, 10.4 - 0.8 * v);
+  }
 
   const perp = rawPerp + direction * bias;
 
@@ -200,7 +214,8 @@ function findWhToDgEdge(
     belowL: m.belowL,
     aboveD: m.aboveD,
     belowD: m.belowD,
-    score: m.score
+    score: m.score,
+    outerVariance: v
   };
 }
 
@@ -227,7 +242,7 @@ function detectTopBorder(img: Img): BorderCurve {
       const y = Math.round(t);
       if (y < 0 || y >= img.height) return 0;
       let s = 0, n = 0;
-      for (let dx = -2; dx <= 2; dx++) { // radius 2 horizontal smoothing
+      for (let dx = -4; dx <= 4; dx++) { // radius 4 horizontal smoothing
         const xi = Math.round(x + dx);
         if (xi >= 0 && xi < img.width) { s += lumaAt(img, xi, y); n++; }
       }
@@ -237,7 +252,7 @@ function detectTopBorder(img: Img): BorderCurve {
       const y = Math.round(t);
       if (y < 0 || y >= img.height) return 0;
       let s = 0, n = 0;
-      for (let dx = -2; dx <= 2; dx++) {
+      for (let dx = -4; dx <= 4; dx++) {
         const xi = Math.round(x + dx);
         if (xi >= 0 && xi < img.width) { s += dgAt(img, xi, y); n++; }
       }
@@ -258,7 +273,7 @@ function detectBotBorder(img: Img): BorderCurve {
       const y = Math.round(t);
       if (y < 0 || y >= img.height) return 0;
       let s = 0, n = 0;
-      for (let dx = -2; dx <= 2; dx++) {
+      for (let dx = -4; dx <= 4; dx++) {
         const xi = Math.round(x + dx);
         if (xi >= 0 && xi < img.width) { s += lumaAt(img, xi, y); n++; }
       }
@@ -268,7 +283,7 @@ function detectBotBorder(img: Img): BorderCurve {
       const y = Math.round(t);
       if (y < 0 || y >= img.height) return 0;
       let s = 0, n = 0;
-      for (let dx = -2; dx <= 2; dx++) {
+      for (let dx = -4; dx <= 4; dx++) {
         const xi = Math.round(x + dx);
         if (xi >= 0 && xi < img.width) { s += dgAt(img, xi, y); n++; }
       }
@@ -289,7 +304,7 @@ function detectLeftBorder(img: Img): BorderCurve {
       const x = Math.round(t);
       if (x < 0 || x >= img.width) return 0;
       let s = 0, n = 0;
-      for (let dy = -2; dy <= 2; dy++) { // radius 2 vertical smoothing
+      for (let dy = -4; dy <= 4; dy++) { // radius 4 vertical smoothing
         const yi = Math.round(y + dy);
         if (yi >= 0 && yi < img.height) { s += lumaAt(img, x, yi); n++; }
       }
@@ -299,7 +314,7 @@ function detectLeftBorder(img: Img): BorderCurve {
       const x = Math.round(t);
       if (x < 0 || x >= img.width) return 0;
       let s = 0, n = 0;
-      for (let dy = -2; dy <= 2; dy++) {
+      for (let dy = -4; dy <= 4; dy++) {
         const yi = Math.round(y + dy);
         if (yi >= 0 && yi < img.height) { s += dgAt(img, x, yi); n++; }
       }
@@ -320,7 +335,7 @@ function detectRightBorder(img: Img): BorderCurve {
       const x = Math.round(t);
       if (x < 0 || x >= img.width) return 0;
       let s = 0, n = 0;
-      for (let dy = -2; dy <= 2; dy++) {
+      for (let dy = -4; dy <= 4; dy++) {
         const yi = Math.round(y + dy);
         if (yi >= 0 && yi < img.height) { s += lumaAt(img, x, yi); n++; }
       }
@@ -330,7 +345,7 @@ function detectRightBorder(img: Img): BorderCurve {
       const x = Math.round(t);
       if (x < 0 || x >= img.width) return 0;
       let s = 0, n = 0;
-      for (let dy = -2; dy <= 2; dy++) {
+      for (let dy = -4; dy <= 4; dy++) {
         const yi = Math.round(y + dy);
         if (yi >= 0 && yi < img.height) { s += dgAt(img, x, yi); n++; }
       }

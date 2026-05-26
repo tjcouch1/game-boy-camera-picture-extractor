@@ -13,7 +13,7 @@ const CANON_RIGHT = 1159;
 
 const SEARCH_HALF = 3 * SCALE;
 const ABOVE_MIN_LUMA = 40;
-const MIN_DG_RISE = 35; // Increased for better robustness
+const MIN_DG_RISE = 20;
 
 type Img = { data: Uint8Array; width: number; height: number; channels: number };
 
@@ -41,7 +41,7 @@ function findRawEdge(
   dg: (t: number) => number,
   canonical: number,
   direction: 1 | -1,
-): { rawPerp: number; score: number } | null {
+): { rawPerp: number; score: number; outerVariance: number } | null {
   const lo = Math.floor(canonical - SEARCH_HALF);
   const hi = Math.ceil(canonical + SEARCH_HALF);
   const rawLuma: number[] = [];
@@ -72,6 +72,7 @@ function findRawEdge(
   const measure = (e: number) => {
     let aboveSumL = 0, belowSumL = 0;
     let aboveSumD = 0, belowSumD = 0;
+    const aboveVals: number[] = [];
     for (let i = 1; i <= R; i++) {
       const oi = direction === 1 ? e - i : e + i;
       const ii = direction === 1 ? e + i : e - i;
@@ -79,10 +80,18 @@ function findRawEdge(
       belowSumL += valsLuma[ii];
       aboveSumD += valsDg[oi];
       belowSumD += valsDg[ii];
+      aboveVals.push(valsLuma[oi]);
     }
-    const drop = (aboveSumL - belowSumL) / R;
+    const aboveL = aboveSumL / R;
+    const belowL = belowSumL / R;
+    
+    let v = 0;
+    for (const val of aboveVals) v += (val - aboveL) ** 2;
+    const outerVariance = Math.sqrt(v / R);
+
+    const drop = aboveL - belowL;
     const dgRise = (belowSumD - aboveSumD) / R;
-    return { score: drop + dgRise, aboveL: aboveSumL / R };
+    return { score: drop + dgRise, aboveL, outerVariance };
   };
 
   let firstE = -1;
@@ -103,25 +112,23 @@ function findRawEdge(
   }
   if (firstE < 0) return null;
 
+  const m = measure(firstE);
   const f = (e: number): number => measure(e).score;
+  const a = f(firstE - 1), b = f(firstE), c = f(firstE + 1);
+
   let off = 0;
-  if (firstE > R && firstE < valsLuma.length - R - 1) {
-    const a = f(firstE - 1), b = f(firstE), c = f(firstE + 1);
-    const denom = a - 2 * b + c;
-    if (Math.abs(denom) > 1e-6) {
-      off = 0.5 * (a - c) / denom;
-      off = Math.max(-0.5, Math.min(0.5, off));
-    }
+  const denom = a - 2 * b + c;
+  if (Math.abs(denom) > 1e-6) {
+    off = 0.5 * (a - c) / denom;
+    off = Math.max(-0.5, Math.min(0.5, off));
   }
 
-  return { rawPerp: lo + firstE + off, score: measure(firstE).score };
+  return { rawPerp: lo + firstE + off, score: b, outerVariance: m.outerVariance };
 }
 
 async function main() {
   const dir = "../../warp-hand-edited-points-branch-warp-and-diagnostics-subagent-plan-2026-05-23";
   const gt = JSON.parse(await fs.readFile(path.join(dir, "ground-truth.json"), "utf8"));
-
-  const results: any[] = [];
 
   for (const imgEntry of gt.images) {
     const warpFile = path.join(dir, imgEntry.file);
@@ -129,8 +136,7 @@ async function main() {
     console.log(`Analyzing ${imgEntry.file}...`);
 
     const analyzeSide = (sideName: string, points: any[], canon: number, direction: 1 | -1, horizontal: boolean) => {
-      const errors: number[] = [];
-      const rawPoints: any[] = [];
+      const data: any[] = [];
       for (const p of points) {
         const pos = horizontal ? p.x : p.y;
         const targetPerp = horizontal ? p.y : p.x;
@@ -139,7 +145,7 @@ async function main() {
           const x = horizontal ? pos : Math.round(t);
           const y = horizontal ? Math.round(t) : pos;
           let s = 0, n = 0;
-          for (let d = -2; d <= 2; d++) {
+          for (let d = -4; d <= 4; d++) {
             const xi = horizontal ? Math.round(x + d) : x;
             const yi = horizontal ? y : Math.round(y + d);
             if (xi >= 0 && xi < img.width && yi >= 0 && yi < img.height) { s += lumaAt(img, xi, yi); n++; }
@@ -150,7 +156,7 @@ async function main() {
           const x = horizontal ? pos : Math.round(t);
           const y = horizontal ? Math.round(t) : pos;
           let s = 0, n = 0;
-          for (let d = -2; d <= 2; d++) {
+          for (let d = -4; d <= 4; d++) {
             const xi = horizontal ? Math.round(x + d) : x;
             const yi = horizontal ? y : Math.round(y + d);
             if (xi >= 0 && xi < img.width && yi >= 0 && yi < img.height) { s += dgAt(img, xi, yi); n++; }
@@ -160,43 +166,33 @@ async function main() {
 
         const res = findRawEdge(lumaSampler, dgSampler, canon, direction);
         if (res) {
-          const neededBias = direction === 1 ? (targetPerp - res.rawPerp) : (res.rawPerp - targetPerp);
-          errors.push(neededBias);
-          rawPoints.push({ pos, targetPerp, rawPerp: res.rawPerp, neededBias });
+          const v = res.outerVariance;
+          let bias = 0;
+          if (sideName === "TOP") bias = Math.max(2.5, 9.0 - 6.3 * v);
+          else if (sideName === "BOT") bias = Math.max(4.0, 9.0 - 4.0 * v);
+          else if (sideName === "LEFT") bias = Math.max(5.0, 11.0 - 1.2 * v);
+          else if (sideName === "RIGHT") bias = Math.max(6.0, 9.0 - 0.8 * v);
+
+          const detectedPerp = res.rawPerp + direction * bias;
+          const error = direction * (targetPerp - detectedPerp);
+          data.push({ error });
         }
       }
-      if (errors.length > 0) {
-        // Filter outliers: keep only those within 10px of the median
-        const sorted = [...errors].sort((a, b) => a - b);
-        const median = sorted[Math.floor(sorted.length / 2)];
-        const filtered = errors.filter(e => Math.abs(e - median) < 10);
+      if (data.length > 0) {
+        const sorted = [...data].sort((a, b) => a.error - b.error);
+        const median = sorted[Math.floor(sorted.length / 2)].error;
+        const filtered = data.filter(d => Math.abs(d.error - median) < 10);
         
-        const mean = filtered.reduce((a, b) => a + b, 0) / filtered.length;
-        console.log(`  ${sideName.padEnd(5)}: n=${filtered.length}/${errors.length}  meanNeededBias=${mean.toFixed(2)}  range=[${Math.min(...filtered).toFixed(2)}, ${Math.max(...filtered).toFixed(2)}]`);
-        return mean;
+        const meanError = filtered.reduce((a, b) => a + b.error, 0) / filtered.length;
+        console.log(`  ${sideName.padEnd(5)}: n=${filtered.length}/${data.length}  meanError=${meanError.toFixed(2)}`);
       }
-      return null;
     };
 
-    const topBias = analyzeSide("TOP", imgEntry.top, CANON_TOP, 1, true);
-    const botBias = analyzeSide("BOT", imgEntry.bot, CANON_BOT, -1, true);
-    const leftBias = analyzeSide("LEFT", imgEntry.left, CANON_LEFT, 1, false);
-    const rightBias = analyzeSide("RIGHT", imgEntry.right, CANON_RIGHT, -1, false);
-    
-    results.push({ file: imgEntry.file, topBias, botBias, leftBias, rightBias });
+    analyzeSide("TOP", imgEntry.top, CANON_TOP, 1, true);
+    analyzeSide("BOT", imgEntry.bot, CANON_BOT, -1, true);
+    analyzeSide("LEFT", imgEntry.left, CANON_LEFT, 1, false);
+    analyzeSide("RIGHT", imgEntry.right, CANON_RIGHT, -1, false);
   }
-
-  const avg = (key: string) => {
-    const vals = results.map(r => r[key]).filter(v => v !== null);
-    if (vals.length === 0) return 0;
-    return vals.reduce((a, b) => a + b, 0) / vals.length;
-  };
-
-  console.log("\nAVERAGE NEEDED BIASES ACROSS IMAGES:");
-  console.log(`  TOP   : ${avg("topBias").toFixed(2)}`);
-  console.log(`  BOT   : ${avg("botBias").toFixed(2)}`);
-  console.log(`  LEFT  : ${avg("leftBias").toFixed(2)}`);
-  console.log(`  RIGHT : ${avg("rightBias").toFixed(2)}`);
 }
 
 main();
