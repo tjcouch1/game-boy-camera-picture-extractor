@@ -1,39 +1,25 @@
 /**
  * border-curve-overlay.ts — dense per-pixel border detection + overlay
  *
- * Diagnoses what the inner DG border looks like in the warp output WITHOUT
- * the assumptions the pipeline detector makes (narrow peak search, contrast
- * threshold). Builds an overlay PNG showing:
- *   • Bright green line at canonical border position (reference).
- *   • Magenta crosses at per-column/row detected DG-strip-centre position
- *     (every 4 image-px along the long axis), with wide ±24 image-px peak
- *     search so we catch the user-described 5-10 px deviations.
- *   • Yellow line connecting consecutive detections (= the actual border
- *     curve, easy to compare visually against canonical).
+ * Diagnoses what the inner DG border looks like in the warp output.
+ * Uses a 3D adaptive bias model calibrated against hand-edited ground truth.
  *
- * Run: `pnpm tsx scripts/border-curve-overlay.ts <warp.png> [--out <path>]`
- *      (also handles a whole directory of *_warp.png files when given a dir)
+ * Run: `node --experimental-strip-types scripts/border-curve-overlay.ts <warp.png|dir>`
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 
 const SCALE = 8;
-// Match common.ts: INNER_TOP=15, INNER_BOT=128, INNER_LEFT=15, INNER_RIGHT=144
-const INNER_TOP = 15, INNER_BOT = 128, INNER_LEFT = 15, INNER_RIGHT = 144;
 const EXP_TOP = 120;
 const EXP_BOT = 1031;
 const EXP_LEFT = 120;
 const EXP_RIGHT = 1159;
-const SEARCH_HALF = 3 * SCALE;              // ±24 image-px — comfortably > the user-reported 5-10 px
-
-// Detection criteria. Adaptive to handle dim images and sub-pixel noise.
-const ABOVE_MIN_LUMA = 40;   // Very low to handle dimmest top regions
-const MIN_DG_RISE = 20;      // Minimum jump in (Luma Drop + DG Rise)
-const OUTLIER_MAX_DEV = 15;  // image-px
-
-// Step along the long axis at half-an-LCD-pixel granularity.
-const STEP = SCALE / 2;    // = 4 image-px = sample every 0.5 GB-pixels along each side
+const SEARCH_HALF = 3 * SCALE;
+const ABOVE_MIN_LUMA = 40;
+const MIN_DG_RISE = 18;
+const OUTLIER_MAX_DEV = 15;
+const STEP = SCALE / 2;
 
 type Img = { data: Uint8Array; width: number; height: number; channels: number };
 
@@ -52,125 +38,82 @@ function setPx(img: Img, x: number, y: number, r: number, g: number, b: number):
   img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b;
 }
 
-/** DG signature 2B-R-G clipped to [0,255]. HIGH only on DG-coloured pixels. */
 function dgAt(img: Img, x: number, y: number): number {
-  const r = px(img, x, y, 0);
-  const g = px(img, x, y, 1);
-  const b = px(img, x, y, 2);
+  const r = px(img, x, y, 0), g = px(img, x, y, 1), b = px(img, x, y, 2);
   const v = 2 * b - r - g;
   return v < 0 ? 0 : v > 255 ? 255 : v;
 }
 
-/** ITU-R BT.601 luma. WH≈244, LG≈180, DG≈160, BK≈0. */
 function lumaAt(img: Img, x: number, y: number): number {
   return 0.299 * px(img, x, y, 0) + 0.587 * px(img, x, y, 1) + 0.114 * px(img, x, y, 2);
 }
 
-interface DetectionPoint {
-  pos: number;      // long-axis position
-  perp: number;     // final biased perpendicular position
-  rawPerp: number;  // pre-biased perpendicular position
-  drop: number;     // luma drop
-  dgRise: number;   // DG signature jump
-  aboveL: number;   // luma on outer side
-  belowL: number;   // luma on inner side
-  aboveD: number;   // DG on outer side
-  belowD: number;   // DG on inner side
-  score: number;    // combined signal strength
-  outerVariance: number;
-}
+interface DetectionPoint { pos: number; perp: number; rawPerp: number; aboveL: number; outerVariance: number; score: number }
+interface BorderCurve { detections: DetectionPoint[] }
 
-interface BorderCurve {
-  detections: DetectionPoint[];
-}
+/** 3D Model Coefficients (offset, var, luma, score) */
+const COEFFS: Record<string, [number, number, number, number]> = {
+    TOP:   [38.6797, -0.4796, -0.1492, -0.1290],
+    BOT:   [2.0711, 0.5738, 0.0598, -0.2070],
+    LEFT:  [16.3671, -0.3670, -0.0195, -0.1119],
+    RIGHT: [21.4907, -1.0077, -0.0310, -0.1834]
+};
 
-/**
- * Find the WH→DG transition by scanning OUTSIDE → INSIDE along the
- * perpendicular axis.
- */
 function findWhToDgEdge(
   luma: (t: number) => number,
   dg: (t: number) => number,
   canonical: number,
-  direction: 1 | -1, // 1 = outward is smaller t (TOP/LEFT); -1 = reverse (BOT/RIGHT)
+  direction: 1 | -1,
   side: "TOP" | "BOT" | "LEFT" | "RIGHT",
 ): DetectionPoint | null {
   const lo = Math.floor(canonical - SEARCH_HALF);
   const hi = Math.ceil(canonical + SEARCH_HALF);
-  const rawLuma: number[] = [];
-  const rawDg: number[] = [];
-  for (let t = lo; t <= hi; t++) {
-    rawLuma.push(luma(t));
-    rawDg.push(dg(t));
-  }
+  const rawLuma: number[] = [], rawDg: number[] = [];
+  for (let t = lo; t <= hi; t++) { rawLuma.push(luma(t)); rawDg.push(dg(t)); }
   
-  // Stronger box filter smoothing (size 9) to remove erratic jumps
-  const valsLuma: number[] = [];
-  const valsDg: number[] = [];
-  const K = 4; // radius
+  const valsLuma: number[] = [], valsDg: number[] = [];
+  const K = 4;
   for (let i = 0; i < rawLuma.length; i++) {
     let sl = 0, sd = 0, n = 0;
     for (let j = -K; j <= K; j++) {
       const k = i + j;
-      if (k >= 0 && k < rawLuma.length) {
-        sl += rawLuma[k];
-        sd += rawDg[k];
-        n++;
-      }
+      if (k >= 0 && k < rawLuma.length) { sl += rawLuma[k]; sd += rawDg[k]; n++; }
     }
-    valsLuma.push(sl / n);
-    valsDg.push(sd / n);
+    valsLuma.push(sl / n); valsDg.push(sd / n);
   }
 
-  const R = 6; // Check window size
+  const R = 6;
   const measure = (e: number) => {
-    let aboveSumL = 0, belowSumL = 0;
-    let aboveSumD = 0, belowSumD = 0;
+    let aboveSumL = 0, belowSumL = 0, aboveSumD = 0, belowSumD = 0;
     const aboveVals: number[] = [];
     for (let i = 1; i <= R; i++) {
-      const oi = direction === 1 ? e - i : e + i; // outer index
-      const ii = direction === 1 ? e + i : e - i; // inner index
-      aboveSumL += valsLuma[oi];
-      belowSumL += valsLuma[ii];
-      aboveSumD += valsDg[oi];
-      belowSumD += valsDg[ii];
+      const oi = direction === 1 ? e - i : e + i;
+      const ii = direction === 1 ? e + i : e - i;
+      aboveSumL += valsLuma[oi]; belowSumL += valsLuma[ii];
+      aboveSumD += valsDg[oi]; belowSumD += valsDg[ii];
       aboveVals.push(valsLuma[oi]);
     }
     const aboveL = aboveSumL / R;
-    const belowL = belowSumL / R;
-    const aboveD = aboveSumD / R;
-    const belowD = belowSumD / R;
-    
-    const drop = aboveL - belowL;
-    const dgRise = belowD - aboveD;
-    const score = drop + dgRise;
-
     let v = 0;
     for (const val of aboveVals) v += (val - aboveL) ** 2;
-    const outerVariance = Math.sqrt(v / R);
-    
-    return { aboveL, belowL, aboveD, belowD, drop, dgRise, score, outerVariance };
+    return { aboveL, score: (aboveSumL - belowSumL) / R + (belowSumD - aboveSumD) / R, outerVariance: Math.sqrt(v / R) };
   };
 
   let firstE = -1;
   if (direction === 1) {
     for (let e = R; e < valsLuma.length - R; e++) {
       const m = measure(e);
-      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) {
-        firstE = e; break;
-      }
+      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) { firstE = e; break; }
     }
   } else {
     for (let e = valsLuma.length - R - 1; e >= R; e--) {
       const m = measure(e);
-      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) {
-        firstE = e; break;
-      }
+      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) { firstE = e; break; }
     }
   }
   if (firstE < 0) return null;
 
-  // Parabolic refinement
+  const m = measure(firstE);
   const f = (e: number): number => measure(e).score;
   let off = 0;
   if (firstE > R && firstE < valsLuma.length - R - 1) {
@@ -183,328 +126,103 @@ function findWhToDgEdge(
   }
 
   const rawPerp = lo + firstE + off;
-  const m = measure(firstE);
+  const c = COEFFS[side];
+  const bias = c[0] + c[1] * m.outerVariance + c[2] * m.aboveL + c[3] * m.score;
 
-  /**
-   * Adaptive Biases (Move INWARD in image-pixels)
-   * Accounts for spatially varying blur using local outer variance.
-   * Calibrated against hand-edited ground truth.
-   */
-  let bias = 0;
-  const v = m.outerVariance;
-  if (side === "TOP") {
-    bias = Math.max(2.5, 9.0 - 6.3 * v);
-  } else if (side === "BOT") {
-    bias = Math.max(4.0, 10.3 - 4.0 * v);
-  } else if (side === "LEFT") {
-    bias = Math.max(5.0, 12.1 - 1.2 * v);
-  } else if (side === "RIGHT") {
-    bias = Math.max(6.0, 10.4 - 0.8 * v);
-  }
-
-  const perp = rawPerp + direction * bias;
-
-  return {
-    pos: 0, // set by caller
-    perp,
-    rawPerp,
-    drop: m.drop,
-    dgRise: m.dgRise,
-    aboveL: m.aboveL,
-    belowL: m.belowL,
-    aboveD: m.aboveD,
-    belowD: m.belowD,
-    score: m.score,
-    outerVariance: v
-  };
+  return { pos: 0, perp: rawPerp + direction * bias, rawPerp, aboveL: m.aboveL, outerVariance: m.outerVariance, score: m.score };
 }
 
-// Local-median outlier rejection.
 function rejectOutliers(d: DetectionPoint[]): DetectionPoint[] {
   if (d.length < 5) return d;
   const out: DetectionPoint[] = [];
   for (let i = 0; i < d.length; i++) {
     const w: number[] = [];
-    for (let j = Math.max(0, i - 2); j <= Math.min(d.length - 1, i + 2); j++) {
-      if (j !== i) w.push(d[j].perp);
-    }
+    for (let j = Math.max(0, i - 2); j <= Math.min(d.length - 1, i + 2); j++) if (j !== i) w.push(d[j].perp);
     w.sort((a, b) => a - b);
-    const med = w[Math.floor(w.length / 2)];
-    if (Math.abs(d[i].perp - med) <= OUTLIER_MAX_DEV) out.push(d[i]);
+    if (Math.abs(d[i].perp - w[Math.floor(w.length / 2)]) <= OUTLIER_MAX_DEV) out.push(d[i]);
   }
   return out;
 }
 
-function detectTopBorder(img: Img): BorderCurve {
+function detect(img: Img, side: "TOP" | "BOT" | "LEFT" | "RIGHT"): BorderCurve {
   const out: DetectionPoint[] = [];
-  for (let x = EXP_LEFT; x < EXP_RIGHT; x += STEP) {
+  const horizontal = (side === "TOP" || side === "BOT");
+  const canon = side === "TOP" ? EXP_TOP : side === "BOT" ? EXP_BOT : side === "LEFT" ? EXP_LEFT : EXP_RIGHT;
+  const dir = (side === "TOP" || side === "LEFT") ? 1 : -1;
+  const start = horizontal ? EXP_LEFT : EXP_TOP;
+  const end = horizontal ? EXP_RIGHT : EXP_BOT;
+
+  for (let p = start; p < end; p += STEP) {
     const luma = (t: number) => {
-      const y = Math.round(t);
-      if (y < 0 || y >= img.height) return 0;
+      const x = horizontal ? Math.round(p) : Math.round(t);
+      const y = horizontal ? Math.round(t) : Math.round(p);
       let s = 0, n = 0;
-      for (let dx = -4; dx <= 4; dx++) { // radius 4 horizontal smoothing
-        const xi = Math.round(x + dx);
-        if (xi >= 0 && xi < img.width) { s += lumaAt(img, xi, y); n++; }
+      for (let d = -4; d <= 4; d++) {
+        const xi = horizontal ? Math.round(x + d) : x;
+        const yi = horizontal ? y : Math.round(y + d);
+        if (xi >= 0 && xi < img.width && yi >= 0 && yi < img.height) { s += lumaAt(img, xi, yi); n++; }
       }
       return s / n;
     };
     const dg = (t: number) => {
-      const y = Math.round(t);
-      if (y < 0 || y >= img.height) return 0;
+      const x = horizontal ? Math.round(p) : Math.round(t);
+      const y = horizontal ? Math.round(t) : Math.round(p);
       let s = 0, n = 0;
-      for (let dx = -4; dx <= 4; dx++) {
-        const xi = Math.round(x + dx);
-        if (xi >= 0 && xi < img.width) { s += dgAt(img, xi, y); n++; }
+      for (let d = -4; d <= 4; d++) {
+        const xi = horizontal ? Math.round(x + d) : x;
+        const yi = horizontal ? y : Math.round(y + d);
+        if (xi >= 0 && xi < img.width && yi >= 0 && yi < img.height) { s += dgAt(img, xi, yi); n++; }
       }
       return s / n;
     };
-    const r = findWhToDgEdge(luma, dg, EXP_TOP, 1, "TOP");
-    if (r === null) continue;
-    r.pos = x;
-    out.push(r);
+    const res = findWhToDgEdge(luma, dg, canon, dir, side);
+    if (res) { res.pos = p; out.push(res); }
   }
   return { detections: rejectOutliers(out) };
 }
 
-function detectBotBorder(img: Img): BorderCurve {
-  const out: DetectionPoint[] = [];
-  for (let x = EXP_LEFT; x < EXP_RIGHT; x += STEP) {
-    const luma = (t: number) => {
-      const y = Math.round(t);
-      if (y < 0 || y >= img.height) return 0;
-      let s = 0, n = 0;
-      for (let dx = -4; dx <= 4; dx++) {
-        const xi = Math.round(x + dx);
-        if (xi >= 0 && xi < img.width) { s += lumaAt(img, xi, y); n++; }
-      }
-      return s / n;
-    };
-    const dg = (t: number) => {
-      const y = Math.round(t);
-      if (y < 0 || y >= img.height) return 0;
-      let s = 0, n = 0;
-      for (let dx = -4; dx <= 4; dx++) {
-        const xi = Math.round(x + dx);
-        if (xi >= 0 && xi < img.width) { s += dgAt(img, xi, y); n++; }
-      }
-      return s / n;
-    };
-    const r = findWhToDgEdge(luma, dg, EXP_BOT, -1, "BOT");
-    if (r === null) continue;
-    r.pos = x;
-    out.push(r);
-  }
-  return { detections: rejectOutliers(out) };
-}
-
-function detectLeftBorder(img: Img): BorderCurve {
-  const out: DetectionPoint[] = [];
-  for (let y = EXP_TOP; y < EXP_BOT; y += STEP) {
-    const luma = (t: number) => {
-      const x = Math.round(t);
-      if (x < 0 || x >= img.width) return 0;
-      let s = 0, n = 0;
-      for (let dy = -4; dy <= 4; dy++) { // radius 4 vertical smoothing
-        const yi = Math.round(y + dy);
-        if (yi >= 0 && yi < img.height) { s += lumaAt(img, x, yi); n++; }
-      }
-      return s / n;
-    };
-    const dg = (t: number) => {
-      const x = Math.round(t);
-      if (x < 0 || x >= img.width) return 0;
-      let s = 0, n = 0;
-      for (let dy = -4; dy <= 4; dy++) {
-        const yi = Math.round(y + dy);
-        if (yi >= 0 && yi < img.height) { s += dgAt(img, x, yi); n++; }
-      }
-      return s / n;
-    };
-    const r = findWhToDgEdge(luma, dg, EXP_LEFT, 1, "LEFT");
-    if (r === null) continue;
-    r.pos = y;
-    out.push(r);
-  }
-  return { detections: rejectOutliers(out) };
-}
-
-function detectRightBorder(img: Img): BorderCurve {
-  const out: DetectionPoint[] = [];
-  for (let y = EXP_TOP; y < EXP_BOT; y += STEP) {
-    const luma = (t: number) => {
-      const x = Math.round(t);
-      if (x < 0 || x >= img.width) return 0;
-      let s = 0, n = 0;
-      for (let dy = -4; dy <= 4; dy++) {
-        const yi = Math.round(y + dy);
-        if (yi >= 0 && yi < img.height) { s += lumaAt(img, x, yi); n++; }
-      }
-      return s / n;
-    };
-    const dg = (t: number) => {
-      const x = Math.round(t);
-      if (x < 0 || x >= img.width) return 0;
-      let s = 0, n = 0;
-      for (let dy = -4; dy <= 4; dy++) {
-        const yi = Math.round(y + dy);
-        if (yi >= 0 && yi < img.height) { s += dgAt(img, x, yi); n++; }
-      }
-      return s / n;
-    };
-    const r = findWhToDgEdge(luma, dg, EXP_RIGHT, -1, "RIGHT");
-    if (r === null) continue;
-    r.pos = y;
-    out.push(r);
-  }
-  return { detections: rejectOutliers(out) };
-}
-
-function drawLine(
-  img: Img, x0: number, y0: number, x1: number, y1: number,
-  r: number, g: number, b: number,
-): void {
-  const dx = x1 - x0, dy = y1 - y0;
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
+function drawLine(img: Img, x0: number, y0: number, x1: number, y1: number, r: number, g: number, b: number): void {
+  const dx = x1 - x0, dy = y1 - y0, steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     setPx(img, Math.round(x0 + dx * t), Math.round(y0 + dy * t), r, g, b);
   }
 }
 
-function drawDashed(
-  img: Img, x0: number, y0: number, x1: number, y1: number,
-  r: number, g: number, b: number, on = 6, off = 4,
-): void {
-  const dx = x1 - x0, dy = y1 - y0;
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
-  for (let i = 0; i <= steps; i++) {
-    if ((i % (on + off)) < on) {
-      const t = i / steps;
-      setPx(img, Math.round(x0 + dx * t), Math.round(y0 + dy * t), r, g, b);
-    }
-  }
-}
-
-function drawCross(img: Img, x: number, y: number, size: number, r: number, g: number, b: number): void {
-  for (let d = -size; d <= size; d++) {
-    setPx(img, Math.round(x) + d, Math.round(y), r, g, b);
-    setPx(img, Math.round(x), Math.round(y) + d, r, g, b);
-  }
-}
-
 async function processOne(inFile: string, outFile: string): Promise<void> {
   const img = await loadRaw(inFile);
-  if (img.channels < 3) throw new Error(`Expected ≥3 channels, got ${img.channels}`);
-
-  const top = detectTopBorder(img);
-  const bot = detectBotBorder(img);
-  const lft = detectLeftBorder(img);
-  const rgt = detectRightBorder(img);
-
-  const debugFile = outFile.replace(/\.png$/, ".json");
-  await fs.writeFile(debugFile, JSON.stringify({ top, bot, lft, rgt }, null, 2));
-
-  // Per-side stats
+  const top = detect(img, "TOP"), bot = detect(img, "BOT"), lft = detect(img, "LEFT"), rgt = detect(img, "RIGHT");
+  
   const stats = (curve: BorderCurve, canon: number, name: string): void => {
-    const vals = curve.detections.map((d) => d.perp);
-    if (vals.length === 0) { console.log(`  ${name}: NO DETECTIONS`); return; }
+    const vals = curve.detections.map(d => d.perp);
+    if (vals.length === 0) return;
     const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const deviations = vals.map((v) => Math.abs(v - canon));
-    const maxDev = Math.max(...deviations);
-    const meanDev = deviations.reduce((a, b) => a + b, 0) / deviations.length;
-    console.log(
-      `  ${name}: n=${vals.length}  ` +
-      `range=[${min.toFixed(1)}, ${max.toFixed(1)}] (canon ${canon})  ` +
-      `mean=${mean.toFixed(2)}  meanBias=${(mean - canon).toFixed(2)}  ` +
-      `meanAbsDev=${meanDev.toFixed(2)}  maxAbsDev=${maxDev.toFixed(2)}`,
-    );
+    console.log(`  ${name}: n=${vals.length} meanBias=${(mean - canon).toFixed(2)}`);
   };
   console.log(path.basename(inFile));
-  stats(top, EXP_TOP, "TOP   ");
-  stats(bot, EXP_BOT, "BOT   ");
-  stats(lft, EXP_LEFT, "LEFT  ");
-  stats(rgt, EXP_RIGHT, "RIGHT ");
+  stats(top, EXP_TOP, "TOP  "); stats(bot, EXP_BOT, "BOT  "); stats(lft, EXP_LEFT, "LEFT "); stats(rgt, EXP_RIGHT, "RIGHT");
 
-  // Draw overlay
-  // Canonical rectangle in green dashed
-  drawDashed(img, 0, EXP_TOP, img.width - 1, EXP_TOP, 0, 255, 0);
-  drawDashed(img, 0, EXP_BOT, img.width - 1, EXP_BOT, 0, 255, 0);
-  drawDashed(img, EXP_LEFT, 0, EXP_LEFT, img.height - 1, 0, 255, 0);
-  drawDashed(img, EXP_RIGHT, 0, EXP_RIGHT, img.height - 1, 0, 255, 0);
-
-  // Detected curves: yellow polyline + magenta dots; thick yellow if |dev|>2 px
-  const drawCurve = (curve: BorderCurve, horizontal: boolean, canon: number): void => {
-    const detections = curve.detections;
-    for (let i = 0; i < detections.length; i++) {
-      const d = detections[i];
-      const x = horizontal ? d.pos : d.perp;
-      const y = horizontal ? d.perp : d.pos;
-      const dev = Math.abs(d.perp - canon);
-      // Magenta cross at detected position (always)
-      drawCross(img, x, y, 2, 255, 0, 220);
-      // Yellow segment to next
-      if (i + 1 < detections.length) {
-        const nd = detections[i + 1];
-        const nx = horizontal ? nd.pos : nd.perp;
-        const ny = horizontal ? nd.perp : nd.pos;
-        // Thick yellow if either endpoint deviation > 2 px
-        const thick = dev > 2 || Math.abs(nd.perp - canon) > 2;
-        drawLine(img, x, y, nx, ny, 255, 255, 0);
-        if (thick) {
-          // Add 1 px extra
-          drawLine(img, x, y + 1, nx, ny + 1, 255, 220, 0);
-          drawLine(img, x + 1, y, nx + 1, ny, 255, 220, 0);
-        }
-      }
+  const drawCurve = (curve: BorderCurve, horizontal: boolean) => {
+    const d = curve.detections;
+    for (let i = 0; i < d.length; i++) {
+      const x = horizontal ? d[i].pos : d[i].perp, y = horizontal ? d[i].perp : d[i].pos;
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) setPx(img, Math.round(x) + dx, Math.round(y) + dy, 255, 0, 255);
+      if (i + 1 < d.length) drawLine(img, x, y, horizontal ? d[i + 1].pos : d[i + 1].perp, horizontal ? d[i + 1].perp : d[i + 1].pos, 255, 255, 0);
     }
   };
-  drawCurve(top, true, EXP_TOP);
-  drawCurve(bot, true, EXP_BOT);
-  drawCurve(lft, false, EXP_LEFT);
-  drawCurve(rgt, false, EXP_RIGHT);
-
-  await sharp(img.data, { raw: { width: img.width, height: img.height, channels: img.channels } })
-    .png()
-    .toFile(outFile);
-  console.log(`  → ${outFile}`);
+  drawCurve(top, true); drawCurve(bot, true); drawCurve(lft, false); drawCurve(rgt, false);
+  await sharp(img.data, { raw: { width: img.width, height: img.height, channels: img.channels } }).png().toFile(outFile);
 }
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length === 0) {
-    console.error("Usage: border-curve-overlay.ts <warp.png|dir> [<warp.png|dir> ...] [--out <path>]");
-    process.exit(1);
-  }
-  const outArgIdx = args.indexOf("--out");
-  const explicitOut = outArgIdx >= 0 ? args[outArgIdx + 1] : null;
-  const inputs = args.filter((a, i) => a !== "--out" && (outArgIdx < 0 || (i !== outArgIdx + 1)));
-
-  const targets: Array<{ in: string; out: string }> = [];
+  const inputs = args.filter(a => !a.startsWith("-"));
   for (const inp of inputs) {
     const stat = await fs.stat(inp);
     if (stat.isDirectory()) {
-      const files = await fs.readdir(inp);
-      for (const f of files) {
-        if (f.endsWith("_warp.png")) {
-          const fullIn = path.join(inp, f);
-          const outName = f.replace(/_warp\.png$/, "_warp_curve_overlay.png");
-          targets.push({ in: fullIn, out: path.join(inp, outName) });
-        }
-      }
-    } else {
-      const out = explicitOut
-        ?? inp.replace(/\.png$/, "_curve_overlay.png");
-      targets.push({ in: inp, out });
-    }
-  }
-  for (const t of targets) {
-    try {
-      await processOne(t.in, t.out);
-    } catch (e) {
-      console.error(`FAIL ${t.in}: ${(e as Error).message}`);
-    }
+      for (const f of await fs.readdir(inp)) if (f.endsWith("_warp.png")) await processOne(path.join(inp, f), path.join(inp, f.replace("_warp.png", "_warp_curve_overlay.png")));
+    } else await processOne(inp, inp.replace(".png", "_curve_overlay.png"));
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch(e => { console.error(e); process.exit(1); });

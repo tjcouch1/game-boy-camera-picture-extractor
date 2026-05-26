@@ -13,7 +13,7 @@ const CANON_RIGHT = 1159;
 
 const SEARCH_HALF = 3 * SCALE;
 const ABOVE_MIN_LUMA = 40;
-const MIN_DG_RISE = 20;
+const MIN_DG_RISE = 18;
 
 type Img = { data: Uint8Array; width: number; height: number; channels: number };
 
@@ -41,105 +41,113 @@ function findRawEdge(
   dg: (t: number) => number,
   canonical: number,
   direction: 1 | -1,
-): { rawPerp: number; score: number; outerVariance: number } | null {
+): { rawPerp: number; score: number; outerVariance: number; aboveL: number } | null {
   const lo = Math.floor(canonical - SEARCH_HALF);
   const hi = Math.ceil(canonical + SEARCH_HALF);
-  const rawLuma: number[] = [];
-  const rawDg: number[] = [];
-  for (let t = lo; t <= hi; t++) {
-    rawLuma.push(luma(t));
-    rawDg.push(dg(t));
-  }
+  const rawLuma: number[] = [], rawDg: number[] = [];
+  for (let t = lo; t <= hi; t++) { rawLuma.push(luma(t)); rawDg.push(dg(t)); }
   
-  const valsLuma: number[] = [];
-  const valsDg: number[] = [];
+  const valsLuma: number[] = [], valsDg: number[] = [];
   const K = 4;
   for (let i = 0; i < rawLuma.length; i++) {
     let sl = 0, sd = 0, n = 0;
     for (let j = -K; j <= K; j++) {
       const k = i + j;
-      if (k >= 0 && k < rawLuma.length) {
-        sl += rawLuma[k];
-        sd += rawDg[k];
-        n++;
-      }
+      if (k >= 0 && k < rawLuma.length) { sl += rawLuma[k]; sd += rawDg[k]; n++; }
     }
-    valsLuma.push(sl / n);
-    valsDg.push(sd / n);
+    valsLuma.push(sl / n); valsDg.push(sd / n);
   }
 
   const R = 6;
   const measure = (e: number) => {
-    let aboveSumL = 0, belowSumL = 0;
-    let aboveSumD = 0, belowSumD = 0;
+    let aboveSumL = 0, belowSumL = 0, aboveSumD = 0, belowSumD = 0;
     const aboveVals: number[] = [];
     for (let i = 1; i <= R; i++) {
       const oi = direction === 1 ? e - i : e + i;
       const ii = direction === 1 ? e + i : e - i;
-      aboveSumL += valsLuma[oi];
-      belowSumL += valsLuma[ii];
-      aboveSumD += valsDg[oi];
-      belowSumD += valsDg[ii];
+      aboveSumL += valsLuma[oi]; belowSumL += valsLuma[ii];
+      aboveSumD += valsDg[oi]; belowSumD += valsDg[ii];
       aboveVals.push(valsLuma[oi]);
     }
     const aboveL = aboveSumL / R;
-    const belowL = belowSumL / R;
-    
     let v = 0;
     for (const val of aboveVals) v += (val - aboveL) ** 2;
-    const outerVariance = Math.sqrt(v / R);
-
-    const drop = aboveL - belowL;
-    const dgRise = (belowSumD - aboveSumD) / R;
-    return { score: drop + dgRise, aboveL, outerVariance };
+    return { aboveL, score: (aboveSumL - belowSumL) / R + (belowSumD - aboveSumD) / R, outerVariance: Math.sqrt(v / R) };
   };
 
+  // FIRST-EDGE DETECTION
   let firstE = -1;
   if (direction === 1) {
     for (let e = R; e < valsLuma.length - R; e++) {
       const m = measure(e);
-      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) {
-        firstE = e; break;
-      }
+      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) { firstE = e; break; }
     }
   } else {
     for (let e = valsLuma.length - R - 1; e >= R; e--) {
       const m = measure(e);
-      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) {
-        firstE = e; break;
-      }
+      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) { firstE = e; break; }
     }
   }
   if (firstE < 0) return null;
 
-  const m = measure(firstE);
+  const mFinal = measure(firstE);
   const f = (e: number): number => measure(e).score;
-  const a = f(firstE - 1), b = f(firstE), c = f(firstE + 1);
-
   let off = 0;
-  const denom = a - 2 * b + c;
-  if (Math.abs(denom) > 1e-6) {
-    off = 0.5 * (a - c) / denom;
-    off = Math.max(-0.5, Math.min(0.5, off));
+  if (firstE > R && firstE < valsLuma.length - R - 1) {
+    const a = f(firstE - 1), b = f(firstE), c = f(firstE + 1);
+    const denom = a - 2 * b + c;
+    if (Math.abs(denom) > 1e-6) {
+      off = 0.5 * (a - c) / denom;
+      off = Math.max(-0.5, Math.min(0.5, off));
+    }
   }
 
-  return { rawPerp: lo + firstE + off, score: b, outerVariance: m.outerVariance };
+  return { rawPerp: lo + firstE + off, score: mFinal.score, outerVariance: mFinal.outerVariance, aboveL: mFinal.aboveL };
+}
+
+function solveLinearSystem(A: number[][], B: number[]): number[] | null {
+    const n = B.length;
+    for (let i = 0; i < n; i++) {
+        let max = i;
+        for (let j = i + 1; j < n; j++) if (Math.abs(A[j][i]) > Math.abs(A[max][i])) max = j;
+        [A[i], A[max]] = [A[max], A[i]];
+        [B[i], B[max]] = [B[max], B[i]];
+        if (Math.abs(A[i][i]) < 1e-12) return null;
+        for (let j = i + 1; j < n; j++) {
+            const ratio = A[j][i] / A[i][i];
+            B[j] -= ratio * B[i];
+            for (let k = i; k < n; k++) A[j][k] -= ratio * A[i][k];
+        }
+    }
+    const x = new Array(n).fill(0);
+    for (let i = n - 1; i >= 0; i--) {
+        let sum = 0;
+        for (let j = i + 1; j < n; j++) sum += A[i][j] * x[j];
+        x[i] = (B[i] - sum) / A[i][i];
+    }
+    return x;
 }
 
 async function main() {
   const dir = "../../warp-hand-edited-points-branch-warp-and-diagnostics-subagent-plan-2026-05-23";
   const gt = JSON.parse(await fs.readFile(path.join(dir, "ground-truth.json"), "utf8"));
 
+  const allData: Record<string, { x: number[]; y: number[]; l: number[]; s: number[] }> = {
+    TOP: { x: [], y: [], l: [], s: [] },
+    BOT: { x: [], y: [], l: [], s: [] },
+    LEFT: { x: [], y: [], l: [], s: [] },
+    RIGHT: { x: [], y: [], l: [], s: [] }
+  };
+
   for (const imgEntry of gt.images) {
     const warpFile = path.join(dir, imgEntry.file);
     const img = await loadRaw(warpFile);
-    console.log(`Analyzing ${imgEntry.file}...`);
 
-    const analyzeSide = (sideName: string, points: any[], canon: number, direction: 1 | -1, horizontal: boolean) => {
-      const data: any[] = [];
+    const collectData = (sideName: string, points: any[], canon: number, direction: 1 | -1, horizontal: boolean) => {
       for (const p of points) {
         const pos = horizontal ? p.x : p.y;
         const targetPerp = horizontal ? p.y : p.x;
+        if (Math.abs(targetPerp - canon) > 20) continue;
 
         const lumaSampler = (t: number) => {
           const x = horizontal ? pos : Math.round(t);
@@ -166,32 +174,102 @@ async function main() {
 
         const res = findRawEdge(lumaSampler, dgSampler, canon, direction);
         if (res) {
-          const v = res.outerVariance;
-          let bias = 0;
-          if (sideName === "TOP") bias = Math.max(2.5, 9.0 - 6.3 * v);
-          else if (sideName === "BOT") bias = Math.max(4.0, 9.0 - 4.0 * v);
-          else if (sideName === "LEFT") bias = Math.max(5.0, 11.0 - 1.2 * v);
-          else if (sideName === "RIGHT") bias = Math.max(6.0, 9.0 - 0.8 * v);
-
-          const detectedPerp = res.rawPerp + direction * bias;
-          const error = direction * (targetPerp - detectedPerp);
-          data.push({ error });
+          const neededBias = direction === 1 ? (targetPerp - res.rawPerp) : (res.rawPerp - targetPerp);
+          allData[sideName].x.push(res.outerVariance);
+          allData[sideName].y.push(neededBias);
+          allData[sideName].l.push(res.aboveL);
+          allData[sideName].s.push(res.score);
         }
-      }
-      if (data.length > 0) {
-        const sorted = [...data].sort((a, b) => a.error - b.error);
-        const median = sorted[Math.floor(sorted.length / 2)].error;
-        const filtered = data.filter(d => Math.abs(d.error - median) < 10);
-        
-        const meanError = filtered.reduce((a, b) => a + b.error, 0) / filtered.length;
-        console.log(`  ${sideName.padEnd(5)}: n=${filtered.length}/${data.length}  meanError=${meanError.toFixed(2)}`);
       }
     };
 
-    analyzeSide("TOP", imgEntry.top, CANON_TOP, 1, true);
-    analyzeSide("BOT", imgEntry.bot, CANON_BOT, -1, true);
-    analyzeSide("LEFT", imgEntry.left, CANON_LEFT, 1, false);
-    analyzeSide("RIGHT", imgEntry.right, CANON_RIGHT, -1, false);
+    collectData("TOP", imgEntry.top, CANON_TOP, 1, true);
+    collectData("BOT", imgEntry.bot, CANON_BOT, -1, true);
+    collectData("LEFT", imgEntry.left, CANON_LEFT, 1, false);
+    collectData("RIGHT", imgEntry.right, CANON_RIGHT, -1, false);
+  }
+
+  const results: any[] = [];
+  for (const side of ["TOP", "BOT", "LEFT", "RIGHT"]) {
+    const d = allData[side];
+    if (d.x.length < 5) continue;
+
+    const n = d.y.length;
+    const X = [d.x, d.l, d.s, new Array(n).fill(1)];
+    const m = X.length;
+    const A: number[][] = Array.from({ length: m }, () => new Array(m).fill(0));
+    const B: number[] = new Array(m).fill(0);
+    
+    for (let i = 0; i < m; i++) {
+        for (let j = 0; j < m; j++) {
+            for (let k = 0; k < n; k++) A[i][j] += X[i][k] * X[j][k];
+        }
+        for (let k = 0; k < n; k++) B[i] += X[i][k] * d.y[k];
+    }
+    
+    const sol = solveLinearSystem(A, B);
+    if (sol) {
+        const [a, b, c, offset] = sol;
+        console.log(`\nOPTIMIZED 3D MODEL FOR ${side}:`);
+        console.log(`  bias = ${offset.toFixed(4)} + (${a.toFixed(4)})*var + (${b.toFixed(4)})*luma + (${c.toFixed(4)})*score`);
+        let err = 0;
+        for (let k=0; k<n; k++) err += Math.abs(d.y[k] - (a*d.x[k] + b*d.l[k] + c*d.s[k] + offset));
+        console.log(`  Mean residual error: ${(err/n).toFixed(2)}px`);
+        results.push({ side, a, b, c, offset });
+    }
+  }
+
+  console.log("\nPER-IMAGE VALIDATION (FIRST-EDGE 3D):");
+  for (const imgEntry of gt.images) {
+    const warpFile = path.join(dir, imgEntry.file);
+    const img = await loadRaw(warpFile);
+    process.stdout.write(`${imgEntry.file.padEnd(45)}`);
+
+    for (const sideName of ["TOP", "BOT", "LEFT", "RIGHT"]) {
+      const model = results.find(r => r.side === sideName);
+      if (!model) { process.stdout.write(` ${sideName[0]}:  N/A`); continue; }
+      const direction = (sideName === "TOP" || sideName === "LEFT") ? 1 : -1;
+      const canon = sideName === "TOP" ? CANON_TOP : sideName === "BOT" ? CANON_BOT : sideName === "LEFT" ? CANON_LEFT : CANON_RIGHT;
+      const horizontal = (sideName === "TOP" || sideName === "BOT");
+      const points = imgEntry[sideName.toLowerCase()];
+      let sumBias = 0, count = 0;
+      for (const p of points) {
+        const targetPerp = horizontal ? p.y : p.x;
+        if (Math.abs(targetPerp - canon) > 20) continue;
+        const pos = horizontal ? p.x : p.y;
+        const lumaSampler = (t: number) => {
+          const x = horizontal ? pos : Math.round(t);
+          const y = horizontal ? Math.round(t) : pos;
+          let s = 0, n = 0;
+          for (let d = -4; d <= 4; d++) {
+            const xi = horizontal ? Math.round(x + d) : x;
+            const yi = horizontal ? y : Math.round(y + d);
+            if (xi >= 0 && xi < img.width && yi >= 0 && yi < img.height) { s += lumaAt(img, xi, yi); n++; }
+          }
+          return s / n;
+        };
+        const dgSampler = (t: number) => {
+          const x = horizontal ? pos : Math.round(t);
+          const y = horizontal ? Math.round(t) : pos;
+          let s = 0, n = 0;
+          for (let d = -4; d <= 4; d++) {
+            const xi = horizontal ? Math.round(x + d) : x;
+            const yi = horizontal ? y : Math.round(y + d);
+            if (xi >= 0 && xi < img.width && yi >= 0 && yi < img.height) { s += dgAt(img, xi, yi); n++; }
+          }
+          return s / n;
+        };
+        const res = findRawEdge(lumaSampler, dgSampler, canon, direction);
+        if (res) {
+          const predictedBias = model.a * res.outerVariance + model.b * res.aboveL + model.c * res.score + model.offset;
+          const detected = res.rawPerp + direction * predictedBias;
+          sumBias += (detected - targetPerp) * direction;
+          count++;
+        }
+      }
+      process.stdout.write(` ${sideName[0]}:${(count > 0 ? sumBias / count : 0).toFixed(2).padStart(5)}`);
+    }
+    console.log();
   }
 }
 
