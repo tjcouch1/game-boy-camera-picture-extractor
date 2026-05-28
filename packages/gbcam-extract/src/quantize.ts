@@ -383,12 +383,42 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     const stripResult = runKmeans(stripRG, sN, globalCentersPO);
     const c2p = bestClusterToPalette(stripResult.centers, targetsRG);
 
-    // Map strip cluster labels to palette and store
+    // Build palette-ordered strip centers, then blend toward global centers.
+    // This anchors per-strip drift (which over-classifies borderline pixels)
+    // while still allowing local adaptation to brightness gradients.
+    const blendedCenters = new Float32Array(4 * 2);
+    const ANCHOR_W = 0.2; // weight on global (vs 1 - ANCHOR_W on strip)
+    const stripCentersPO = new Float32Array(4 * 2);
+    for (let pi = 0; pi < 4; pi++) {
+      let ci = -1;
+      for (let cj = 0; cj < 4; cj++) {
+        if (c2p[cj] === pi) { ci = cj; break; }
+      }
+      if (ci >= 0) {
+        stripCentersPO[pi * 2] = stripResult.centers[ci * 2];
+        stripCentersPO[pi * 2 + 1] = stripResult.centers[ci * 2 + 1];
+      } else {
+        stripCentersPO[pi * 2] = globalCentersPO[pi * 2];
+        stripCentersPO[pi * 2 + 1] = globalCentersPO[pi * 2 + 1];
+      }
+      blendedCenters[pi * 2] = stripCentersPO[pi * 2] * (1 - ANCHOR_W) + globalCentersPO[pi * 2] * ANCHOR_W;
+      blendedCenters[pi * 2 + 1] = stripCentersPO[pi * 2 + 1] * (1 - ANCHOR_W) + globalCentersPO[pi * 2 + 1] * ANCHOR_W;
+    }
+
+    // Re-classify strip pixels using the blended centers
     idx = 0;
     for (let y = 0; y < CAM_H; y++) {
       for (let x = colStart; x < colEnd; x++) {
-        const palLabel = c2p[stripResult.labels[idx]];
-        stripLabels[(y * CAM_W + x) * nStrips + s] = palLabel;
+        const r = stripRG[idx * 2];
+        const g = stripRG[idx * 2 + 1];
+        let bestPi = 0, bestD = Infinity;
+        for (let pi = 0; pi < 4; pi++) {
+          const dr = r - blendedCenters[pi * 2];
+          const dg = g - blendedCenters[pi * 2 + 1];
+          const d = dr * dr + dg * dg;
+          if (d < bestD) { bestD = d; bestPi = pi; }
+        }
+        stripLabels[(y * CAM_W + x) * nStrips + s] = bestPi;
         idx++;
       }
     }

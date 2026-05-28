@@ -31,48 +31,49 @@ PIPELINE DIAGNOSTICS
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
   [quantize] global k-means cluster centers (palette-ordered):  BK=(R81,G37)  DG=(R140,G148)  LG=(R208,G164)  WH=(R233,G243)
   [quantize] after global kmeans: BK=1335  DG=8819  LG=2491  WH=1691
-  [quantize] strip ensemble: 7 strips, changed 252 px  now: BK=1336  DG=8586  LG=2730  WH=1684
-  [quantize] G-valley refinement: threshold=210.0 (LG center G=163.6, WH center G=242.7), changed 1 px
-  [quantize] final: BK=1336 (9.3%)  DG=8586 (59.9%)  LG=2729 (19.0%)  WH=1685 (11.8%)
+  [quantize] strip ensemble: 7 strips, changed 210 px  now: BK=1335  DG=8627  LG=2689  WH=1685
+  [quantize] G-valley refinement: threshold=210.0 (LG center G=163.6, WH center G=242.7), changed 0 px
+  [quantize] final: BK=1335 (9.3%)  DG=8627 (60.2%)  LG=2689 (18.8%)  WH=1685 (11.8%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14275  (99.57%)
-  Different    : 61   (0.43%)
+  Matching     : 14294  (99.71%)
+  Different    : 42   (0.29%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
-  BK  #000000                 1336        1336  +0
-  DG  #9494FF                 8586        8626  -40
-  LG  #FF9494                 2729        2690  +39
+  BK  #000000                 1335        1336  -1
+  DG  #9494FF                 8627        8626  +1
+  LG  #FF9494                 2689        2690  -1
   WH  #FFFFA5                 1685        1684  +1
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
-  BK  #000000                    1336 v                0                  0                  0      1336
-  DG  #9494FF                       0               8576 v               10 X                0      8586
-  LG  #FF9494                       0                 50 X             2679 v                0      2729
+  BK  #000000                    1335 v                0                  0                  0      1335
+  DG  #9494FF                       1 X             8606 v               20 X                0      8627
+  LG  #FF9494                       0                 20 X             2669 v                0      2689
   WH  #FFFFA5                       0                  0                  1 X             1684 v    1685
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  DG  #9494FF  ->  LG  #FF9494 : 10 px
-  LG  #FF9494  ->  DG  #9494FF : 50 px
+  DG  #9494FF  ->  BK  #000000 : 1 px
+  DG  #9494FF  ->  LG  #FF9494 : 20 px
+  LG  #FF9494  ->  DG  #9494FF : 20 px
   WH  #FFFFA5  ->  LG  #FF9494 : 1 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14275  (99.57%)
-  Different    : 61   (0.43%)
+  Matching     : 14294  (99.71%)
+  Different    : 42   (0.29%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
