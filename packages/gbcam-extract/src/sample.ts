@@ -138,8 +138,8 @@ export function sample(
     const bHiLog = innerStartLog + Math.floor(innerWLog / 3);
     const gLoLog = bHiLog;
     const gHiLog = innerStartLog + 2 * Math.floor(innerWLog / 3);
-    const rLoLog = gHiLog;
-    const rHiLog = innerEndLog;
+    const rLoLog = gHiLog + (scale >= 8 ? 1 : 0);
+    const rHiLog = scale;
     dbg.log(
       `[sample] subpixel cols (scale=${scale}): ` +
         `B=[${bLoLog},${bHiLog}) G=[${gLoLog},${gHiLog}) R=[${rLoLog},${rHiLog}) vMargin=${vMargin}`,
