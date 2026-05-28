@@ -38,16 +38,16 @@ PIPELINE DIAGNOSTICS
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14243  (99.35%)
-  Different    : 93   (0.65%)
+  Matching     : 14245  (99.37%)
+  Different    : 91   (0.63%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1746        1746  +0
-  DG  #9494FF                 3913        3911  +2
-  LG  #FF9494                 3873        3818  +55
+  DG  #9494FF                 3913        3909  +4
+  LG  #FF9494                 3873        3820  +53
   WH  #FFFFA5                 4804        4861  -57
 
 ----------------------------------------------------------------------
@@ -56,14 +56,13 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1746 v                0                  0                  0      1746
   DG  #9494FF                       0               3909 v                4 X                0      3913
-  LG  #FF9494                       0                  2 X             3799 v               72 X    3873
+  LG  #FF9494                       0                  0               3801 v               72 X    3873
   WH  #FFFFA5                       0                  0                 15 X             4789 v    4804
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
   DG  #9494FF  ->  LG  #FF9494 : 4 px
-  LG  #FF9494  ->  DG  #9494FF : 2 px
   LG  #FF9494  ->  WH  #FFFFA5 : 72 px
   WH  #FFFFA5  ->  LG  #FF9494 : 15 px
 
@@ -71,8 +70,8 @@ ERROR BREAKDOWN  (result -> reference)
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14243  (99.35%)
-  Different    : 93   (0.65%)
+  Matching     : 14245  (99.37%)
+  Different    : 91   (0.63%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
