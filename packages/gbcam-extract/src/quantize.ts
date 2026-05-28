@@ -551,7 +551,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
       const dgMeanB = dgBsum / dgBcount;
       const warmMeanB = warmBsum / warmBcount;
       const sep = dgMeanB - warmMeanB; // expect positive
-      if (sep > 15) {
+      if (sep > 5) {
         const lgR = globalCentersPO[2 * 2];
         const lgG = globalCentersPO[2 * 2 + 1];
         const whR = globalCentersPO[3 * 2];
