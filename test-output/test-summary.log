@@ -6,14 +6,14 @@ TEST SUMMARY
 
   Test             Matching            Different           Verdict
   ----------------------------------------------------------------
-  bathhouse-1      14314 ( 99.85%)      22 (  0.15%)   FAIL
-  park-1           14245 ( 99.37%)      91 (  0.63%)   FAIL
-  thing-1          14319 ( 99.88%)      17 (  0.12%)   FAIL
-  thing-2          14259 ( 99.46%)      77 (  0.54%)   FAIL
-  thing-3          14323 ( 99.91%)      13 (  0.09%)   FAIL
-  zelda-poster-1   14328 ( 99.94%)       8 (  0.06%)   FAIL
-  zelda-poster-2   14285 ( 99.64%)      51 (  0.36%)   FAIL
-  zelda-poster-3   14298 ( 99.73%)      38 (  0.27%)   FAIL
+  bathhouse-1      14323 ( 99.91%)      13 (  0.09%)   FAIL
+  park-1           14290 ( 99.68%)      46 (  0.32%)   FAIL
+  thing-1          14318 ( 99.87%)      18 (  0.13%)   FAIL
+  thing-2          14312 ( 99.83%)      24 (  0.17%)   FAIL
+  thing-3          14331 ( 99.97%)       5 (  0.03%)   FAIL
+  zelda-poster-1   14334 ( 99.99%)       2 (  0.01%)   FAIL
+  zelda-poster-2   14324 ( 99.92%)      12 (  0.08%)   FAIL
+  zelda-poster-3   14306 ( 99.79%)      30 (  0.21%)   FAIL
 
   0/8 passed
 

@@ -112,6 +112,21 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   bgr.delete();
   currentM.delete();
 
+  // e — Sub-pixel rectification pass: detect the BGR sub-pixel phase from the
+  // WH frame columns above and below the camera area, and remap each row so
+  // LCD pixel boundaries align uniformly with the 8-col output grid. Fixes
+  // residual lens-distortion drift the perspective transform cannot model.
+  {
+    const subPixelResult = subPixelRectify(currentWarped, scale);
+    if (subPixelResult.applied) {
+      currentWarped.delete();
+      currentWarped = subPixelResult.rectified;
+    } else {
+      subPixelResult.rectified.delete();
+    }
+    if (dbg) recordSubPixelMetrics(dbg, subPixelResult);
+  }
+
   // Render the final border-diagnostic image (so it reflects the post-remap state)
   if (dbg) renderBorderDiagnostic(dbg, currentWarped, scale);
 
@@ -756,6 +771,7 @@ interface Poly {
   a: number;
   b: number;
   c: number;
+  d?: number; // cubic coefficient (optional)
   rmse: number;
 }
 
@@ -816,8 +832,66 @@ function polyFit(points: Array<[number, number]>): Poly {
   return { a, b, c, rmse };
 }
 
+/**
+ * Cubic least-squares fit: y = a + b*x + c*x^2 + d*x^3
+ * Solves the 4x4 normal equations via Gaussian elimination.
+ */
+function cubicFit(points: Array<[number, number]>): Poly {
+  if (points.length < 4) return polyFit(points);
+  // Compute power sums
+  const sums = new Array<number>(7).fill(0);
+  const ts = new Array<number>(4).fill(0);
+  for (const [x, y] of points) {
+    let xk = 1;
+    for (let k = 0; k <= 6; k++) {
+      sums[k] += xk;
+      if (k < 4) ts[k] += xk * y;
+      xk *= x;
+    }
+  }
+  // 4x4 matrix M[i][j] = sums[i+j], rhs[i] = ts[i]
+  const M: number[][] = [];
+  const rhs: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    M.push([sums[i], sums[i + 1], sums[i + 2], sums[i + 3]]);
+    rhs.push(ts[i]);
+  }
+  // Gaussian elimination with partial pivoting
+  for (let i = 0; i < 4; i++) {
+    let pivot = i;
+    for (let r = i + 1; r < 4; r++) {
+      if (Math.abs(M[r][i]) > Math.abs(M[pivot][i])) pivot = r;
+    }
+    if (Math.abs(M[pivot][i]) < 1e-12) return polyFit(points); // fall back
+    if (pivot !== i) {
+      [M[i], M[pivot]] = [M[pivot], M[i]];
+      [rhs[i], rhs[pivot]] = [rhs[pivot], rhs[i]];
+    }
+    for (let r = i + 1; r < 4; r++) {
+      const factor = M[r][i] / M[i][i];
+      for (let c = i; c < 4; c++) M[r][c] -= factor * M[i][c];
+      rhs[r] -= factor * rhs[i];
+    }
+  }
+  // Back substitution
+  const coef = new Array<number>(4).fill(0);
+  for (let i = 3; i >= 0; i--) {
+    let s = rhs[i];
+    for (let j = i + 1; j < 4; j++) s -= M[i][j] * coef[j];
+    coef[i] = s / M[i][i];
+  }
+  let sqSum = 0;
+  for (const [x, y] of points) {
+    const yp = coef[0] + coef[1] * x + coef[2] * x * x + coef[3] * x * x * x;
+    sqSum += (y - yp) ** 2;
+  }
+  const rmse = Math.sqrt(sqSum / points.length);
+  return { a: coef[0], b: coef[1], c: coef[2], d: coef[3], rmse };
+}
+
 function polyEval(p: Poly, x: number): number {
-  return p.a + p.b * x + p.c * x * x;
+  const cubicPart = p.d ? p.d * x * x * x : 0;
+  return p.a + p.b * x + p.c * x * x + cubicPart;
 }
 
 /**
@@ -1414,6 +1488,213 @@ function nonLinearRemap(
       left: ROUND(postPolyDelta.left), right: ROUND(postPolyDelta.right),
     },
     fitRmse,
+  };
+}
+
+// ─── Sub-pixel rectification (Phase 5) ───
+
+interface SubPixelResult {
+  rectified: any;
+  applied: boolean;
+  topOffsets: number[];   // per-block G-peak offset from top WH frame
+  botOffsets: number[];   // per-block G-peak offset from bottom WH frame
+  maxShift: number;       // max |shift| applied
+}
+
+function recordSubPixelMetrics(dbg: DebugCollector, r: SubPixelResult): void {
+  dbg.log(
+    `[warp] sub-pixel rectify: max shift=${r.maxShift.toFixed(2)} px ` +
+      `top G-offset range [${Math.min(...r.topOffsets).toFixed(2)}, ${Math.max(...r.topOffsets).toFixed(2)}] ` +
+      `bot G-offset range [${Math.min(...r.botOffsets).toFixed(2)}, ${Math.max(...r.botOffsets).toFixed(2)}]` +
+      (r.applied ? "" : "  (SKIPPED — already aligned)"),
+  );
+  dbg.setMetric("warp", "subPixel", {
+    maxShift: Number(r.maxShift.toFixed(3)),
+    topOffsets: r.topOffsets.map(v => Number(v.toFixed(3))),
+    botOffsets: r.botOffsets.map(v => Number(v.toFixed(3))),
+    applied: r.applied,
+  });
+}
+
+/**
+ * Find the sub-pixel offset of the G-subpixel peak within a GB-pixel block
+ * by sampling a vertical strip of WH frame. Returns NaN if the peak isn't
+ * confident (no clear winner among the columns).
+ */
+function findGPeakOffset(
+  warped: any,
+  blockStartCol: number,
+  rowStart: number,
+  rowEnd: number,
+  scale: number,
+): number {
+  const W = warped.cols;
+  const data = warped.data;
+  const stride = W * 3; // BGR
+  const means: number[] = new Array(scale).fill(0);
+  const nRows = rowEnd - rowStart;
+  for (let r = rowStart; r < rowEnd; r++) {
+    const rowBase = r * stride;
+    for (let c = 0; c < scale; c++) {
+      means[c] += data[rowBase + (blockStartCol + c) * 3 + 1];
+    }
+  }
+  for (let c = 0; c < scale; c++) means[c] /= nRows;
+  // Find max col and min
+  let maxC = 0;
+  let minVal = means[0];
+  let maxVal = means[0];
+  for (let c = 1; c < scale; c++) {
+    if (means[c] > means[maxC]) maxC = c;
+    if (means[c] < minVal) minVal = means[c];
+    if (means[c] > maxVal) maxVal = means[c];
+  }
+  // Quality check: need a clear peak (range > 12) and not at boundary
+  if (maxVal - minVal < 12) return NaN;
+  if (maxC === 0 || maxC === scale - 1) return NaN;
+  // Quadratic sub-pixel interp
+  const y0 = means[maxC - 1];
+  const y1 = means[maxC];
+  const y2 = means[maxC + 1];
+  const denom = y0 - 2 * y1 + y2;
+  if (Math.abs(denom) < 1e-6) return maxC;
+  const delta = Math.max(-1, Math.min(1, 0.5 * (y0 - y2) / denom));
+  return maxC + delta;
+}
+
+const SUB_PIXEL_MIN_SHIFT = 0.3; // skip if max shift is below this
+
+function subPixelRectify(warped: any, scale: number): SubPixelResult {
+  const cv = getCV();
+  const H = warped.rows;
+  const W = warped.cols;
+
+  const camLeft = INNER_LEFT * scale + scale;     // 128 at scale=8
+  const camRight = INNER_RIGHT * scale;           // 1152 at scale=8
+  const camTop = INNER_TOP * scale + scale;       // 128
+  const camBot = INNER_BOT * scale;               // 1024
+  const nBlocks = (camRight - camLeft) / scale;   // 128 GB pixels horizontally
+
+  // Sample strips: top WH frame (rows 16..INNER_TOP*scale-8) and bottom
+  // (rows INNER_BOT*scale+scale+8..H-16). Avoid edges to skip dash artifacts.
+  const topR1 = Math.max(scale * 2, 0);
+  const topR2 = Math.min(INNER_TOP * scale - scale, topR1 + 12 * scale);
+  const botR1 = Math.max(INNER_BOT * scale + scale + scale, camBot);
+  const botR2 = Math.min(H - scale * 2, botR1 + 12 * scale);
+
+  if (topR2 <= topR1 || botR2 <= botR1) {
+    return {
+      rectified: new cv.Mat(),
+      applied: false,
+      topOffsets: [],
+      botOffsets: [],
+      maxShift: 0,
+    };
+  }
+
+  const topOffsetsRaw = new Array<number>(nBlocks);
+  const botOffsetsRaw = new Array<number>(nBlocks);
+  for (let bx = 0; bx < nBlocks; bx++) {
+    const blockStart = camLeft + bx * scale;
+    topOffsetsRaw[bx] = findGPeakOffset(warped, blockStart, topR1, topR2, scale);
+    botOffsetsRaw[bx] = findGPeakOffset(warped, blockStart, botR1, botR2, scale);
+  }
+
+  // Fit a degree-2 polynomial to the offsets (filtering NaN). The actual drift
+  // across the image is smooth (lens distortion), so a quadratic fit smooths
+  // out per-block detection noise and fills in failed-detection blocks.
+  const topPts: Array<[number, number]> = [];
+  const botPts: Array<[number, number]> = [];
+  for (let bx = 0; bx < nBlocks; bx++) {
+    if (Number.isFinite(topOffsetsRaw[bx])) topPts.push([bx, topOffsetsRaw[bx]]);
+    if (Number.isFinite(botOffsetsRaw[bx])) botPts.push([bx, botOffsetsRaw[bx]]);
+  }
+  if (topPts.length < 6 || botPts.length < 6) {
+    return {
+      rectified: new cv.Mat(),
+      applied: false,
+      topOffsets: topOffsetsRaw,
+      botOffsets: botOffsetsRaw,
+      maxShift: 0,
+    };
+  }
+  const topFit = robustPolyFit(topPts);
+  const botFit = robustPolyFit(botPts);
+
+  const topOffsets = new Array<number>(nBlocks);
+  const botOffsets = new Array<number>(nBlocks);
+  for (let bx = 0; bx < nBlocks; bx++) {
+    topOffsets[bx] = polyEval(topFit, bx);
+    botOffsets[bx] = polyEval(botFit, bx);
+  }
+
+  // Target = mean of TOP offsets (most reliable, less drift than bottom).
+  // This preserves the global sub-pixel convention used by the photo and only
+  // corrects the per-block residual drift.
+  const targetOffset = topOffsets.reduce((s, v) => s + v, 0) / nBlocks;
+
+  const shiftTop = new Array<number>(nBlocks);
+  const shiftBot = new Array<number>(nBlocks);
+  let maxShift = 0;
+  for (let bx = 0; bx < nBlocks; bx++) {
+    shiftTop[bx] = topOffsets[bx] - targetOffset;
+    shiftBot[bx] = botOffsets[bx] - targetOffset;
+    if (Math.abs(shiftTop[bx]) > maxShift) maxShift = Math.abs(shiftTop[bx]);
+    if (Math.abs(shiftBot[bx]) > maxShift) maxShift = Math.abs(shiftBot[bx]);
+  }
+
+  if (maxShift < SUB_PIXEL_MIN_SHIFT) {
+    return {
+      rectified: new cv.Mat(),
+      applied: false,
+      topOffsets,
+      botOffsets,
+      maxShift,
+    };
+  }
+
+  // Build mapX, mapY. Identity in Y. For each (x, y), compute the block bx,
+  // interp shift from top to bot based on y, and src_x = x + shift.
+  const mapX = new cv.Mat(H, W, cv.CV_32FC1);
+  const mapY = new cv.Mat(H, W, cv.CV_32FC1);
+  const mapXData = mapX.data32F;
+  const mapYData = mapY.data32F;
+  // y reference: top frame center ≈ (topR1+topR2)/2, bot frame center ≈ (botR1+botR2)/2
+  const yTopRef = (topR1 + topR2) / 2;
+  const yBotRef = (botR1 + botR2) / 2;
+  const yRange = yBotRef - yTopRef;
+
+  for (let y = 0; y < H; y++) {
+    const t = Math.max(0, Math.min(1, (y - yTopRef) / yRange));
+    for (let x = 0; x < W; x++) {
+      let shift = 0;
+      if (x >= camLeft && x < camRight) {
+        // Float block index
+        const bxFloat = (x - camLeft) / scale;
+        const bxLo = Math.max(0, Math.min(nBlocks - 1, Math.floor(bxFloat)));
+        const bxHi = Math.max(0, Math.min(nBlocks - 1, bxLo + 1));
+        const fbx = bxFloat - bxLo;
+        const sT = shiftTop[bxLo] * (1 - fbx) + shiftTop[bxHi] * fbx;
+        const sB = shiftBot[bxLo] * (1 - fbx) + shiftBot[bxHi] * fbx;
+        shift = sT * (1 - t) + sB * t;
+      }
+      const idx = y * W + x;
+      mapXData[idx] = x + shift;
+      mapYData[idx] = y;
+    }
+  }
+
+  const rectified = new cv.Mat();
+  cv.remap(warped, rectified, mapX, mapY, cv.INTER_LANCZOS4, cv.BORDER_REPLICATE);
+  mapX.delete();
+  mapY.delete();
+
+  return {
+    rectified,
+    applied: true,
+    topOffsets,
+    botOffsets,
+    maxShift,
   };
 }
 
