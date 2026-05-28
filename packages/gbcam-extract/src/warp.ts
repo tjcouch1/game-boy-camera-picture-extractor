@@ -1669,19 +1669,22 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const yBotRef = (botR1 + botR2) / 2;
   const yRange = yBotRef - yTopRef;
 
+  // Strength factor: <1 means soft rectification. This protects images
+  // with fine LG/DG transitions (thing-2) from over-rectification, while
+  // still doing most of the correction on images with severe drift.
+  const STRENGTH = 0.9;
   for (let y = 0; y < H; y++) {
     const t = Math.max(0, Math.min(1, (y - yTopRef) / yRange));
     for (let x = 0; x < W; x++) {
       let shift = 0;
       if (x >= camLeft && x < camRight) {
-        // Float block index
         const bxFloat = (x - camLeft) / scale;
         const bxLo = Math.max(0, Math.min(nBlocks - 1, Math.floor(bxFloat)));
         const bxHi = Math.max(0, Math.min(nBlocks - 1, bxLo + 1));
         const fbx = bxFloat - bxLo;
         const sT = shiftTop[bxLo] * (1 - fbx) + shiftTop[bxHi] * fbx;
         const sB = shiftBot[bxLo] * (1 - fbx) + shiftBot[bxHi] * fbx;
-        shift = sT * (1 - t) + sB * t;
+        shift = (sT * (1 - t) + sB * t) * STRENGTH;
       }
       const idx = y * W + x;
       mapXData[idx] = x + shift;
