@@ -33,6 +33,7 @@ PIPELINE DIAGNOSTICS
   [quantize] after global kmeans: BK=1571  DG=3503  LG=4274  WH=4988
   [quantize] strip ensemble: 7 strips, changed 25 px  now: BK=1571  DG=3525  LG=4255  WH=4985
   [quantize] G-valley refinement: threshold=220.0 (LG center G=173.3, WH center G=249.5), changed 0 px
+  [quantize] B-aware DG reclassify: dgMeanB=232.5 threshold=180.0 flipped=0
   [quantize] final: BK=1571 (11.0%)  DG=3525 (24.6%)  LG=4255 (29.7%)  WH=4985 (34.8%)
 
 ======================================================================

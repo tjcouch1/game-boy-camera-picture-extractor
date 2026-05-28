@@ -533,6 +533,56 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     }
   }
 
+  // ── 3c. B-aware reclassification of DG misclassifications ──
+  // DG palette has B=255, LG/WH have B around 148-165. Pixels currently
+  // labeled DG but with low B are highly suspicious — likely warm pixels
+  // (LG/WH) misclassified by 2D RG distance because PSF bleed inflated G.
+  // This is the washed-out scenario in park-1's BR corner.
+  {
+    let dgBsum = 0, dgBcount = 0;
+    for (let i = 0; i < N; i++) {
+      if (finalLabels[i] === 1) {
+        dgBsum += input.data[i * 4 + 2];
+        dgBcount++;
+      }
+    }
+    if (dgBcount >= 50) {
+      const dgMeanB = dgBsum / dgBcount;
+      // Use the lower-tail (palette LG B=148 plus a margin) as the threshold
+      // for what "definitely isn't DG" means. A DG pixel should have B
+      // appreciably above LG.
+      const bThresh = Math.min(dgMeanB - 30, 180);
+      const lgR = globalCentersPO[2 * 2];
+      const lgG = globalCentersPO[2 * 2 + 1];
+      const whR = globalCentersPO[3 * 2];
+      const whG = globalCentersPO[3 * 2 + 1];
+      const dgR = globalCentersPO[1 * 2];
+      const dgG = globalCentersPO[1 * 2 + 1];
+      let changedB = 0;
+      for (let i = 0; i < N; i++) {
+        if (finalLabels[i] !== 1) continue;
+        const b = input.data[i * 4 + 2];
+        if (b >= bThresh) continue; // B confirms DG — leave alone
+        const r = flatRG[i * 2];
+        const g = flatRG[i * 2 + 1];
+        // Among warm classes only, find closest
+        const dLG = (r - lgR) ** 2 + (g - lgG) ** 2;
+        const dWH = (r - whR) ** 2 + (g - whG) ** 2;
+        const dDG = (r - dgR) ** 2 + (g - dgG) ** 2;
+        const dWarm = Math.min(dLG, dWH);
+        // Only flip if warm distance is reasonably close to current DG
+        // distance (so we're not transplanting a clearly-DG pixel)
+        if (dWarm < dDG * 1.3) {
+          finalLabels[i] = dLG < dWH ? 2 : 3;
+          changedB++;
+        }
+      }
+      if (dbg) {
+        dbg.log(`[quantize] B-aware DG reclassify: dgMeanB=${dgMeanB.toFixed(1)} threshold=${bThresh.toFixed(1)} flipped=${changedB}`);
+      }
+    }
+  }
+
   // ── 4. Output: map palette indices to grayscale values ──
   const output = createGBImageData(CAM_W, CAM_H);
   for (let i = 0; i < N; i++) {
