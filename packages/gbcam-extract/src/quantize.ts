@@ -514,7 +514,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     // Apply threshold to LG/WH pixels with high R
     for (let i = 0; i < N; i++) {
       if (
-        flatRG[i * 2] > 190 &&
+        flatRG[i * 2] > 170 &&
         (finalLabels[i] === 2 || finalLabels[i] === 3)
       ) {
         const newLabel = flatRG[i * 2 + 1] >= gThresh ? 3 : 2;
