@@ -27,7 +27,7 @@ PIPELINE DIAGNOSTICS
   [correct] frame post-correction p85: R=254 G=255 B=203 (target #FFFFA5 = R255 G255 B165)
   [correct] camera region mean: R=154.8 G=143.1 B=207.9
   [crop] inner-border mean=178.5 white-frame mean=202.0 (ratio 0.883, WARN)
-  [sample] R: 37–255  G: 0–255  B: 77–252
+  [sample] R: 37–255  G: 0–255  B: 81–253
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
   [quantize] global k-means cluster centers (palette-ordered):  BK=(R77,G28)  DG=(R139,G148)  LG=(R216,G161)  WH=(R209,G253)
   [quantize] after global kmeans: BK=1335  DG=8624  LG=2693  WH=1684

@@ -27,28 +27,28 @@ PIPELINE DIAGNOSTICS
   [correct] frame post-correction p85: R=254 G=255 B=252 (target #FFFFA5 = R255 G255 B165)
   [correct] camera region mean: R=149.3 G=70.9 B=199.9
   [crop] inner-border mean=186.9 white-frame mean=225.0 (ratio 0.830, OK)
-  [sample] R: 41–254  G: 0–255  B: 115–255
+  [sample] R: 41–254  G: 0–255  B: 114–255
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
   [quantize] global k-means cluster centers (palette-ordered):  BK=(R122,G24)  DG=(R152,G157)  LG=(R230,G182)  WH=(R226,G253)
   [quantize] after global kmeans: BK=9494  DG=1885  LG=1401  WH=1556
-  [quantize] strip ensemble: 7 strips, changed 4 px  now: BK=9494  DG=1881  LG=1405  WH=1556
+  [quantize] strip ensemble: 7 strips, changed 3 px  now: BK=9494  DG=1882  LG=1404  WH=1556
   [quantize] G-valley refinement: threshold=223.0 (LG center G=182.5, WH center G=253.2), changed 1 px
-  [quantize] final: BK=9494 (66.2%)  DG=1881 (13.1%)  LG=1406 (9.8%)  WH=1555 (10.8%)
+  [quantize] final: BK=9494 (66.2%)  DG=1882 (13.1%)  LG=1405 (9.8%)  WH=1555 (10.8%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14325  (99.92%)
-  Different    : 11   (0.08%)
+  Matching     : 14326  (99.93%)
+  Different    : 10   (0.07%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 9494        9494  +0
-  DG  #9494FF                 1881        1884  -3
-  LG  #FF9494                 1406        1403  +3
+  DG  #9494FF                 1882        1884  -2
+  LG  #FF9494                 1405        1403  +2
   WH  #FFFFA5                 1555        1555  +0
 
 ----------------------------------------------------------------------
@@ -56,22 +56,22 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    9494 v                0                  0                  0      9494
-  DG  #9494FF                       0               1877 v                4 X                0      1881
-  LG  #FF9494                       0                  7 X             1399 v                0      1406
+  DG  #9494FF                       0               1878 v                4 X                0      1882
+  LG  #FF9494                       0                  6 X             1399 v                0      1405
   WH  #FFFFA5                       0                  0                  0               1555 v    1555
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
   DG  #9494FF  ->  LG  #FF9494 : 4 px
-  LG  #FF9494  ->  DG  #9494FF : 7 px
+  LG  #FF9494  ->  DG  #9494FF : 6 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14325  (99.92%)
-  Different    : 11   (0.08%)
+  Matching     : 14326  (99.93%)
+  Different    : 10   (0.07%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
