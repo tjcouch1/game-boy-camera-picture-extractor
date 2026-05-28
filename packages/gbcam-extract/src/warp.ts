@@ -1574,6 +1574,11 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const camTop = INNER_TOP * scale + scale;       // 128
   const camBot = INNER_BOT * scale;               // 1024
   const nBlocks = (camRight - camLeft) / scale;   // 128 GB pixels horizontally
+  // Detect offsets across the FULL screen width (frame area included) so the
+  // polynomial fit has more sample points and is better-constrained at the
+  // camera edges where lens distortion is worst.
+  const detectStartCol = 0;
+  const detectNBlocks = Math.floor(W / scale);    // 160 at scale=8
 
   // Sample strips: top WH frame (rows 16..INNER_TOP*scale-8) and bottom
   // (rows INNER_BOT*scale+scale+8..H-16). Use narrow slices closest to the
@@ -1593,22 +1598,29 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
     };
   }
 
+  // Detect raw G-peak offsets across the FULL detection range
+  const topOffsetsRawFull = new Array<number>(detectNBlocks);
+  const botOffsetsRawFull = new Array<number>(detectNBlocks);
+  for (let bx = 0; bx < detectNBlocks; bx++) {
+    const blockStart = detectStartCol + bx * scale;
+    topOffsetsRawFull[bx] = findGPeakOffset(warped, blockStart, topR1, topR2, scale);
+    botOffsetsRawFull[bx] = findGPeakOffset(warped, blockStart, botR1, botR2, scale);
+  }
+
+  // Fit polynomials using the full data; then evaluate over camera blocks
+  const topPts: Array<[number, number]> = [];
+  const botPts: Array<[number, number]> = [];
+  for (let bx = 0; bx < detectNBlocks; bx++) {
+    if (Number.isFinite(topOffsetsRawFull[bx])) topPts.push([bx, topOffsetsRawFull[bx]]);
+    if (Number.isFinite(botOffsetsRawFull[bx])) botPts.push([bx, botOffsetsRawFull[bx]]);
+  }
+  // Also build camera-block aligned arrays for the metric output
   const topOffsetsRaw = new Array<number>(nBlocks);
   const botOffsetsRaw = new Array<number>(nBlocks);
   for (let bx = 0; bx < nBlocks; bx++) {
-    const blockStart = camLeft + bx * scale;
-    topOffsetsRaw[bx] = findGPeakOffset(warped, blockStart, topR1, topR2, scale);
-    botOffsetsRaw[bx] = findGPeakOffset(warped, blockStart, botR1, botR2, scale);
-  }
-
-  // Fit a degree-2 polynomial to the offsets (filtering NaN). The actual drift
-  // across the image is smooth (lens distortion), so a quadratic fit smooths
-  // out per-block detection noise and fills in failed-detection blocks.
-  const topPts: Array<[number, number]> = [];
-  const botPts: Array<[number, number]> = [];
-  for (let bx = 0; bx < nBlocks; bx++) {
-    if (Number.isFinite(topOffsetsRaw[bx])) topPts.push([bx, topOffsetsRaw[bx]]);
-    if (Number.isFinite(botOffsetsRaw[bx])) botPts.push([bx, botOffsetsRaw[bx]]);
+    const fullBx = bx + (camLeft - detectStartCol) / scale;
+    topOffsetsRaw[bx] = topOffsetsRawFull[fullBx] ?? NaN;
+    botOffsetsRaw[bx] = botOffsetsRawFull[fullBx] ?? NaN;
   }
   if (topPts.length < 6 || botPts.length < 6) {
     return {
@@ -1624,9 +1636,10 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
 
   const topOffsets = new Array<number>(nBlocks);
   const botOffsets = new Array<number>(nBlocks);
+  const cameraBlockOffset = (camLeft - detectStartCol) / scale;
   for (let bx = 0; bx < nBlocks; bx++) {
-    topOffsets[bx] = polyEval(topFit, bx);
-    botOffsets[bx] = polyEval(botFit, bx);
+    topOffsets[bx] = polyEval(topFit, bx + cameraBlockOffset);
+    botOffsets[bx] = polyEval(botFit, bx + cameraBlockOffset);
   }
 
   // Target = mean of top and bottom offsets across the image. This is the
