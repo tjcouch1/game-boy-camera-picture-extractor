@@ -387,7 +387,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     // This anchors per-strip drift (which over-classifies borderline pixels)
     // while still allowing local adaptation to brightness gradients.
     const blendedCenters = new Float32Array(4 * 2);
-    const ANCHOR_W = 0.25; // weight on global (vs 1 - ANCHOR_W on strip)
+    const ANCHOR_W = 0.3; // weight on global (vs 1 - ANCHOR_W on strip)
     const stripCentersPO = new Float32Array(4 * 2);
     for (let pi = 0; pi < 4; pi++) {
       let ci = -1;

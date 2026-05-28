@@ -75,9 +75,7 @@ export function sample(
         continue;
       }
 
-      // B sub-pixel center at scale=8 is at col 1.33. Sample [1, 3) was
-      // centered at col 2 — 0.67 cols right of peak. Shift left to [0, 2).
-      const bLo = Math.max(0, innerStart - (scale >= 8 ? 1 : 0));
+      const bLo = innerStart;
       const bHi = innerStart + Math.floor(innerW / 3);
       const gLo = innerStart + Math.floor(innerW / 3);
       const gHi = innerStart + 2 * Math.floor(innerW / 3);
