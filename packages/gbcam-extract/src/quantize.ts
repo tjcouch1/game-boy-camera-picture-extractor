@@ -574,7 +574,10 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
           const dDG = (r - dgR) ** 2 + (g - dgG) ** 2;
           if (lbl === 1 && b < bDgLowThresh) {
             const dWarm = Math.min(dLG, dWH);
-            if (dWarm < dDG * 1.3) {
+            // Distances here are SQUARED — ratio 1.7 sq ≈ 1.30 linear, so
+            // we permit warm to be up to 30% farther in RG than DG when B
+            // clearly indicates warm content.
+            if (dWarm < dDG * 1.7) {
               finalLabels[i] = dLG < dWH ? 2 : 3;
               flippedFromDg++;
             }
