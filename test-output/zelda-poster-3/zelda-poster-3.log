@@ -17,22 +17,22 @@ PIPELINE DIAGNOSTICS
   [warp] non-linear pre-remap residuals: top=-0.40 bot=-0.01 left=1.77 right=0.86
   [warp] non-linear fit RMSE: top=0.34 bot=0.25 left=0.64 right=0.37
   [warp] non-linear shift magnitudes (max |Δ|): top=0.63 bot=0.59 left=1.41 right=1.16
-  [warp] sub-pixel rectify: max shift=3.14 px top G-offset range [0.46, 4.43] bot G-offset range [0.35, 4.75]
-  [warp] final residuals (post-remap, signed mean): top=-0.041 bot=0.036 left=1.330 right=0.252
-  [correct] R: white samples kept=7445 (median 225.1, range 167–255)
-  [correct] G: white samples kept=7576 (median 223.1, range 166–255)
+  [warp] sub-pixel rectify: max shift=3.07 px top G-offset range [0.45, 4.46] bot G-offset range [0.46, 4.77]
+  [warp] final residuals (post-remap, signed mean): top=-0.046 bot=0.035 left=1.332 right=0.250
+  [correct] R: white samples kept=7444 (median 225.1, range 167–255)
+  [correct] G: white samples kept=7575 (median 223.3, range 166–255)
   [correct] white surface R: 191–249; G: 191–248
   [correct] dark surface  R: 134–167; G: 150–176
-  [correct] interior DG calibration: R=3333px G=4304px
+  [correct] interior DG calibration: R=3332px G=4328px
   [correct] frame post-correction p85: R=255 G=255 B=211 (target #FFFFA5 = R255 G255 B165)
-  [correct] camera region mean: R=175.2 G=153.5 B=201.0
+  [correct] camera region mean: R=175.2 G=153.4 B=201.0
   [crop] inner-border mean=170.0 white-frame mean=194.8 (ratio 0.872, WARN)
-  [sample] R: 13–255  G: 0–255  B: 73–252
+  [sample] R: 12–255  G: 0–255  B: 73–252
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
   [quantize] global k-means cluster centers (palette-ordered):  BK=(R55,G29)  DG=(R139,G154)  LG=(R236,G176)  WH=(R239,G249)
-  [quantize] after global kmeans: BK=1572  DG=3525  LG=4252  WH=4987
-  [quantize] strip ensemble: 7 strips, changed 6 px  now: BK=1572  DG=3525  LG=4254  WH=4985
-  [quantize] G-valley refinement: threshold=216.0 (LG center G=176.0, WH center G=249.3), changed 3 px
+  [quantize] after global kmeans: BK=1572  DG=3525  LG=4253  WH=4986
+  [quantize] strip ensemble: 7 strips, changed 5 px  now: BK=1572  DG=3525  LG=4254  WH=4985
+  [quantize] G-valley refinement: threshold=216.0 (LG center G=175.7, WH center G=249.3), changed 3 px
   [quantize] final: BK=1572 (11.0%)  DG=3525 (24.6%)  LG=4257 (29.7%)  WH=4982 (34.8%)
 
 ======================================================================

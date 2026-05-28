@@ -1576,11 +1576,12 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const nBlocks = (camRight - camLeft) / scale;   // 128 GB pixels horizontally
 
   // Sample strips: top WH frame (rows 16..INNER_TOP*scale-8) and bottom
-  // (rows INNER_BOT*scale+scale+8..H-16). Avoid edges to skip dash artifacts.
-  const topR1 = Math.max(scale * 2, 0);
-  const topR2 = Math.min(INNER_TOP * scale - scale, topR1 + 12 * scale);
+  // (rows INNER_BOT*scale+scale+8..H-16). Use narrow slices closest to the
+  // camera so per-row drift differences are captured accurately.
+  const topR1 = Math.max(scale * 6, 0);
+  const topR2 = Math.min(INNER_TOP * scale - scale, topR1 + 8 * scale);
   const botR1 = Math.max(INNER_BOT * scale + scale + scale, camBot);
-  const botR2 = Math.min(H - scale * 2, botR1 + 12 * scale);
+  const botR2 = Math.min(H - scale * 2, botR1 + 8 * scale);
 
   if (topR2 <= topR1 || botR2 <= botR1) {
     return {
