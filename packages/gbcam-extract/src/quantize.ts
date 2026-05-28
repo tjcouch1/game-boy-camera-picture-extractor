@@ -559,9 +559,11 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
         const dgR = globalCentersPO[1 * 2];
         const dgG = globalCentersPO[1 * 2 + 1];
         // Lower threshold: pixels currently DG with B below this look warm.
-        // Cap to protect against false flips in tests where DG and warm B
-        // distributions overlap (e.g., bathhouse-1).
-        const bDgLowThresh = Math.min(dgMeanB - 30, 180);
+        // Clamp to [175, 180] to protect against false flips in tests where
+        // DG and warm B distributions overlap (e.g., bathhouse-1, where
+        // dgMeanB-30 > 180) while still catching warm-but-DG-labeled pixels
+        // in tests with dim DG.
+        const bDgLowThresh = Math.max(175, Math.min(dgMeanB - 30, 180));
         // Upper threshold: pixels currently warm with B above this look DG
         const bWarmHiThresh = warmMeanB + sep * 0.6;
         let flippedFromDg = 0;
