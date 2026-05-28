@@ -27,50 +27,52 @@ PIPELINE DIAGNOSTICS
   [correct] frame post-correction p85: R=253 G=254 B=245 (target #FFFFA5 = R255 G255 B165)
   [correct] camera region mean: R=182.8 G=155.8 B=226.7
   [crop] inner-border mean=177.3 white-frame mean=212.6 (ratio 0.834, OK)
-  [sample] R: 38–255  G: 1–255  B: 106–255
+  [sample] R: 37–255  G: 1–255  B: 106–255
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
-  [quantize] global k-means cluster centers (palette-ordered):  BK=(R77,G38)  DG=(R148,G158)  LG=(R233,G174)  WH=(R237,G250)
-  [quantize] after global kmeans: BK=1572  DG=3514  LG=4264  WH=4986
-  [quantize] strip ensemble: 7 strips, changed 12 px  now: BK=1572  DG=3523  LG=4258  WH=4983
-  [quantize] G-valley refinement: threshold=221.0 (LG center G=173.5, WH center G=249.6), changed 0 px
-  [quantize] final: BK=1572 (11.0%)  DG=3523 (24.6%)  LG=4258 (29.7%)  WH=4983 (34.8%)
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R78,G38)  DG=(R136,G158)  LG=(R220,G173)  WH=(R216,G250)
+  [quantize] after global kmeans: BK=1571  DG=3504  LG=4272  WH=4989
+  [quantize] strip ensemble: 7 strips, changed 27 px  now: BK=1571  DG=3525  LG=4255  WH=4985
+  [quantize] G-valley refinement: threshold=221.0 (LG center G=173.4, WH center G=249.6), changed 0 px
+  [quantize] final: BK=1571 (11.0%)  DG=3525 (24.6%)  LG=4255 (29.7%)  WH=4985 (34.8%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14333  (99.98%)
-  Different    : 3   (0.02%)
+  Matching     : 14331  (99.97%)
+  Different    : 5   (0.03%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
-  BK  #000000                 1572        1572  +0
-  DG  #9494FF                 3523        3526  -3
-  LG  #FF9494                 4258        4255  +3
-  WH  #FFFFA5                 4983        4983  +0
+  BK  #000000                 1571        1572  -1
+  DG  #9494FF                 3525        3526  -1
+  LG  #FF9494                 4255        4255  +0
+  WH  #FFFFA5                 4985        4983  +2
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
-  BK  #000000                    1572 v                0                  0                  0      1572
-  DG  #9494FF                       0               3523 v                0                  0      3523
-  LG  #FF9494                       0                  3 X             4255 v                0      4258
-  WH  #FFFFA5                       0                  0                  0               4983 v    4983
+  BK  #000000                    1571 v                0                  0                  0      1571
+  DG  #9494FF                       1 X             3524 v                0                  0      3525
+  LG  #FF9494                       0                  2 X             4253 v                0      4255
+  WH  #FFFFA5                       0                  0                  2 X             4983 v    4985
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  LG  #FF9494  ->  DG  #9494FF : 3 px
+  DG  #9494FF  ->  BK  #000000 : 1 px
+  LG  #FF9494  ->  DG  #9494FF : 2 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 2 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14333  (99.98%)
-  Different    : 3   (0.02%)
+  Matching     : 14331  (99.97%)
+  Different    : 5   (0.03%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.

@@ -79,8 +79,12 @@ export function sample(
       const bHi = innerStart + Math.floor(innerW / 3);
       const gLo = innerStart + Math.floor(innerW / 3);
       const gHi = innerStart + 2 * Math.floor(innerW / 3);
-      const rLo = innerStart + 2 * Math.floor(innerW / 3);
-      const rHi = innerEnd;
+      // R sub-pixel center at scale=8 is at col 6.67. Sample [5,7) was
+      // centered at col 5.5 — 1.17 cols left of the actual peak. Now that
+      // sub-pixel rectification reliably places the LCD R sub-pixel at the
+      // same column across the image, we can shift R sampling 1 col right.
+      const rLo = innerStart + 2 * Math.floor(innerW / 3) + (scale >= 8 ? 1 : 0);
+      const rHi = Math.min(scale, innerEnd + 1);
 
       let rSum = 0,
         gSum = 0,
