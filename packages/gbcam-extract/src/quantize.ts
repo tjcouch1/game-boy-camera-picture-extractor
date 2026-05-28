@@ -578,11 +578,11 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
               finalLabels[i] = dLG < dWH ? 2 : 3;
               flippedFromDg++;
             }
-          } else if ((lbl === 2 || lbl === 3) && b > dgMeanB - 10) {
+          } else if ((lbl === 2 || lbl === 3) && b > dgMeanB - 20) {
             // Pixel labeled warm but B is in the DG range — require RG
             // distance to also strongly indicate DG (much closer than warm)
             const dWarm = Math.min(dLG, dWH);
-            if (dDG < dWarm * 0.7) {
+            if (dDG < dWarm * 0.85) {
               finalLabels[i] = 1;
               flippedToDg++;
             }
