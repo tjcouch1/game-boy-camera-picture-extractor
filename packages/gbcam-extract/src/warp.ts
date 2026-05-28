@@ -82,20 +82,11 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   // b — Initial perspective warp
   let { warped: currentWarped, M: currentM } = initialWarp(bgr, corners, scale);
 
-  // c — Refine (pass 1)
-  {
+  // c — Perspective refinement passes (2 iterations is enough; a 3rd doesn't
+  // measurably converge further given polynomial-fit noise)
+  for (let pass = 1; pass <= 2; pass++) {
     const result = refineWarpWithMetrics(bgr, currentM, currentWarped, scale);
-    if (dbg) recordRefinementMetrics(dbg, 1, result.metrics);
-    currentM.delete();
-    currentWarped.delete();
-    currentM = result.M;
-    currentWarped = result.refined;
-  }
-
-  // c — Refine (pass 2)
-  {
-    const result = refineWarpWithMetrics(bgr, currentM, currentWarped, scale);
-    if (dbg) recordRefinementMetrics(dbg, 2, result.metrics);
+    if (dbg) recordRefinementMetrics(dbg, pass, result.metrics);
     currentM.delete();
     currentWarped.delete();
     currentM = result.M;
@@ -196,6 +187,7 @@ interface NonLinearResult {
   colShifts: number[]; // length = W, signed source-y adjustment for each col
   preResidual: { top: number; bottom: number; left: number; right: number };
   postPolyDelta: { top: number; bottom: number; left: number; right: number };
+  fitRmse: { top: number; bottom: number; left: number; right: number };
 }
 
 function recordNonLinearMetrics(dbg: DebugCollector, r: NonLinearResult): void {
@@ -204,7 +196,13 @@ function recordNonLinearMetrics(dbg: DebugCollector, r: NonLinearResult): void {
     `[warp] non-linear pre-remap residuals: ` +
       `top=${pre.top.toFixed(2)} bot=${pre.bottom.toFixed(2)} ` +
       `left=${pre.left.toFixed(2)} right=${pre.right.toFixed(2)}` +
-      (r.applied ? "" : "  (skipped — already aligned)"),
+      (r.applied ? "" : "  (SKIPPED — already aligned or noisy fit)"),
+  );
+  const fr = r.fitRmse;
+  dbg.log(
+    `[warp] non-linear fit RMSE: ` +
+      `top=${fr.top.toFixed(2)} bot=${fr.bottom.toFixed(2)} ` +
+      `left=${fr.left.toFixed(2)} right=${fr.right.toFixed(2)}`,
   );
   const post = r.postPolyDelta;
   dbg.log(
@@ -877,6 +875,79 @@ function robustPolyFit(points: Array<[number, number]>): Poly {
   return linFit;
 }
 
+/**
+ * Constrained quadratic fit: forces the polynomial to pass through two
+ * given endpoints, then fits the quadratic coefficient by minimising SSE
+ * on the remaining points.
+ *
+ * Mathematically: p(y) = line_TL_BL(y) + c·(y - y0)·(y - y1)
+ * where the linear part is fixed by the two endpoints.
+ *
+ * This is used so the polynomial border line agrees with the
+ * direct-localized corner detection at the corners — the non-linear remap
+ * then only corrects mid-edge curvature, never moves the corner.
+ */
+function constrainedQuadFit(
+  points: Array<[number, number]>,
+  x0: number, y0: number,
+  x1: number, y1: number,
+): Poly {
+  // Linear part: y = y0 + slope * (x - x0)
+  const denom = x1 - x0;
+  if (Math.abs(denom) < 1e-6) {
+    // Endpoints stacked — fall back to the average y
+    return { a: (y0 + y1) / 2, b: 0, c: 0, rmse: 0 };
+  }
+  const slope = (y1 - y0) / denom;
+  // q(x) = (x - x0)(x - x1) — zero at endpoints
+  // Solve c = Σ q(x_i) * r(x_i) / Σ q(x_i)^2
+  let num = 0;
+  let den = 0;
+  for (const [x, y] of points) {
+    const linPart = y0 + slope * (x - x0);
+    const r = y - linPart;
+    const q = (x - x0) * (x - x1);
+    num += q * r;
+    den += q * q;
+  }
+  const c = den > 1e-6 ? num / den : 0;
+  // Expand to a + b*x + c*x^2
+  // p(x) = y0 + slope*(x - x0) + c*(x - x0)*(x - x1)
+  //      = y0 - slope*x0 + c*x0*x1
+  //         + (slope - c*(x0 + x1)) * x
+  //         + c * x^2
+  const a = y0 - slope * x0 + c * x0 * x1;
+  const b = slope - c * (x0 + x1);
+  let sq = 0;
+  for (const [x, y] of points) sq += (y - (a + b * x + c * x * x)) ** 2;
+  const rmse = points.length > 0 ? Math.sqrt(sq / points.length) : 0;
+  return { a, b, c, rmse };
+}
+
+/**
+ * Like constrainedQuadFit but with model selection: only use the
+ * quadratic correction term when it reduces RMSE by ≥15% over the line
+ * through the endpoints. Otherwise the polynomial is exactly the line.
+ */
+function constrainedQuadFitWithSelection(
+  points: Array<[number, number]>,
+  x0: number, y0: number,
+  x1: number, y1: number,
+): Poly {
+  const cFit = constrainedQuadFit(points, x0, y0, x1, y1);
+  // Linear-only fit (c = 0)
+  const denom = x1 - x0;
+  if (Math.abs(denom) < 1e-6) return cFit;
+  const slope = (y1 - y0) / denom;
+  const lin: Poly = { a: y0 - slope * x0, b: slope, c: 0, rmse: 0 };
+  let sq = 0;
+  for (const [x, y] of points) sq += (y - (lin.a + lin.b * x)) ** 2;
+  lin.rmse = points.length > 0 ? Math.sqrt(sq / points.length) : 0;
+  if (lin.rmse <= 0.2) return lin;
+  if (cFit.rmse < lin.rmse * 0.85) return cFit;
+  return lin;
+}
+
 // ─── Build R-B channel (warm vs cool) ───
 
 function buildRBChannel(warped: any): any {
@@ -1173,7 +1244,14 @@ function refineWarpWithMetrics(
  * noise to a quadratic introduces sub-pixel jitter that hurts the cleaner
  * tests more than it helps the noisier ones.
  */
-const NON_LINEAR_REMAP_THRESHOLD = 1.0;
+const NON_LINEAR_REMAP_THRESHOLD = 0.8;
+/**
+ * Skip the non-linear remap if any edge's polynomial fit has RMSE above this
+ * value. A noisy fit (which happens when camera content right at the border
+ * resembles the DG border colour, e.g. zelda-poster-3's blue artwork) cannot
+ * be trusted to drive a sub-pixel correction.
+ */
+const NON_LINEAR_REMAP_MAX_RMSE = 1.5;
 
 function nonLinearRemap(
   bgrSrc: any,
@@ -1247,7 +1325,14 @@ function nonLinearRemap(
   const colShifts: number[] = new Array(W);
   for (let x = 0; x < W; x++) colShifts[x] = polyEval(topFit, x) - expTop;
 
-  if (maxDelta < NON_LINEAR_REMAP_THRESHOLD) {
+  const maxRmse = Math.max(topFit.rmse, botFit.rmse, leftFit.rmse, rightFit.rmse);
+  const fitRmse = {
+    top: Number(topFit.rmse.toFixed(3)),
+    bottom: Number(botFit.rmse.toFixed(3)),
+    left: Number(leftFit.rmse.toFixed(3)),
+    right: Number(rightFit.rmse.toFixed(3)),
+  };
+  if (maxDelta < NON_LINEAR_REMAP_THRESHOLD || maxRmse > NON_LINEAR_REMAP_MAX_RMSE) {
     return {
       remapped: empty,
       applied: false,
@@ -1261,6 +1346,7 @@ function nonLinearRemap(
         top: ROUND(postPolyDelta.top), bottom: ROUND(postPolyDelta.bottom),
         left: ROUND(postPolyDelta.left), right: ROUND(postPolyDelta.right),
       },
+      fitRmse,
     };
   }
 
@@ -1327,6 +1413,7 @@ function nonLinearRemap(
       top: ROUND(postPolyDelta.top), bottom: ROUND(postPolyDelta.bottom),
       left: ROUND(postPolyDelta.left), right: ROUND(postPolyDelta.right),
     },
+    fitRmse,
   };
 }
 

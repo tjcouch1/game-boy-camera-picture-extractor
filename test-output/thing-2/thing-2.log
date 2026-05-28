@@ -15,6 +15,7 @@ PIPELINE DIAGNOSTICS
   [warp] pass 2 poly fit RMSE: top=0.67 bot=0.41 left=0.63 right=0.47
   [warp] pass 2 sub-pixel gap width: left=25.38 right=24.69 top=24.06 bottom=18.82
   [warp] non-linear pre-remap residuals: top=0.08 bot=-0.03 left=-0.31 right=0.33
+  [warp] non-linear fit RMSE: top=0.67 bot=0.42 left=0.63 right=0.46
   [warp] non-linear shift magnitudes (max |Δ|): top=0.20 bot=0.15 left=0.54 right=2.00
   [warp] final residuals (post-remap, signed mean): top=-0.022 bot=-0.006 left=0.094 right=-0.004
   [correct] R: white samples kept=7333 (median 243.0, range 181–255)
