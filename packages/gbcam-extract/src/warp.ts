@@ -1628,10 +1628,15 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
     botOffsets[bx] = polyEval(botFit, bx);
   }
 
-  // Target = mean of TOP offsets (most reliable, less drift than bottom).
-  // This preserves the global sub-pixel convention used by the photo and only
-  // corrects the per-block residual drift.
-  const targetOffset = topOffsets.reduce((s, v) => s + v, 0) / nBlocks;
+  // Target = mean of top and bottom offsets across the image. This is the
+  // global sub-pixel convention. Shifts then represent deviations from this
+  // mean, fixing per-block lens-distortion drift.
+  let topSum = 0, botSum = 0;
+  for (let bx = 0; bx < nBlocks; bx++) {
+    topSum += topOffsets[bx];
+    botSum += botOffsets[bx];
+  }
+  const targetOffset = (topSum + botSum) / (2 * nBlocks);
 
   const shiftTop = new Array<number>(nBlocks);
   const shiftBot = new Array<number>(nBlocks);
