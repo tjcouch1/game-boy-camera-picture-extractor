@@ -1631,8 +1631,15 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
       maxShift: 0,
     };
   }
-  const topFit = robustPolyFit(topPts);
-  const botFit = robustPolyFit(botPts);
+  // Try a cubic fit and use it if it's significantly better than quadratic.
+  // With 160 sample points across the full screen width, cubic can pick up
+  // S-shaped lens distortion that quadratic cannot.
+  const topCubic = topPts.length >= 8 ? cubicFit(topPts) : null;
+  const botCubic = botPts.length >= 8 ? cubicFit(botPts) : null;
+  const topQuad = robustPolyFit(topPts);
+  const botQuad = robustPolyFit(botPts);
+  const topFit = topCubic && topCubic.rmse < topQuad.rmse * 0.6 ? topCubic : topQuad;
+  const botFit = botCubic && botCubic.rmse < botQuad.rmse * 0.6 ? botCubic : botQuad;
 
   const topOffsets = new Array<number>(nBlocks);
   const botOffsets = new Array<number>(nBlocks);
