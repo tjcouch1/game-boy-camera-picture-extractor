@@ -582,7 +582,10 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             // Pixel labeled warm but B is in the DG range — require RG
             // distance to also strongly indicate DG (much closer than warm)
             const dWarm = Math.min(dLG, dWH);
-            if (dDG < dWarm * 0.85) {
+            // Adaptive ratio: higher B means more confident in DG (palette
+            // B=255), so we allow flipping with less RG distance advantage.
+            const ratio = b >= dgMeanB ? 0.95 : 0.85;
+            if (dDG < dWarm * ratio) {
               finalLabels[i] = 1;
               flippedToDg++;
             }
