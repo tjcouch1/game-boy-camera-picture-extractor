@@ -596,8 +596,100 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             }
           }
         }
+        // ── Spatial passes: detect warm pixels that should be DG.
+        // Rule A: warm pixel in warm region (≥3 warm incl. ≥1 LG) with R far
+        //         below avg warm neighbour R — DG dot embedded in warm.
+        //         Guards: R<lgR-25, B>warmMeanB+sep*0.3, |G-dgG|≤15.
+        const lgRCenter = globalCentersPO[2 * 2];
+        const bSpatialThresh = warmMeanB + sep * 0.3;
+        let spatialFlipped = 0;
+        for (let i = 0; i < N; i++) {
+          const lbl = finalLabels[i];
+          if (lbl !== 2 && lbl !== 3) continue;
+          const r = flatRG[i * 2];
+          const g = flatRG[i * 2 + 1];
+          const b = input.data[i * 4 + 2];
+          if (r >= lgRCenter - 25) continue;
+          if (b < bSpatialThresh) continue;
+          if (Math.abs(g - dgG) > 15) continue;
+          const x = i % CAM_W;
+          const y = Math.floor(i / CAM_W);
+          let warmN = 0;
+          let warmRsum = 0;
+          let hasLgNeighbor = false;
+          for (const [dx, dy] of [
+            [-1, 0],
+            [1, 0],
+            [0, -1],
+            [0, 1],
+          ]) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+            const ni = ny * CAM_W + nx;
+            const nl = finalLabels[ni];
+            if (nl === 2 || nl === 3) {
+              warmN++;
+              warmRsum += flatRG[ni * 2];
+              if (nl === 2) hasLgNeighbor = true;
+            }
+          }
+          if (warmN >= 3 && hasLgNeighbor) {
+            const warmAvgR = warmRsum / warmN;
+            if (r < warmAvgR - 25) {
+              finalLabels[i] = 1;
+              spatialFlipped++;
+            }
+          }
+        }
+        // Rule B: warm pixel with warmN==0 and ≥1 DG neighbour whose RGB is
+        // very close (Manhattan ≤ 25). This catches pixels surrounded by BK
+        // and DG whose RGB matches a DG neighbour but 2D RG put them on the
+        // LG side. No |G-dgG| guard so high-G "DG outline next to DG fill"
+        // cases pass; the strict Manhattan distance ensures the pixel is
+        // genuinely the same colour as its DG neighbour.
+        for (let i = 0; i < N; i++) {
+          const lbl = finalLabels[i];
+          if (lbl !== 2 && lbl !== 3) continue;
+          const r = flatRG[i * 2];
+          const g = flatRG[i * 2 + 1];
+          const b = input.data[i * 4 + 2];
+          if (r >= lgRCenter - 25) continue;
+          if (b < bSpatialThresh) continue;
+          const x = i % CAM_W;
+          const y = Math.floor(i / CAM_W);
+          let warmNb = 0;
+          let dgNb = 0;
+          let dgNearestManhattan = Infinity;
+          for (const [dx, dy] of [
+            [-1, 0],
+            [1, 0],
+            [0, -1],
+            [0, 1],
+          ]) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+            const ni = ny * CAM_W + nx;
+            const nl = finalLabels[ni];
+            if (nl === 2 || nl === 3) {
+              warmNb++;
+            } else if (nl === 1) {
+              dgNb++;
+              const nr = flatRG[ni * 2];
+              const ng = flatRG[ni * 2 + 1];
+              const nb = input.data[ni * 4 + 2];
+              const d = Math.abs(r - nr) + Math.abs(g - ng) + Math.abs(b - nb);
+              if (d < dgNearestManhattan) dgNearestManhattan = d;
+            }
+          }
+          if (warmNb === 0 && dgNb >= 1 && dgNearestManhattan <= 22) {
+            finalLabels[i] = 1;
+            spatialFlipped++;
+          }
+        }
         if (dbg) {
-          dbg.log(`[quantize] B reclassify: dgMeanB=${dgMeanB.toFixed(1)} warmMeanB=${warmMeanB.toFixed(1)} flipDg->warm=${flippedFromDg} flipWarm->dg=${flippedToDg}`);
+          dbg.log(`[quantize] B reclassify: dgMeanB=${dgMeanB.toFixed(1)} warmMeanB=${warmMeanB.toFixed(1)} flipDg->warm=${flippedFromDg} flipWarm->dg=${flippedToDg} spatial=${spatialFlipped}`);
         }
       }
     }
