@@ -686,6 +686,15 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
           if (warmNb === 0 && dgNb >= 1 && dgNearestManhattan <= 22) {
             finalLabels[i] = 1;
             spatialFlipped++;
+            continue;
+          }
+          // Rule C: warm pixel with no warm and no DG neighbours (all BK)
+          // but strongly DG-leaning B value (within 15 of dgMeanB). Catches
+          // isolated DG pixels in BK regions whose RGB is ambiguous in 2D
+          // RG (intermediate R, LG-like G) but where high B confirms DG.
+          if (warmNb === 0 && dgNb === 0 && b > dgMeanB - 15) {
+            finalLabels[i] = 1;
+            spatialFlipped++;
           }
         }
         if (dbg) {
