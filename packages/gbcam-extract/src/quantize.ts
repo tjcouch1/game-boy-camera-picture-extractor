@@ -601,7 +601,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
         //  - R well below LG cluster center R
         //  - G near DG cluster G (within ±15)
         //  - B above warmMeanB + sep*0.3 (DG-leaning)
-        //  - ≥3 warm neighbors with their avg R > pixel R + 25
+        //  - ≥3 warm neighbors incl. ≥1 LG, R ≥25 below avg warm R.
         const lgRCenter = globalCentersPO[2 * 2];
         const bSpatialThresh = warmMeanB + sep * 0.3;
         let spatialFlipped = 0;
@@ -637,8 +637,6 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             }
           }
           if (warmN < 3) continue;
-          // Require ≥1 LG neighbor — DG dots embedded in pure-WH regions are
-          // too ambiguous (zp3 / park-1 over-flipped without this guard).
           if (!hasLgNeighbor) continue;
           const warmAvgR = warmRsum / warmN;
           if (r < warmAvgR - 25) {
