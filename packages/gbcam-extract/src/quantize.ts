@@ -20,8 +20,23 @@ import {
   renderRGScatter,
   upscale,
 } from "./debug.js";
+import {
+  buildFrameClassifier,
+  classifyByFrame,
+  cameraToFrameCoords,
+} from "./frame-classify.js";
 
 export interface QuantizeOptions {
+  /**
+   * Optional warped/corrected color image at (SCREEN_W*scale, SCREEN_H*scale).
+   * When provided, quantize uses frame-aware classification: it samples the
+   * frame dashes (which contain all four palette colors) to fit per-color
+   * surfaces for R/G/B, then classifies each camera pixel by nearest
+   * predicted color at its location. Falls back to 2D RG k-means when not
+   * provided.
+   */
+  corrected?: GBImageData;
+  scale?: number;
   debug?: DebugCollector;
 }
 
@@ -278,10 +293,10 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
       `Expected ${CAM_W}x${CAM_H}, got ${input.width}x${input.height}`,
     );
   }
+  const dbg = options?.debug;
 
   const N = CAM_W * CAM_H;
   const targetsRG = PALETTE_RG;
-  const dbg = options?.debug;
 
   // Extract RG values (Nx2 float32) and full RGB (Nx3)
   const flatRG = new Float32Array(N * 2);
@@ -291,7 +306,31 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
   }
 
   // ── 1. Global k-means ──
-  const global = runKmeans(flatRG, N, INIT_CENTERS_RG);
+  // Seed with frame-anchor means when a corrected image is available — these
+  // are anchored to actual palette samples in the frame's dashes rather than
+  // an arbitrary warm initialization.
+  let initCenters: [number, number][] | Float32Array = INIT_CENTERS_RG;
+  if (options?.corrected) {
+    const fcls = buildFrameClassifier(options.corrected, options.scale ?? 8, 0);
+    initCenters = new Float32Array([
+      fcls.meanR[0], fcls.meanG[0],
+      fcls.meanR[1], fcls.meanG[1],
+      fcls.meanR[2], fcls.meanG[2],
+      fcls.meanR[3], fcls.meanG[3],
+    ]);
+    if (dbg) {
+      dbg.log(
+        `[quantize] frame anchor init: ` +
+          ["BK", "DG", "LG", "WH"]
+            .map(
+              (n, c) =>
+                `${n}=(${fcls.meanR[c].toFixed(0)},${fcls.meanG[c].toFixed(0)})`,
+            )
+            .join("  "),
+      );
+    }
+  }
+  const global = runKmeans(flatRG, N, initCenters);
   const clusterToPalette = bestClusterToPalette(global.centers, targetsRG);
 
   // Map cluster labels to palette indices
@@ -351,6 +390,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
       globalCentersPO[pi * 2 + 1] = targetsRG[pi][1];
     }
   }
+
 
   // ── 2. Strip k-means refinement ──
   const stripWidth = 32;
@@ -707,4 +747,148 @@ function countLabels(labels: Int32Array | Uint8Array): [number, number, number, 
     if (v >= 0 && v < 4) c[v]++;
   }
   return c;
+}
+
+/**
+ * Frame-aware quantize: uses palette anchors extracted from the frame to fit
+ * per-color RGB surfaces, then classifies each camera pixel by nearest
+ * predicted color at its frame location.
+ */
+function frameAwareQuantize(
+  input: GBImageData,
+  warped: GBImageData,
+  scale: number,
+  dbg?: DebugCollector,
+): GBImageData {
+  const N = CAM_W * CAM_H;
+  // Degree-2 surfaces for well-sampled colours (BK, DG, WH). LG is too sparse
+  // (only ~135 dash-edge anchors) and its polynomial extrapolates wildly.
+  // Instead, predict LG by combining other surfaces, mirroring how palette
+  // targets relate: LG.R == WH.R, LG.G == DG.G, LG.B ≈ WH.B - (165 - 148).
+  // Degree-2 polynomial surfaces for all 4 colors (clamped to sample range).
+  // The WH surface is the gradient reference (WH has the most anchors,
+  // spread across the entire frame, so its surface tracks the frontlight
+  // gradient well). We use it to per-pixel-shift the observed RGB into a
+  // gradient-normalised space, then classify by global per-color means.
+  const cls = buildFrameClassifier(warped, scale, 2);
+  const W = cls.W;
+  // Global means per color
+  const meanR = cls.meanR;
+  const meanG = cls.meanG;
+  const meanB = cls.meanB;
+  // Mean of WH surface = global WH mean (its center value).
+  let whRsum = 0, whGsum = 0, whBsum = 0;
+  const surfN = cls.R[3].length;
+  for (let i = 0; i < surfN; i++) {
+    whRsum += cls.R[3][i];
+    whGsum += cls.G[3][i];
+    whBsum += cls.B[3][i];
+  }
+  const whGlobalR = whRsum / surfN;
+  const whGlobalG = whGsum / surfN;
+  const whGlobalB = whBsum / surfN;
+
+  const labels = new Uint8Array(N);
+  for (let cy = 0; cy < CAM_H; cy++) {
+    for (let cx = 0; cx < CAM_W; cx++) {
+      const i = cy * CAM_W + cx;
+      const R = input.data[i * 4];
+      const G = input.data[i * 4 + 1];
+      const B = input.data[i * 4 + 2];
+      const { frameY, frameX } = cameraToFrameCoords(cy, cx);
+      const idx = frameY * W + frameX;
+      // Per-position WH gradient shift (so observed values land in the
+      // global mean's frame of reference).
+      const shiftR = whGlobalR - cls.R[3][idx];
+      const shiftG = whGlobalG - cls.G[3][idx];
+      const shiftB = whGlobalB - cls.B[3][idx];
+      const adjR = R + shiftR;
+      const adjG = G + shiftG;
+      const adjB = B + shiftB;
+      let bestC = 0;
+      let bestD = Infinity;
+      for (let c = 0; c < 4; c++) {
+        const dR = adjR - meanR[c];
+        const dG = adjG - meanG[c];
+        const dB = adjB - meanB[c];
+        const d = dR * dR + dG * dG + dB * dB;
+        if (d < bestD) {
+          bestD = d;
+          bestC = c;
+        }
+      }
+      labels[i] = bestC;
+    }
+  }
+  const output = createGBImageData(CAM_W, CAM_H);
+  for (let i = 0; i < N; i++) {
+    const v = GB_COLORS[labels[i]];
+    const j = i * 4;
+    output.data[j] = v;
+    output.data[j + 1] = v;
+    output.data[j + 2] = v;
+    output.data[j + 3] = 255;
+  }
+
+  if (dbg) {
+    const counts = countLabels(labels);
+    dbg.log(
+      `[quantize] frame-aware: anchor samples ` +
+        `BK=${cls.sampleCounts[0]} DG=${cls.sampleCounts[1]} ` +
+        `LG=${cls.sampleCounts[2]} WH=${cls.sampleCounts[3]}`,
+    );
+    dbg.log(
+      `[quantize] frame-aware means: ` +
+        ["BK", "DG", "LG", "WH"]
+          .map(
+            (n, c) =>
+              `${n}=(R${cls.meanR[c].toFixed(0)},G${cls.meanG[c].toFixed(0)},B${cls.meanB[c].toFixed(0)})`,
+          )
+          .join("  "),
+    );
+    // Predicted RGB at three frame positions (TL, center, BR of camera region)
+    const PROBES = [
+      { name: "TL", fy: 20, fx: 20 },
+      { name: "MID", fy: 72, fx: 80 },
+      { name: "BR", fy: 124, fx: 140 },
+    ];
+    for (const p of PROBES) {
+      const idx = p.fy * cls.W + p.fx;
+      const txt = ["BK", "DG", "LG", "WH"]
+        .map(
+          (n, c) =>
+            `${n}=(R${cls.R[c][idx].toFixed(0)},G${cls.G[c][idx].toFixed(0)},B${cls.B[c][idx].toFixed(0)})`,
+        )
+        .join(" ");
+      dbg.log(`[quantize] frame-aware probe ${p.name}@(${p.fy},${p.fx}): ${txt}`);
+    }
+    dbg.log(
+      `[quantize] frame-aware final: ` +
+        ["BK", "DG", "LG", "WH"]
+          .map(
+            (n, i) =>
+              `${n}=${counts[i]} (${((100 * counts[i]) / N).toFixed(1)}%)`,
+          )
+          .join("  "),
+    );
+    dbg.addImage("quantize_a_gray_8x", upscale(output, 8));
+    const rgbOut = createGBImageData(CAM_W, CAM_H);
+    const PALETTE_RGB: [number, number, number][] = [
+      [0, 0, 0],
+      [148, 148, 255],
+      [255, 148, 148],
+      [255, 255, 165],
+    ];
+    for (let i = 0; i < N; i++) {
+      const c = PALETTE_RGB[labels[i]];
+      const j = i * 4;
+      rgbOut.data[j] = c[0];
+      rgbOut.data[j + 1] = c[1];
+      rgbOut.data[j + 2] = c[2];
+      rgbOut.data[j + 3] = 255;
+    }
+    dbg.addImage("quantize_b_rgb_8x", upscale(rgbOut, 8));
+  }
+
+  return output;
 }
