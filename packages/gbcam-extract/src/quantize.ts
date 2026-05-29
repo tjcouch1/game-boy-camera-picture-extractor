@@ -695,6 +695,83 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
           if (warmNb === 0 && dgNb === 0 && b > dgMeanB - 15) {
             finalLabels[i] = 1;
             spatialFlipped++;
+            continue;
+          }
+          // Rule D: warm pixel at DG/LG boundary (≥1 DG and ≥1 LG neighbour).
+          // Compare pixel R,G,B to averaged DG-vs-LG-neighbour R/G/B.
+          // Requires LG-labeled neighbour specifically — when the warm
+          // neighbours are all WH, their high G inflates warm-avg-G and
+          // makes G strong-vote DG too easily (false positives on bright
+          // boundary LG pixels).
+          let lgNb2 = 0;
+          let lgRsum = 0, lgGsum = 0, lgBsum = 0;
+          for (const [dx, dy] of [
+            [-1, 0],
+            [1, 0],
+            [0, -1],
+            [0, 1],
+          ]) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+            const ni = ny * CAM_W + nx;
+            if (finalLabels[ni] === 2) {
+              lgNb2++;
+              lgRsum += flatRG[ni * 2];
+              lgGsum += flatRG[ni * 2 + 1];
+              lgBsum += input.data[ni * 4 + 2];
+            }
+          }
+          if (dgNb >= 1 && lgNb2 >= 1) {
+            let dgRsum = 0, dgGsum = 0, dgBsum2 = 0;
+            for (const [dx, dy] of [
+              [-1, 0],
+              [1, 0],
+              [0, -1],
+              [0, 1],
+            ]) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+              const ni = ny * CAM_W + nx;
+              if (finalLabels[ni] === 1) {
+                dgRsum += flatRG[ni * 2];
+                dgGsum += flatRG[ni * 2 + 1];
+                dgBsum2 += input.data[ni * 4 + 2];
+              }
+            }
+            const dgAvgR = dgRsum / dgNb;
+            const dgAvgG = dgGsum / dgNb;
+            const dgAvgB = dgBsum2 / dgNb;
+            const warmAvgR2 = lgRsum / lgNb2;
+            const warmAvgG = lgGsum / lgNb2;
+            const warmAvgB = lgBsum / lgNb2;
+            // Strong vote: pixel ≥2× closer to DG-avg than warm-avg on that
+            // channel. Plain "closer" is too easy for borderline LG pixels
+            // that have G/B slightly closer to DG; requiring strength means
+            // the channel is unambiguously DG-leaning.
+            let strongDgVotes = 0;
+            let closerDgVotes = 0;
+            const dR = Math.abs(r - dgAvgR);
+            const wR = Math.abs(r - warmAvgR2);
+            const dG2 = Math.abs(g - dgAvgG);
+            const wG = Math.abs(g - warmAvgG);
+            const dB2 = Math.abs(b - dgAvgB);
+            const wB = Math.abs(b - warmAvgB);
+            if (dR * 2 <= wR) strongDgVotes++;
+            if (dG2 * 2 <= wG) strongDgVotes++;
+            if (dB2 * 2 <= wB) strongDgVotes++;
+            // "Closer to DG" requires a meaningful margin (≥20%) — strict
+            // closer-than would let near-ties (e.g. G=247 vs DG-avg-G=150
+            // and LG-avg-G=148 where the pixel is clearly WH) vote DG.
+            if (dR * 1.2 < wR) closerDgVotes++;
+            if (dG2 * 1.2 < wG) closerDgVotes++;
+            if (dB2 * 1.2 < wB) closerDgVotes++;
+            // Flip if either two strong votes OR one strong + two closer.
+            if (strongDgVotes >= 2 || (strongDgVotes >= 1 && closerDgVotes >= 2)) {
+              finalLabels[i] = 1;
+              spatialFlipped++;
+            }
           }
         }
         if (dbg) {
