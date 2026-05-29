@@ -563,7 +563,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
         // DG and warm B distributions overlap (e.g., bathhouse-1, where
         // dgMeanB-30 > 180) while still catching warm-but-DG-labeled pixels
         // in tests with dim DG.
-        const bDgLowThresh = Math.max(175, Math.min(dgMeanB - 30, 180));
+        const bDgLowThresh = Math.max(195, Math.min(dgMeanB - 30, 180));
         // Upper threshold: pixels currently warm with B above this look DG
         const bWarmHiThresh = warmMeanB + sep * 0.6;
         let flippedFromDg = 0;
@@ -589,8 +589,6 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             // Pixel labeled warm but B is in the DG range — require RG
             // distance to also strongly indicate DG (much closer than warm)
             const dWarm = Math.min(dLG, dWH);
-            // Adaptive ratio: higher B means more confident in DG (palette
-            // B=255), so we allow flipping with less RG distance advantage.
             const ratio = b >= dgMeanB ? 0.95 : 0.85;
             if (dDG < dWarm * ratio) {
               finalLabels[i] = 1;
