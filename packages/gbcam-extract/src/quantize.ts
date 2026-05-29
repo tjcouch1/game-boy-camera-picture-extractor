@@ -596,8 +596,58 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             }
           }
         }
+        // ── Spatial pass: warm pixel with R much lower than warm neighbors
+        // is likely a DG dot in a warm region. Requires:
+        //  - R well below LG cluster center R
+        //  - G near DG cluster G (within ±15)
+        //  - B above warmMeanB + sep*0.3 (DG-leaning)
+        //  - ≥3 warm neighbors with their avg R > pixel R + 25
+        const lgRCenter = globalCentersPO[2 * 2];
+        const bSpatialThresh = warmMeanB + sep * 0.3;
+        let spatialFlipped = 0;
+        for (let i = 0; i < N; i++) {
+          const lbl = finalLabels[i];
+          if (lbl !== 2 && lbl !== 3) continue;
+          const r = flatRG[i * 2];
+          const g = flatRG[i * 2 + 1];
+          const b = input.data[i * 4 + 2];
+          if (r >= lgRCenter - 25) continue;
+          if (b < bSpatialThresh) continue;
+          if (Math.abs(g - dgG) > 15) continue;
+          const x = i % CAM_W;
+          const y = Math.floor(i / CAM_W);
+          let warmN = 0;
+          let warmRsum = 0;
+          let hasLgNeighbor = false;
+          for (const [dx, dy] of [
+            [-1, 0],
+            [1, 0],
+            [0, -1],
+            [0, 1],
+          ]) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+            const ni = ny * CAM_W + nx;
+            const nl = finalLabels[ni];
+            if (nl === 2 || nl === 3) {
+              warmN++;
+              warmRsum += flatRG[ni * 2];
+              if (nl === 2) hasLgNeighbor = true;
+            }
+          }
+          if (warmN < 3) continue;
+          // Require ≥1 LG neighbor — DG dots embedded in pure-WH regions are
+          // too ambiguous (zp3 / park-1 over-flipped without this guard).
+          if (!hasLgNeighbor) continue;
+          const warmAvgR = warmRsum / warmN;
+          if (r < warmAvgR - 25) {
+            finalLabels[i] = 1;
+            spatialFlipped++;
+          }
+        }
         if (dbg) {
-          dbg.log(`[quantize] B reclassify: dgMeanB=${dgMeanB.toFixed(1)} warmMeanB=${warmMeanB.toFixed(1)} flipDg->warm=${flippedFromDg} flipWarm->dg=${flippedToDg}`);
+          dbg.log(`[quantize] B reclassify: dgMeanB=${dgMeanB.toFixed(1)} warmMeanB=${warmMeanB.toFixed(1)} flipDg->warm=${flippedFromDg} flipWarm->dg=${flippedToDg} spatial=${spatialFlipped}`);
         }
       }
     }
