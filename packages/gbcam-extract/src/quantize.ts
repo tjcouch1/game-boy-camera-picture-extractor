@@ -803,6 +803,46 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             }
           }
         }
+        // Rule G: WH→LG refinement near the G-valley. WH-labeled pixels with
+        // G just above the valley and R below the WH cluster R likely belong
+        // to LG — they sat on the WH side of the G threshold only because of
+        // G-channel bleed from a neighbouring WH region. Requires the WH
+        // neighbour avg R to also be higher than the pixel's R.
+        if (valleyThreshold !== null && whClusterIdx >= 0) {
+          const whR = globalCentersPO[3 * 2];
+          for (let i = 0; i < N; i++) {
+            if (finalLabels[i] !== 3) continue;
+            const r = flatRG[i * 2];
+            const g = flatRG[i * 2 + 1];
+            // Tight G band: from 5 below valley to 10 above. Pixels far
+            // above the valley are confidently WH and shouldn't be touched.
+            if (g < valleyThreshold - 5 || g > valleyThreshold + 10) continue;
+            if (r >= whR - 10) continue;
+            const x = i % CAM_W;
+            const y = Math.floor(i / CAM_W);
+            let whNeigh = 0;
+            let whRsum2 = 0;
+            for (const [dx, dy] of [
+              [-1, 0],
+              [1, 0],
+              [0, -1],
+              [0, 1],
+            ]) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+              const ni = ny * CAM_W + nx;
+              if (finalLabels[ni] === 3) {
+                whNeigh++;
+                whRsum2 += flatRG[ni * 2];
+              }
+            }
+            if (whNeigh >= 2 && whRsum2 / whNeigh > r + 3) {
+              finalLabels[i] = 2;
+              spatialFlipped++;
+            }
+          }
+        }
         if (dbg) {
           dbg.log(`[quantize] B reclassify: dgMeanB=${dgMeanB.toFixed(1)} warmMeanB=${warmMeanB.toFixed(1)} flipDg->warm=${flippedFromDg} flipWarm->dg=${flippedToDg} spatial=${spatialFlipped}`);
         }
