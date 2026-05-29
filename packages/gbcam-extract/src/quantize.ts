@@ -58,6 +58,7 @@ const INIT_CENTERS_RG: [number, number][] = [
   [250, 250],
 ];
 
+
 // ─── Helpers ───
 
 /** Simple 1D Gaussian filter with reflected boundary. */

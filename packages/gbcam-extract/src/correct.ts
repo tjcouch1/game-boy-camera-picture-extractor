@@ -131,17 +131,11 @@ export function correct(
   let darkSurfaceG = buildDarkSurface(leftG, rightG, topG, botG, H, W, scale, darkSmooth);
   let correctedG = applyCorrectionChannel(chG, whiteSurfaceG, darkSurfaceG, W, H, 255, 148);
 
-  // B channel: 3-anchor piecewise-linear correction (BK, WH, DG samples)
-  // with DG target lowered to 220 (instead of palette 255) so camera-area
-  // DG pixels — which have higher observed B than the frame anchors due to
-  // less PSF bleed in multi-pixel DG regions — don't saturate the high end.
-  const { ys: bkYs, xs: bkXs, vs: bkVsB } = collectFrameColorSamples(chB, scale, 0);
-  const { ys: whYsB, xs: whXsB, vs: whVsB } = collectFrameColorSamples(chB, scale, 3);
-  const { ys: dgYsB, xs: dgXsB, vs: dgVsB } = collectFrameColorSamples(chB, scale, 1);
-  const bkBSurface = fitBivariateSurface(bkYs, bkXs, bkVsB, H, W, polyDegree);
-  const whBSurface = fitBivariateSurface(whYsB, whXsB, whVsB, H, W, polyDegree);
-  const dgBSurface = fitBivariateSurface(dgYsB, dgXsB, dgVsB, H, W, polyDegree);
-  const correctedB = applyThreeAnchorB(chB, bkBSurface, whBSurface, dgBSurface, W, H);
+  // B channel: kept raw (downstream B reclassify uses empirical means
+  // computed from current labels). Earlier 3-anchor piecewise-linear
+  // attempts collapsed the camera-area B discriminator at saturation; the
+  // raw range gives the existing reclassify what it expects.
+  const correctedB = new Float32Array(chB);
 
   if (dbg) {
     dbg.log(
