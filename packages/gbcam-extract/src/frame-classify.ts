@@ -135,6 +135,43 @@ function samplePixelBlock(
   };
 }
 
+export interface FrameAnchor {
+  y: number;
+  x: number;
+  c: number;
+  R: number;
+  G: number;
+  B: number;
+}
+
+/**
+ * Collect raw per-color anchor samples (no surface fit). Used by k-NN.
+ */
+export function collectFrameAnchors(
+  warped: GBImageData,
+  scale: number = 8,
+): FrameAnchor[] {
+  if (
+    warped.width !== SCREEN_W * scale ||
+    warped.height !== SCREEN_H * scale
+  ) {
+    throw new Error(
+      `Unexpected warped size ${warped.width}x${warped.height}; ` +
+        `expected ${SCREEN_W * scale}x${SCREEN_H * scale} (scale=${scale})`,
+    );
+  }
+  const anchors: FrameAnchor[] = [];
+  for (let fy = 0; fy < FRAME_MASK_H; fy++) {
+    for (let fx = 0; fx < FRAME_MASK_W; fx++) {
+      const c = FRAME_MASK[fy * FRAME_MASK_W + fx];
+      if (c >= 4) continue;
+      const { R, G, B } = samplePixelBlock(warped, scale, fy, fx);
+      anchors.push({ y: fy, x: fx, c, R, G, B });
+    }
+  }
+  return anchors;
+}
+
 /**
  * Build a frame-aware classifier by sampling the corrected image at every
  * frame-mask pixel and fitting per-colour, per-channel polynomial surfaces.

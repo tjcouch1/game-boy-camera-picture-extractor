@@ -24,6 +24,7 @@ import {
   buildFrameClassifier,
   classifyByFrame,
   cameraToFrameCoords,
+  collectFrameAnchors,
 } from "./frame-classify.js";
 
 export interface QuantizeOptions {
@@ -390,6 +391,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
       globalCentersPO[pi * 2 + 1] = targetsRG[pi][1];
     }
   }
+
 
 
   // ── 2. Strip k-means refinement ──
@@ -761,34 +763,16 @@ function frameAwareQuantize(
   dbg?: DebugCollector,
 ): GBImageData {
   const N = CAM_W * CAM_H;
-  // Degree-2 surfaces for well-sampled colours (BK, DG, WH). LG is too sparse
-  // (only ~135 dash-edge anchors) and its polynomial extrapolates wildly.
-  // Instead, predict LG by combining other surfaces, mirroring how palette
-  // targets relate: LG.R == WH.R, LG.G == DG.G, LG.B ≈ WH.B - (165 - 148).
-  // Degree-2 polynomial surfaces for all 4 colors (clamped to sample range).
-  // The WH surface is the gradient reference (WH has the most anchors,
-  // spread across the entire frame, so its surface tracks the frontlight
-  // gradient well). We use it to per-pixel-shift the observed RGB into a
-  // gradient-normalised space, then classify by global per-color means.
+  // k-NN in (y, x, R, G, B) space against all frame anchors. For each camera
+  // pixel, find K nearest anchors and vote (weighted by 1/(1+d)) for the
+  // colour. Position similarity uses nearby-gradient anchors; colour
+  // similarity uses similar-RGB anchors. Avoids polynomial extrapolation
+  // because predictions are always over actual observed samples.
+  const anchors = collectFrameAnchors(warped, scale);
   const cls = buildFrameClassifier(warped, scale, 2);
-  const W = cls.W;
-  // Global means per color
-  const meanR = cls.meanR;
-  const meanG = cls.meanG;
-  const meanB = cls.meanB;
-  // Mean of WH surface = global WH mean (its center value).
-  let whRsum = 0, whGsum = 0, whBsum = 0;
-  const surfN = cls.R[3].length;
-  for (let i = 0; i < surfN; i++) {
-    whRsum += cls.R[3][i];
-    whGsum += cls.G[3][i];
-    whBsum += cls.B[3][i];
-  }
-  const whGlobalR = whRsum / surfN;
-  const whGlobalG = whGsum / surfN;
-  const whGlobalB = whBsum / surfN;
-
   const labels = new Uint8Array(N);
+  const SPATIAL_W = 0.05;
+  const K = 5;
   for (let cy = 0; cy < CAM_H; cy++) {
     for (let cx = 0; cx < CAM_W; cx++) {
       const i = cy * CAM_W + cx;
@@ -796,28 +780,44 @@ function frameAwareQuantize(
       const G = input.data[i * 4 + 1];
       const B = input.data[i * 4 + 2];
       const { frameY, frameX } = cameraToFrameCoords(cy, cx);
-      const idx = frameY * W + frameX;
-      // Per-position WH gradient shift (so observed values land in the
-      // global mean's frame of reference).
-      const shiftR = whGlobalR - cls.R[3][idx];
-      const shiftG = whGlobalG - cls.G[3][idx];
-      const shiftB = whGlobalB - cls.B[3][idx];
-      const adjR = R + shiftR;
-      const adjG = G + shiftG;
-      const adjB = B + shiftB;
-      let bestC = 0;
-      let bestD = Infinity;
-      for (let c = 0; c < 4; c++) {
-        const dR = adjR - meanR[c];
-        const dG = adjG - meanG[c];
-        const dB = adjB - meanB[c];
-        const d = dR * dR + dG * dG + dB * dB;
-        if (d < bestD) {
-          bestD = d;
-          bestC = c;
+      const bestD = new Array<number>(K).fill(Infinity);
+      const bestC = new Array<number>(K).fill(-1);
+      for (let ai = 0; ai < anchors.length; ai++) {
+        const a = anchors[ai];
+        const dy = frameY - a.y;
+        const dx = frameX - a.x;
+        const dR = R - a.R;
+        const dG = G - a.G;
+        const dB = B - a.B;
+        const d =
+          SPATIAL_W * (dy * dy + dx * dx) + dR * dR + dG * dG + dB * dB;
+        for (let k = 0; k < K; k++) {
+          if (d < bestD[k]) {
+            for (let m = K - 1; m > k; m--) {
+              bestD[m] = bestD[m - 1];
+              bestC[m] = bestC[m - 1];
+            }
+            bestD[k] = d;
+            bestC[k] = a.c;
+            break;
+          }
         }
       }
-      labels[i] = bestC;
+      const votes = [0, 0, 0, 0];
+      for (let k = 0; k < K; k++) {
+        if (bestC[k] < 0) continue;
+        const w = 1 / (1 + bestD[k]);
+        votes[bestC[k]] += w;
+      }
+      let bestColor = 0;
+      let bestVote = -1;
+      for (let c = 0; c < 4; c++) {
+        if (votes[c] > bestVote) {
+          bestVote = votes[c];
+          bestColor = c;
+        }
+      }
+      labels[i] = bestColor;
     }
   }
   const output = createGBImageData(CAM_W, CAM_H);
