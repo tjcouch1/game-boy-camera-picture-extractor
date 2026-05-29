@@ -138,6 +138,62 @@ function bestClusterToPalette(
 }
 
 /**
+ * Run cv.kmeans on an Nx3 float32 (R, G, B*scale) sample set with warm
+ * initialisation. Returns { labels: Int32Array(N), centers: Float32Array(4*3) }.
+ * The caller scales B before passing in to control how much B affects the
+ * Euclidean distance vs R/G.
+ */
+function runKmeans3D(
+  samplesRGB: Float32Array,
+  n: number,
+  initCenters: Float32Array,
+): { labels: Int32Array; centers: Float32Array } {
+  const cv = getCV();
+  return withMats((track) => {
+    const samplesMat = track(new cv.Mat(n, 3, cv.CV_32F));
+    samplesMat.data32F.set(samplesRGB);
+    const labelsMat = track(new cv.Mat(n, 1, cv.CV_32S));
+    const centersMat = track(new cv.Mat(4, 3, cv.CV_32F));
+    for (let i = 0; i < n; i++) {
+      const r = samplesRGB[i * 3];
+      const g = samplesRGB[i * 3 + 1];
+      const b = samplesRGB[i * 3 + 2];
+      let bestK = 0;
+      let bestD = Infinity;
+      for (let k = 0; k < 4; k++) {
+        const cr = initCenters[k * 3];
+        const cg = initCenters[k * 3 + 1];
+        const cb = initCenters[k * 3 + 2];
+        const d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          bestK = k;
+        }
+      }
+      labelsMat.data32S[i] = bestK;
+    }
+    const criteria = new cv.TermCriteria(
+      cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER,
+      300,
+      0.1,
+    );
+    cv.kmeans(
+      samplesMat,
+      4,
+      labelsMat,
+      criteria,
+      1,
+      cv.KMEANS_USE_INITIAL_LABELS,
+      centersMat,
+    );
+    return {
+      labels: new Int32Array(labelsMat.data32S),
+      centers: new Float32Array(centersMat.data32F),
+    };
+  });
+}
+
+/**
  * Run cv.kmeans on an Nx2 float32 sample set with warm initialisation.
  * Returns { labels: Int32Array(N), centers: Float32Array(4*2) }
  */
@@ -300,39 +356,15 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
   const N = CAM_W * CAM_H;
   const targetsRG = PALETTE_RG;
 
-  // Extract RG values (Nx2 float32) and full RGB (Nx3)
+  // Extract RG values (Nx2 float32) for 2D k-means.
   const flatRG = new Float32Array(N * 2);
   for (let i = 0; i < N; i++) {
-    flatRG[i * 2] = input.data[i * 4]; // R
-    flatRG[i * 2 + 1] = input.data[i * 4 + 1]; // G
+    flatRG[i * 2] = input.data[i * 4];
+    flatRG[i * 2 + 1] = input.data[i * 4 + 1];
   }
 
   // ── 1. Global k-means ──
-  // Seed with frame-anchor means when a corrected image is available — these
-  // are anchored to actual palette samples in the frame's dashes rather than
-  // an arbitrary warm initialization.
-  let initCenters: [number, number][] | Float32Array = INIT_CENTERS_RG;
-  if (options?.corrected) {
-    const fcls = buildFrameClassifier(options.corrected, options.scale ?? 8, 0);
-    initCenters = new Float32Array([
-      fcls.meanR[0], fcls.meanG[0],
-      fcls.meanR[1], fcls.meanG[1],
-      fcls.meanR[2], fcls.meanG[2],
-      fcls.meanR[3], fcls.meanG[3],
-    ]);
-    if (dbg) {
-      dbg.log(
-        `[quantize] frame anchor init: ` +
-          ["BK", "DG", "LG", "WH"]
-            .map(
-              (n, c) =>
-                `${n}=(${fcls.meanR[c].toFixed(0)},${fcls.meanG[c].toFixed(0)})`,
-            )
-            .join("  "),
-      );
-    }
-  }
-  const global = runKmeans(flatRG, N, initCenters);
+  const global = runKmeans(flatRG, N, INIT_CENTERS_RG);
   const clusterToPalette = bestClusterToPalette(global.centers, targetsRG);
 
   // Map cluster labels to palette indices

@@ -29,7 +29,6 @@ PIPELINE DIAGNOSTICS
   [crop] inner-border mean=182.4 white-frame mean=213.5 (ratio 0.854, WARN)
   [sample] R: 49–245  G: 0–255  B: 115–254
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[6,8) vMargin=1
-  [quantize] frame anchor init: BK=(89,46)  DG=(134,152)  LG=(222,173)  WH=(228,246)
   [quantize] global k-means cluster centers (palette-ordered):  BK=(R88,G37)  DG=(R136,G148)  LG=(R203,G162)  WH=(R209,G243)
   [quantize] after global kmeans: BK=1335  DG=8628  LG=2689  WH=1684
   [quantize] strip ensemble: 7 strips, changed 19 px  now: BK=1336  DG=8613  LG=2703  WH=1684
