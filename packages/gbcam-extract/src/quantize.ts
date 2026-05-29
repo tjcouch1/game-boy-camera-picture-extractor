@@ -655,7 +655,10 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
           const g = flatRG[i * 2 + 1];
           const b = input.data[i * 4 + 2];
           if (r >= lgRCenter - 25) continue;
-          if (b < bSpatialThresh) continue;
+          // Loose outer B guard — each inner rule applies its own stricter
+          // B check. Lets Rule F catch pixels (e.g. thing-2 (61,28) B=201)
+          // whose B is just above warmMeanB but below bSpatialThresh.
+          if (b < warmMeanB) continue;
           const x = i % CAM_W;
           const y = Math.floor(i / CAM_W);
           let warmNb = 0;
@@ -698,11 +701,9 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             continue;
           }
           // Rule D: warm pixel at DG/LG boundary (≥1 DG and ≥1 LG neighbour).
-          // Compare pixel R,G,B to averaged DG-vs-LG-neighbour R/G/B.
-          // Requires LG-labeled neighbour specifically — when the warm
-          // neighbours are all WH, their high G inflates warm-avg-G and
-          // makes G strong-vote DG too easily (false positives on bright
-          // boundary LG pixels).
+          // Uses LG-only avg (not all-warm) — when WH is in the mix its
+          // high G/R/B inflates the warm reference and pulls borderline LG
+          // pixels toward a false DG flip.
           let lgNb2 = 0;
           let lgRsum = 0, lgGsum = 0, lgBsum = 0;
           for (const [dx, dy] of [
@@ -769,6 +770,34 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
             if (dB2 * 1.2 < wB) closerDgVotes++;
             // Flip if either two strong votes OR one strong + two closer.
             if (strongDgVotes >= 2 || (strongDgVotes >= 1 && closerDgVotes >= 2)) {
+              finalLabels[i] = 1;
+              spatialFlipped++;
+              continue;
+            }
+          }
+          // Rule F: warm pixel with a DG neighbour having near-identical R
+          // (within 5). R is the strongest DG/LG discriminator (DG.R=148,
+          // LG.R=255 targets), so R matching a DG neighbour is a strong
+          // signal the pixel is the same colour. Requires R<lgR-25 and B in
+          // the upper warm/DG range to avoid flipping bright LG pixels.
+          if (dgNb >= 1) {
+            let minRdiff = Infinity;
+            for (const [dx, dy] of [
+              [-1, 0],
+              [1, 0],
+              [0, -1],
+              [0, 1],
+            ]) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+              const ni = ny * CAM_W + nx;
+              if (finalLabels[ni] !== 1) continue;
+              const nr = flatRG[ni * 2];
+              const diff = Math.abs(r - nr);
+              if (diff < minRdiff) minRdiff = diff;
+            }
+            if (minRdiff <= 5 && r < lgRCenter - 25 && b > warmMeanB) {
               finalLabels[i] = 1;
               spatialFlipped++;
             }
