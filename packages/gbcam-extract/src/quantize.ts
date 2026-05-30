@@ -678,6 +678,139 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     }
   }
 
+  // ── 3d. Confidence-based neighbour refinement ──
+  // For each pixel, compute its 3D RGB distance to the empirical cluster
+  // centres of all four palette classes. If the pixel is unambiguously
+  // closest to its current class (large gap to the second-nearest), leave
+  // it alone. If it's *ambiguous* — close to two clusters at once — look at
+  // confident neighbours nearby: the same-coloured pixel will have a
+  // confident neighbour with very similar RGB and that confident neighbour
+  // gets the deciding vote. This is principled: it uses local colour
+  // similarity to confident pixels, not hard-coded relationships.
+  {
+    // Empirical 3D RGB centres from current labels
+    const cR3 = [0, 0, 0, 0];
+    const cG3 = [0, 0, 0, 0];
+    const cB3 = [0, 0, 0, 0];
+    const cN3 = [0, 0, 0, 0];
+    for (let i = 0; i < N; i++) {
+      const lbl = finalLabels[i];
+      cR3[lbl] += flatRG[i * 2];
+      cG3[lbl] += flatRG[i * 2 + 1];
+      cB3[lbl] += input.data[i * 4 + 2];
+      cN3[lbl]++;
+    }
+    for (let p = 0; p < 4; p++) {
+      if (cN3[p] > 0) {
+        cR3[p] /= cN3[p];
+        cG3[p] /= cN3[p];
+        cB3[p] /= cN3[p];
+      }
+    }
+    // Compute 3D distance and confidence per pixel.
+    // "Confident" = nearest 3D distance is meaningfully smaller than
+    // second-nearest. Threshold uses linear ratio: sqrt(d_best) * 1.4 ≤
+    // sqrt(d_second) means second is ≥40% farther.
+    const isConfident = new Uint8Array(N);
+    const d3all = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) {
+      const r = flatRG[i * 2];
+      const g = flatRG[i * 2 + 1];
+      const b = input.data[i * 4 + 2];
+      let dBest = Infinity;
+      let dSecond = Infinity;
+      let bestP = 0;
+      for (let p = 0; p < 4; p++) {
+        const d =
+          (r - cR3[p]) * (r - cR3[p]) +
+          (g - cG3[p]) * (g - cG3[p]) +
+          (b - cB3[p]) * (b - cB3[p]);
+        d3all[i * 4 + p] = d;
+        if (d < dBest) {
+          dSecond = dBest;
+          dBest = d;
+          bestP = p;
+        } else if (d < dSecond) {
+          dSecond = d;
+        }
+      }
+      // Confident iff sqrt(dSecond) ≥ 1.4 * sqrt(dBest), i.e. dSecond ≥ 1.96 * dBest.
+      // We do NOT override confident pixels' labels — they may have been
+      // correctly classified by the G-valley or B-reclassify steps which
+      // know more than raw 3D distance. We only trust confidence to filter
+      // which pixels are reliable *neighbour voters*.
+      isConfident[i] = dBest > 0 && dSecond >= dBest * 1.96 ? 1 : 0;
+    }
+
+    // For ambiguous pixels: find neighbours whose RGB is highly similar
+    // (Manhattan distance ≤ MD_MAX) and vote weighted by similarity.
+    // Confident neighbours get full weight; ambiguous neighbours get a
+    // discounted weight — they still contribute when the pipeline got
+    // them right, but lopsided. Only flip when:
+    //   (a) the winning class differs from the pixel's current label,
+    //   (b) the winning vote is ≥ MIN_DOMINANCE × current-label vote,
+    //   (c) the winning vote is ≥ MIN_VOTE (real similar neighbours, not
+    //   one stray look-alike).
+    const WIN = 4;
+    const MD_MAX = 30;
+    const SIGMA = 15;
+    const AMBIG_DISCOUNT = 0.5;
+    const MIN_DOMINANCE = 2.0;
+    const MIN_VOTE = 0.1;
+    let refined = 0;
+    const newLabels = new Uint8Array(finalLabels);
+    for (let i = 0; i < N; i++) {
+      if (isConfident[i]) continue;
+      const cx = i % CAM_W;
+      const cy = Math.floor(i / CAM_W);
+      const r = flatRG[i * 2];
+      const g = flatRG[i * 2 + 1];
+      const b = input.data[i * 4 + 2];
+      const votes = [0, 0, 0, 0];
+      for (let dy = -WIN; dy <= WIN; dy++) {
+        const ny = cy + dy;
+        if (ny < 0 || ny >= CAM_H) continue;
+        for (let dx = -WIN; dx <= WIN; dx++) {
+          const nx = cx + dx;
+          if (nx < 0 || nx >= CAM_W) continue;
+          const ni = ny * CAM_W + nx;
+          if (ni === i) continue;
+          const nr = flatRG[ni * 2];
+          const ng = flatRG[ni * 2 + 1];
+          const nb = input.data[ni * 4 + 2];
+          const md = Math.abs(r - nr) + Math.abs(g - ng) + Math.abs(b - nb);
+          if (md > MD_MAX) continue;
+          let w = Math.exp(-md / SIGMA);
+          if (!isConfident[ni]) w *= AMBIG_DISCOUNT;
+          votes[finalLabels[ni]] += w;
+        }
+      }
+      let bestP = 0;
+      let bestV = -1;
+      for (let p = 0; p < 4; p++) {
+        if (votes[p] > bestV) {
+          bestV = votes[p];
+          bestP = p;
+        }
+      }
+      const curLabel = finalLabels[i];
+      if (bestP === curLabel) continue;
+      if (bestV < MIN_VOTE) continue;
+      const curV = votes[curLabel];
+      if (curV > 0 && bestV < curV * MIN_DOMINANCE) continue;
+      newLabels[i] = bestP;
+      refined++;
+    }
+    for (let i = 0; i < N; i++) finalLabels[i] = newLabels[i];
+    if (dbg) {
+      let nConf = 0;
+      for (let i = 0; i < N; i++) if (isConfident[i]) nConf++;
+      dbg.log(
+        `[quantize] confidence refine: ${nConf}/${N} pixels confident, ${refined} ambiguous pixels reclassified via similar-RGB neighbour vote`,
+      );
+    }
+  }
+
   // ── 4. Output: map palette indices to grayscale values ──
   const output = createGBImageData(CAM_W, CAM_H);
   for (let i = 0; i < N; i++) {

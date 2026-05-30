@@ -34,6 +34,11 @@ PIPELINE DIAGNOSTICS
   [quantize] strip ensemble: 7 strips, changed 30 px  now: BK=1336  DG=8621  LG=2680  WH=1699
   [quantize] G-valley refinement: threshold=229.0 (LG center G=185.1, WH center G=252.0), changed 14 px
   [quantize] B reclassify: dgMeanB=235.2 warmMeanB=215.1 flipDg->warm=0 flipWarm->dg=1
+  [quantize] confidence refine: 13726/14336 pixels confident, 4 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] probe (89,77) label=DG RGB=(183,183,241) d²=BK40157 DG3146 LG2097 WH5239 conf=no
+  [quantize] probe (83,70) label=DG RGB=(177,192,237) d²=BK41157 DG3194 LG2311 WH4194 conf=no
+  [quantize] probe (10,44) label=LG RGB=(198,203,243) d²=BK50026 DG6398 LG1812 WH2700 conf=no
+  [quantize] probe (127,72) label=LG RGB=(228,158,209) d²=BK38831 DG9240 LG912 WH10013 conf=yes
   [quantize] final: BK=1336 (9.3%)  DG=8622 (60.1%)  LG=2694 (18.8%)  WH=1684 (11.7%)
 
 ======================================================================
