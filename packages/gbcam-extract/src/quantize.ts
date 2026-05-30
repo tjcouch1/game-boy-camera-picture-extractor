@@ -877,6 +877,58 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     if (refined === 0) break;
   }
 
+  // ── 3e. Spatial anomaly detection: DG pixel surrounded by all-DG
+  // neighbours with R substantially higher than neighbours' R avg is
+  // anomalous — likely a true LG embedded in a DG region (PSF flattens
+  // the R difference but it's still measurably above the local DG mean).
+  // This is principled: based on the pixel's actual R vs the local DG
+  // baseline, not hard-coded patterns.
+  {
+    let anomalyFlipped = 0;
+    const newLabels = new Uint8Array(finalLabels);
+    for (let i = 0; i < N; i++) {
+      if (finalLabels[i] !== 1) continue; // only check DG-labelled pixels
+      const cx = i % CAM_W;
+      const cy = Math.floor(i / CAM_W);
+      let allDG = true;
+      let nR = 0;
+      let nCount = 0;
+      for (const [ddx, ddy] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ]) {
+        const nx = cx + ddx;
+        const ny = cy + ddy;
+        if (nx < 0 || nx >= CAM_W || ny < 0 || ny >= CAM_H) continue;
+        const ni = ny * CAM_W + nx;
+        if (finalLabels[ni] !== 1) {
+          allDG = false;
+          break;
+        }
+        nR += flatRG[ni * 2];
+        nCount++;
+      }
+      if (!allDG || nCount < 4) continue;
+      const navgR = nR / nCount;
+      const r = flatRG[i * 2];
+      // Require R to also be above 160 (rough midpoint between palette
+      // DG.R=148 and LG.R=255) — without this guard, ordinary DG pixels
+      // with R slightly above an unusually-dim DG neighbour also flip.
+      if (r >= 160 && r - navgR >= 25) {
+        newLabels[i] = 2; // flip to LG
+        anomalyFlipped++;
+      }
+    }
+    for (let i = 0; i < N; i++) finalLabels[i] = newLabels[i];
+    if (dbg && anomalyFlipped > 0) {
+      dbg.log(
+        `[quantize] DG-in-DG anomaly: ${anomalyFlipped} pixels reclassified DG → LG (R ≥ 25 above local DG mean)`,
+      );
+    }
+  }
+
   // ── 4. Output: map palette indices to grayscale values ──
   const output = createGBImageData(CAM_W, CAM_H);
   for (let i = 0; i < N; i++) {
