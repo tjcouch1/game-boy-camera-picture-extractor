@@ -687,10 +687,13 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
   // anchor still-ambiguous neighbours in subsequent passes.
   let confidenceRefineTotal = 0;
   for (let iter = 0; iter < 8; iter++) {
-    const cR3 = [0, 0, 0, 0];
-    const cG3 = [0, 0, 0, 0];
-    const cB3 = [0, 0, 0, 0];
-    const cN3 = [0, 0, 0, 0];
+    // Two-pass cluster mean: first using all pixels, then recompute using
+    // only confident pixels so cluster centres aren't biased by
+    // borderline/mis-labelled pixels.
+    let cR3 = [0, 0, 0, 0];
+    let cG3 = [0, 0, 0, 0];
+    let cB3 = [0, 0, 0, 0];
+    let cN3 = [0, 0, 0, 0];
     for (let i = 0; i < N; i++) {
       const lbl = finalLabels[i];
       cR3[lbl] += flatRG[i * 2];
@@ -705,6 +708,7 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
         cB3[p] /= cN3[p];
       }
     }
+    // First-pass confidence based on biased means
     const isConfident = new Uint8Array(N);
     for (let i = 0; i < N; i++) {
       const r = flatRG[i * 2];
@@ -726,7 +730,50 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
       }
       isConfident[i] = dBest > 0 && dSecond >= dBest * 1.96 ? 1 : 0;
     }
-    const WIN = 6;
+    // Recompute cluster means using only confident pixels — these
+    // represent the "core" of each cluster, not pulled down by
+    // borderline pixels that may themselves be mis-labelled.
+    const cR3c = [0, 0, 0, 0];
+    const cG3c = [0, 0, 0, 0];
+    const cB3c = [0, 0, 0, 0];
+    const cN3c = [0, 0, 0, 0];
+    for (let i = 0; i < N; i++) {
+      if (!isConfident[i]) continue;
+      const lbl = finalLabels[i];
+      cR3c[lbl] += flatRG[i * 2];
+      cG3c[lbl] += flatRG[i * 2 + 1];
+      cB3c[lbl] += input.data[i * 4 + 2];
+      cN3c[lbl]++;
+    }
+    for (let p = 0; p < 4; p++) {
+      if (cN3c[p] > 50) {
+        cR3[p] = cR3c[p] / cN3c[p];
+        cG3[p] = cG3c[p] / cN3c[p];
+        cB3[p] = cB3c[p] / cN3c[p];
+      }
+    }
+    // Recompute confidence using cleaner means
+    for (let i = 0; i < N; i++) {
+      const r = flatRG[i * 2];
+      const g = flatRG[i * 2 + 1];
+      const b = input.data[i * 4 + 2];
+      let dBest = Infinity;
+      let dSecond = Infinity;
+      for (let p = 0; p < 4; p++) {
+        const d =
+          (r - cR3[p]) * (r - cR3[p]) +
+          (g - cG3[p]) * (g - cG3[p]) +
+          (b - cB3[p]) * (b - cB3[p]);
+        if (d < dBest) {
+          dSecond = dBest;
+          dBest = d;
+        } else if (d < dSecond) {
+          dSecond = d;
+        }
+      }
+      isConfident[i] = dBest > 0 && dSecond >= dBest * 1.96 ? 1 : 0;
+    }
+    const WIN = 7;
     const MD_MAX = 30;
     const SIGMA = 15;
     const AMBIG_DISCOUNT = 0.5;
