@@ -34,11 +34,15 @@ PIPELINE DIAGNOSTICS
   [quantize] strip ensemble: 7 strips, changed 5 px  now: BK=9494  DG=1880  LG=1407  WH=1555
   [quantize] G-valley refinement: threshold=223.0 (LG center G=181.4, WH center G=253.2), changed 0 px
   [quantize] B reclassify: dgMeanB=236.8 warmMeanB=224.7 flipDg->warm=0 flipWarm->dg=2
-  [quantize] confidence refine: 14171/14336 pixels confident, 1 ambiguous pixels reclassified via similar-RGB neighbour vote
-  [quantize] probe (89,77) label=BK RGB=(140,27,182) d²=BK330 DG19915 LG33135 WH61324 conf=yes
-  [quantize] probe (83,70) label=BK RGB=(115,36,180) d²=BK214 DG19105 LG35728 WH62516 conf=yes
-  [quantize] probe (10,44) label=DG RGB=(146,154,252) d²=BK22893 DG272 LG9234 WH16754 conf=yes
-  [quantize] probe (127,72) label=BK RGB=(117,49,184) d²=BK706 DG15559 LG31392 WH56186 conf=yes
+  [quantize] confidence refine pass 1: 14171/14336 pixels confident, 1 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] probe (42,47) RGB=(206,255,247) label=WH conf=y palD=[BK168470 DG14877 LG23651 WH9125]
+  [quantize] probe (40,51) RGB=(206,203,250) label=LG conf=n palD=[BK146145 DG6414 LG15830 WH12330]
+  [quantize] probe (10,44) RGB=(146,154,252) label=DG conf=y palD=[BK108536 DG49 LG22733 WH29651]
+  [quantize] probe (24,44) RGB=(143,156,245) label=DG conf=y palD=[BK104810 DG189 LG22017 WH28745]
+  [quantize] probe (18,9) RGB=(103,0,130) label=BK conf=y palD=[BK27509 DG39554 LG45332 WH89354]
+  [quantize] probe (18,11) RGB=(103,0,133) label=BK conf=y palD=[BK28298 DG38813 LG45233 WH89153]
+  [quantize] probe (127,72) RGB=(117,49,184) label=BK conf=y palD=[BK49946 DG15803 LG30141 WH61841]
+  [quantize] confidence refine pass 2: 14171/14336 pixels confident, 0 ambiguous pixels reclassified via similar-RGB neighbour vote
   [quantize] final: BK=9494 (66.2%)  DG=1881 (13.1%)  LG=1406 (9.8%)  WH=1555 (10.8%)
 
 ======================================================================

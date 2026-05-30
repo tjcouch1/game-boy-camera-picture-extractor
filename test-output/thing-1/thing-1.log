@@ -34,27 +34,33 @@ PIPELINE DIAGNOSTICS
   [quantize] strip ensemble: 7 strips, changed 30 px  now: BK=1336  DG=8621  LG=2680  WH=1699
   [quantize] G-valley refinement: threshold=229.0 (LG center G=185.1, WH center G=252.0), changed 14 px
   [quantize] B reclassify: dgMeanB=235.2 warmMeanB=215.1 flipDg->warm=0 flipWarm->dg=1
-  [quantize] confidence refine: 13726/14336 pixels confident, 4 ambiguous pixels reclassified via similar-RGB neighbour vote
-  [quantize] probe (89,77) label=DG RGB=(183,183,241) d²=BK40157 DG3146 LG2097 WH5239 conf=no
-  [quantize] probe (83,70) label=DG RGB=(177,192,237) d²=BK41157 DG3194 LG2311 WH4194 conf=no
-  [quantize] probe (10,44) label=LG RGB=(198,203,243) d²=BK50026 DG6398 LG1812 WH2700 conf=no
-  [quantize] probe (127,72) label=LG RGB=(228,158,209) d²=BK38831 DG9240 LG912 WH10013 conf=yes
-  [quantize] final: BK=1336 (9.3%)  DG=8622 (60.1%)  LG=2694 (18.8%)  WH=1684 (11.7%)
+  [quantize] confidence refine pass 1: 13726/14336 pixels confident, 4 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] probe (42,47) RGB=(128,137,219) label=DG conf=y palD=[BK83114 DG1817 LG21291 WH32969]
+  [quantize] probe (40,51) RGB=(127,137,230) label=DG conf=y palD=[BK87798 DG1187 LG23229 WH34533]
+  [quantize] probe (10,44) RGB=(198,203,243) label=LG conf=n palD=[BK139462 DG5669 LG15299 WH12037]
+  [quantize] probe (24,44) RGB=(189,203,233) label=LG conf=n palD=[BK131219 DG5190 LG14606 WH11684]
+  [quantize] probe (18,9) RGB=(141,150,232) label=DG conf=y palD=[BK96205 DG582 LG20056 WH28510]
+  [quantize] probe (18,11) RGB=(143,153,234) label=DG conf=y palD=[BK98614 DG491 LG19965 WH27709]
+  [quantize] probe (127,72) RGB=(228,158,209) label=LG conf=y palD=[BK120629 DG8616 LG4550 WH12074]
+  [quantize] confidence refine pass 2: 13726/14336 pixels confident, 1 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] confidence refine pass 3: 13724/14336 pixels confident, 1 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] confidence refine pass 4: 13723/14336 pixels confident, 0 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] final: BK=1336 (9.3%)  DG=8626 (60.2%)  LG=2690 (18.8%)  WH=1684 (11.7%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14332  (99.97%)
-  Different    : 4   (0.03%)
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1336        1336  +0
-  DG  #9494FF                 8622        8626  -4
-  LG  #FF9494                 2694        2690  +4
+  DG  #9494FF                 8626        8626  +0
+  LG  #FF9494                 2690        2690  +0
   WH  #FFFFA5                 1684        1684  +0
 
 ----------------------------------------------------------------------
@@ -62,22 +68,17 @@ CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1336 v                0                  0                  0      1336
-  DG  #9494FF                       0               8622 v                0                  0      8622
-  LG  #FF9494                       0                  4 X             2690 v                0      2694
+  DG  #9494FF                       0               8626 v                0                  0      8626
+  LG  #FF9494                       0                  0               2690 v                0      2690
   WH  #FFFFA5                       0                  0                  0               1684 v    1684
-
-----------------------------------------------------------------------
-ERROR BREAKDOWN  (result -> reference)
-----------------------------------------------------------------------
-  LG  #FF9494  ->  DG  #9494FF : 4 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14332  (99.97%)
-  Different    : 4   (0.03%)
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
 
 ======================================================================
-RESULT: FAIL — see diagnostics above and in the output directory.
+RESULT: PASS — all pixels match the reference.
 ======================================================================

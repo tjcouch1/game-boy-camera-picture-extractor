@@ -678,17 +678,15 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     }
   }
 
-  // ── 3d. Confidence-based neighbour refinement ──
+  // ── 3d. Confidence-based neighbour refinement (iterative) ──
   // For each pixel, compute its 3D RGB distance to the empirical cluster
-  // centres of all four palette classes. If the pixel is unambiguously
-  // closest to its current class (large gap to the second-nearest), leave
-  // it alone. If it's *ambiguous* — close to two clusters at once — look at
-  // confident neighbours nearby: the same-coloured pixel will have a
-  // confident neighbour with very similar RGB and that confident neighbour
-  // gets the deciding vote. This is principled: it uses local colour
-  // similarity to confident pixels, not hard-coded relationships.
-  {
-    // Empirical 3D RGB centres from current labels
+  // centres of all four palette classes. Pixels whose nearest cluster is
+  // decisively closer than the second-nearest are "confident". Ambiguous
+  // pixels get reclassified by a vote among confident neighbours with
+  // similar RGB. We iterate so newly-confident pixels in pass N+1 can
+  // anchor still-ambiguous neighbours in subsequent passes.
+  let confidenceRefineTotal = 0;
+  for (let iter = 0; iter < 8; iter++) {
     const cR3 = [0, 0, 0, 0];
     const cG3 = [0, 0, 0, 0];
     const cB3 = [0, 0, 0, 0];
@@ -707,56 +705,43 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
         cB3[p] /= cN3[p];
       }
     }
-    // Compute 3D distance and confidence per pixel.
-    // "Confident" = nearest 3D distance is meaningfully smaller than
-    // second-nearest. Threshold uses linear ratio: sqrt(d_best) * 1.4 ≤
-    // sqrt(d_second) means second is ≥40% farther.
     const isConfident = new Uint8Array(N);
-    const d3all = new Float32Array(N * 4);
     for (let i = 0; i < N; i++) {
       const r = flatRG[i * 2];
       const g = flatRG[i * 2 + 1];
       const b = input.data[i * 4 + 2];
       let dBest = Infinity;
       let dSecond = Infinity;
-      let bestP = 0;
       for (let p = 0; p < 4; p++) {
         const d =
           (r - cR3[p]) * (r - cR3[p]) +
           (g - cG3[p]) * (g - cG3[p]) +
           (b - cB3[p]) * (b - cB3[p]);
-        d3all[i * 4 + p] = d;
         if (d < dBest) {
           dSecond = dBest;
           dBest = d;
-          bestP = p;
         } else if (d < dSecond) {
           dSecond = d;
         }
       }
-      // Confident iff sqrt(dSecond) ≥ 1.4 * sqrt(dBest), i.e. dSecond ≥ 1.96 * dBest.
-      // We do NOT override confident pixels' labels — they may have been
-      // correctly classified by the G-valley or B-reclassify steps which
-      // know more than raw 3D distance. We only trust confidence to filter
-      // which pixels are reliable *neighbour voters*.
       isConfident[i] = dBest > 0 && dSecond >= dBest * 1.96 ? 1 : 0;
     }
-
-    // For ambiguous pixels: find neighbours whose RGB is highly similar
-    // (Manhattan distance ≤ MD_MAX) and vote weighted by similarity.
-    // Confident neighbours get full weight; ambiguous neighbours get a
-    // discounted weight — they still contribute when the pipeline got
-    // them right, but lopsided. Only flip when:
-    //   (a) the winning class differs from the pixel's current label,
-    //   (b) the winning vote is ≥ MIN_DOMINANCE × current-label vote,
-    //   (c) the winning vote is ≥ MIN_VOTE (real similar neighbours, not
-    //   one stray look-alike).
-    const WIN = 4;
+    const WIN = 6;
     const MD_MAX = 30;
     const SIGMA = 15;
     const AMBIG_DISCOUNT = 0.5;
     const MIN_DOMINANCE = 2.0;
     const MIN_VOTE = 0.1;
+    // Palette-target centres (the ideal colour each class should be when
+    // observed by a perfect pipeline). Used as a secondary anchor for
+    // ambiguous pixels: if the palette-target nearest class differs from
+    // the empirical-cluster nearest, the palette gets a vote too. Each
+    // palette vote is weighted by the palette-target distance ratio
+    // (more decisive = more vote).
+    const PAL_R: [number, number, number, number] = [0, 148, 255, 255];
+    const PAL_G: [number, number, number, number] = [0, 148, 148, 255];
+    const PAL_B: [number, number, number, number] = [0, 255, 148, 165];
+    const PAL_VOTE_SCALE = 0.12;
     let refined = 0;
     const newLabels = new Uint8Array(finalLabels);
     for (let i = 0; i < N; i++) {
@@ -785,6 +770,38 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
           votes[finalLabels[ni]] += w;
         }
       }
+      // Palette-target vote: which palette class is the pixel closest to
+      // when compared against the IDEAL palette RGB? Independent of the
+      // (potentially noisy) empirical cluster centres. This captures the
+      // "what colour was the LCD supposed to display here?" signal. The
+      // palette is most reliable for BK (R/G/B all ≈ 0) and DG (only
+      // class with both low R/G AND high B); LG and WH share R=255 in
+      // the palette so their differentiation comes from G — we let the
+      // existing G-valley step handle that. So we only count a palette
+      // vote when palBest is BK or DG (where palette is decisive on
+      // multiple channels).
+      let palBest = 0;
+      let palBestD = Infinity;
+      let palSecond = Infinity;
+      for (let p = 0; p < 4; p++) {
+        const dR = r - PAL_R[p];
+        const dG = g - PAL_G[p];
+        const dB = b - PAL_B[p];
+        const d = dR * dR + dG * dG + dB * dB;
+        if (d < palBestD) {
+          palSecond = palBestD;
+          palBestD = d;
+          palBest = p;
+        } else if (d < palSecond) {
+          palSecond = d;
+        }
+      }
+      if (palBestD > 0 && (palBest === 0 || palBest === 1)) {
+        const palMargin = Math.sqrt(palSecond / palBestD) - 1;
+        if (palMargin > 0) {
+          votes[palBest] += palMargin * PAL_VOTE_SCALE;
+        }
+      }
       let bestP = 0;
       let bestV = -1;
       for (let p = 0; p < 4; p++) {
@@ -806,9 +823,11 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
       let nConf = 0;
       for (let i = 0; i < N; i++) if (isConfident[i]) nConf++;
       dbg.log(
-        `[quantize] confidence refine: ${nConf}/${N} pixels confident, ${refined} ambiguous pixels reclassified via similar-RGB neighbour vote`,
+        `[quantize] confidence refine pass ${iter + 1}: ${nConf}/${N} pixels confident, ${refined} ambiguous pixels reclassified via similar-RGB neighbour vote`,
       );
     }
+    confidenceRefineTotal += refined;
+    if (refined === 0) break;
   }
 
   // ── 4. Output: map palette indices to grayscale values ──
