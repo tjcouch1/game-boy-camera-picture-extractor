@@ -1864,21 +1864,85 @@ function initialWarp(bgr: any, corners: Corners, scale: number): WarpResult {
 
 // ─── Sub-pixel inner-border edge detection ───
 
+/** 3D Model Coefficients (offset, var, luma, score) */
+const ADAPTIVE_BIAS_COEFFS: Record<string, [number, number, number, number]> = {
+    TOP:   [38.6797, -0.4796, -0.1492, -0.1290],
+    BOT:   [2.0711, 0.5738, 0.0598, -0.2070],
+    LEFT:  [16.3671, -0.3670, -0.0195, -0.1119],
+    RIGHT: [21.4907, -1.0077, -0.0310, -0.1834]
+};
+
+const ABOVE_MIN_LUMA = 40;
+const MIN_DG_RISE = 18;
+
 function firstDarkFromFrame(
-  profile: number[],
-  smoothSigma = 1.5,
-  /**
-   * Width (in samples) of a box pre-smoothing pass that removes
-   * sub-pixel BGR oscillation from the R-B+128 channel. Pass `scale` (the
-   * image-pixels-per-LCD-pixel factor used for the warp output) so a full
-   * BGR period is averaged before the gaussian + argmin gradient detection.
-   * Default 0 disables the box pre-pass for backwards compat.
-   */
-  periodSmooth = 0,
+  profileLuma: number[],
+  profileDg: number[],
+  scale: number,
+  side: "TOP" | "BOT" | "LEFT" | "RIGHT",
+  direction: 1 | -1,
 ): number {
-  const prepped = periodSmooth > 1 ? boxSmooth(profile, periodSmooth) : profile;
-  const p = gaussianFilter1d(prepped, smoothSigma);
-  return argminOfDerivative(p);
+  const lo = 0;
+  const hi = profileLuma.length - 1;
+  const N = profileLuma.length;
+  
+  const valsLuma = boxSmooth(profileLuma, scale);
+  const valsDg = boxSmooth(profileDg, scale);
+  const pLuma = gaussianFilter1d(valsLuma, 1.0);
+  const pDg = gaussianFilter1d(valsDg, 1.0);
+
+  const R = 6;
+  const measure = (e: number) => {
+    let aboveSumL = 0, belowSumL = 0, aboveSumD = 0, belowSumD = 0;
+    const aboveVals: number[] = [];
+    for (let i = 1; i <= R; i++) {
+      const oi = direction === 1 ? e - i : e + i;
+      const ii = direction === 1 ? e + i : e - i;
+      if (oi >= 0 && oi < N && ii >= 0 && ii < N) {
+          aboveSumL += pLuma[oi]; belowSumL += pLuma[ii];
+          aboveSumD += pDg[oi]; belowSumD += pDg[ii];
+          aboveVals.push(pLuma[oi]);
+      }
+    }
+    const count = aboveVals.length || 1;
+    const aboveL = aboveSumL / count;
+    let v = 0;
+    for (const val of aboveVals) v += (val - aboveL) ** 2;
+    const score = (aboveSumL - belowSumL) / count + (belowSumD - aboveSumD) / count;
+    return { aboveL, score, outerVariance: Math.sqrt(v / count) };
+  };
+
+  let firstE = -1;
+  if (direction === 1) {
+    for (let e = R; e < N - R; e++) {
+      const m = measure(e);
+      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) { firstE = e; break; }
+    }
+  } else {
+    for (let e = N - R - 1; e >= R; e--) {
+      const m = measure(e);
+      if (m.aboveL >= ABOVE_MIN_LUMA && m.score >= MIN_DG_RISE) { firstE = e; break; }
+    }
+  }
+  if (firstE < 0) return direction === 1 ? 0 : N - 1;
+
+  const m = measure(firstE);
+  const f = (e: number): number => measure(e).score;
+  let off = 0;
+  if (firstE > R && firstE < N - R - 1) {
+    const a = f(firstE - 1), b = f(firstE), c = f(firstE + 1);
+    const denom = a - 2 * b + c;
+    if (Math.abs(denom) > 1e-6) {
+      off = 0.5 * (a - c) / denom;
+      off = Math.max(-0.5, Math.min(0.5, off));
+    }
+  }
+
+  const rawPerp = firstE + off;
+  const coeffs = ADAPTIVE_BIAS_COEFFS[side];
+  const bias = coeffs[0] + coeffs[1] * m.outerVariance + coeffs[2] * m.aboveL + coeffs[3] * m.score;
+
+  return rawPerp + direction * bias;
 }
 
 /**
@@ -2095,9 +2159,9 @@ function rowMeans(mat: any, r1: number, r2: number, c1: number, c2: number): num
 
 type CornerPts = { TL: Point; TR: Point; BR: Point; BL: Point };
 
-function findBorderCorners(channel: any, scale: number): CornerPts {
-  const H = channel.rows;
-  const W = channel.cols;
+function findBorderCorners(dgMat: any, lumaMat: any, scale: number): CornerPts {
+  const H = dgMat.rows;
+  const W = dgMat.cols;
   const srch = 6 * scale;
 
   const midCol = Math.floor((INNER_LEFT + INNER_RIGHT) / 2) * scale;
@@ -2109,62 +2173,40 @@ function findBorderCorners(channel: any, scale: number): CornerPts {
   const rTop: [number, number] = [Math.max(0, 10 * scale), midRow];
   const rBot: [number, number] = [midRow, Math.min(H, (SCREEN_H - 10) * scale)];
 
-  // Each side detector finds the DG strip's centre via dgStripCentre1D, then
-  // converts to outer-low edge by subtracting scale/2 - 0.5 (the strip
-  // centre is at index k whose pixel centre is at edge k+0.5; outer-low edge
-  // of an 8-wide strip centred there is at edge k+0.5 - scale/2).
-
-  // dgStripOuterLow1D's legacy fallback assumes the WH frame is at the
-  // LOW-coord side of the profile (it scans for "first dark from frame").
-  // For TOP/LEFT, the natural-order profile has WH at low coord ✓.
-  // For BOT/RIGHT, the profile must be REVERSED so WH is at low coord;
-  // the result is then mapped back to original coords (inverting the
-  // reversal AND shifting by -(scale-1) to convert outer-high → outer-low,
-  // matching the legacy detector's BOT/RIGHT convention).
-
   function topY(c0: number, c1: number): number {
     const exp = INNER_TOP * scale;
     const r1 = Math.max(0, exp - srch);
     const r2 = Math.min(H, exp + srch);
-    const profile = rowMeans(channel, r1, r2, c0, c1);
-    const expCentre = (exp + scale / 2) - r1;
-    return r1 + dgStripOuterLow1D(profile, scale, expCentre);
+    const pDg = rowMeans(dgMat, r1, r2, c0, c1);
+    const pLu = rowMeans(lumaMat, r1, r2, c0, c1);
+    return r1 + firstDarkFromFrame(pLu, pDg, scale, "TOP", 1);
   }
 
   function botY(c0: number, c1: number): number {
     const expFrame = (INNER_BOT + 1) * scale;
     const r1 = Math.max(0, expFrame - srch);
     const r2 = Math.min(H, expFrame + srch);
-    const profile = rowMeans(channel, r1, r2, c0, c1);
-    const reversed = profile.slice().reverse();
-    // DG strip centre in reversed coords:
-    //   original strip centre = INNER_BOT*scale + scale/2.
-    //   reversed idx = (profile.length - 1) - (orig idx - r1).
-    const stripCentreOrig = INNER_BOT * scale + scale / 2;
-    const expCentreRev = (profile.length - 1) - (stripCentreOrig - r1);
-    const idx = dgStripOuterLow1D(reversed, scale, expCentreRev);
-    return (r2 - 1) - idx - (scale - 1);
+    const pDg = rowMeans(dgMat, r1, r2, c0, c1);
+    const pLu = rowMeans(lumaMat, r1, r2, c0, c1);
+    return r1 + firstDarkFromFrame(pLu, pDg, scale, "BOT", -1);
   }
 
   function leftX(r0: number, r1_: number): number {
     const exp = INNER_LEFT * scale;
     const c1 = Math.max(0, exp - srch);
     const c2 = Math.min(W, exp + srch);
-    const profile = colMeans(channel, r0, r1_, c1, c2);
-    const expCentre = (exp + scale / 2) - c1;
-    return c1 + dgStripOuterLow1D(profile, scale, expCentre);
+    const pDg = colMeans(dgMat, r0, r1_, c1, c2);
+    const pLu = colMeans(lumaMat, r0, r1_, c1, c2);
+    return c1 + firstDarkFromFrame(pLu, pDg, scale, "LEFT", 1);
   }
 
   function rightX(r0: number, r1_: number): number {
     const expFrame = (INNER_RIGHT + 1) * scale;
     const c1 = Math.max(0, expFrame - srch);
     const c2 = Math.min(W, expFrame + srch);
-    const profile = colMeans(channel, r0, r1_, c1, c2);
-    const reversed = profile.slice().reverse();
-    const stripCentreOrig = INNER_RIGHT * scale + scale / 2;
-    const expCentreRev = (profile.length - 1) - (stripCentreOrig - c1);
-    const idx = dgStripOuterLow1D(reversed, scale, expCentreRev);
-    return (c2 - 1) - idx - (scale - 1);
+    const pDg = colMeans(dgMat, r0, r1_, c1, c2);
+    const pLu = colMeans(lumaMat, r0, r1_, c1, c2);
+    return c1 + firstDarkFromFrame(pLu, pDg, scale, "RIGHT", -1);
   }
 
   const tlY = topY(cLft[0], cLft[1]);
@@ -2193,9 +2235,9 @@ interface BorderPoints {
   left: Point[];
 }
 
-function findBorderPoints(channel: any, scale: number): BorderPoints {
-  const H = channel.rows;
-  const W = channel.cols;
+function findBorderPoints(dgMat: any, lumaMat: any, scale: number): BorderPoints {
+  const H = dgMat.rows;
+  const W = dgMat.cols;
   const srch = 6 * scale;
 
   const expLeft = INNER_LEFT * scale;
@@ -2205,7 +2247,6 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
 
   const points: BorderPoints = { top: [], right: [], bottom: [], left: [] };
 
-  // linspace helper
   const linspace = (start: number, end: number, n: number): number[] => {
     if (n <= 1) return [start];
     const result: number[] = [];
@@ -2215,16 +2256,6 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     return result;
   };
 
-  // findBorderPoints uses a single-column (or single-row) 1D profile per
-  // sample point. The DG-floor detector that findBorderCorners uses is too
-  // noisy here: a single column is much more sensitive to camera content
-  // than the multi-column averages used for corners. So findBorderPoints
-  // keeps using the legacy descent-midpoint detector, which is robust on
-  // 1D profiles even when the inner-border isn't visually distinct from
-  // adjacent camera content. The slight bias in the descent-midpoint
-  // result is uniform across all 9 sample points per side and cancels out
-  // in the edge-curvature calculation downstream.
-
   // Top edge at 9 points
   for (const colFrac of linspace(0, 1, 9)) {
     let col = Math.floor(expLeft + (expRight - expLeft) * colFrac);
@@ -2232,11 +2263,13 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     const r1 = Math.max(0, expTop - srch);
     const r2 = Math.min(H, expTop + srch);
     if (r1 < r2) {
-      const profile: number[] = [];
+      const pDg: number[] = [];
+      const pLu: number[] = [];
       for (let r = r1; r < r2; r++) {
-        profile.push(channel.ucharAt(r, col));
+        pDg.push(dgMat.ucharAt(r, col));
+        pLu.push(lumaMat.ucharAt(r, col));
       }
-      const yPos = r1 + firstDarkFromFrame(profile, 1.5, scale);
+      const yPos = r1 + firstDarkFromFrame(pLu, pDg, scale, "TOP", 1);
       points.top.push([col, yPos]);
     }
   }
@@ -2248,13 +2281,13 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     const r1 = Math.max(0, expBottom - srch);
     const r2 = Math.min(H, expBottom + srch);
     if (r1 < r2) {
-      const profile: number[] = [];
+      const pDg: number[] = [];
+      const pLu: number[] = [];
       for (let r = r1; r < r2; r++) {
-        profile.push(channel.ucharAt(r, col));
+        pDg.push(dgMat.ucharAt(r, col));
+        pLu.push(lumaMat.ucharAt(r, col));
       }
-      const reversed = [...profile].reverse();
-      const idx = firstDarkFromFrame(reversed, 1.5, scale);
-      const yPos = (r2 - 1) - idx - (scale - 1);
+      const yPos = r1 + firstDarkFromFrame(pLu, pDg, scale, "BOT", -1);
       points.bottom.push([col, yPos]);
     }
   }
@@ -2266,11 +2299,13 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     const c1 = Math.max(0, expLeft - srch);
     const c2 = Math.min(W, expLeft + srch);
     if (c1 < c2) {
-      const profile: number[] = [];
+      const pDg: number[] = [];
+      const pLu: number[] = [];
       for (let c = c1; c < c2; c++) {
-        profile.push(channel.ucharAt(row, c));
+        pDg.push(dgMat.ucharAt(row, c));
+        pLu.push(lumaMat.ucharAt(row, c));
       }
-      const xPos = c1 + firstDarkFromFrame(profile, 1.5, scale);
+      const xPos = c1 + firstDarkFromFrame(pLu, pDg, scale, "LEFT", 1);
       points.left.push([xPos, row]);
     }
   }
@@ -2282,13 +2317,13 @@ function findBorderPoints(channel: any, scale: number): BorderPoints {
     const c1 = Math.max(0, expRight - srch);
     const c2 = Math.min(W, expRight + srch);
     if (c1 < c2) {
-      const profile: number[] = [];
+      const pDg: number[] = [];
+      const pLu: number[] = [];
       for (let c = c1; c < c2; c++) {
-        profile.push(channel.ucharAt(row, c));
+        pDg.push(dgMat.ucharAt(row, c));
+        pLu.push(lumaMat.ucharAt(row, c));
       }
-      const reversed = [...profile].reverse();
-      const idx = firstDarkFromFrame(reversed, 1.5, scale);
-      const xPos = (c2 - 1) - idx - (scale - 1);
+      const xPos = c1 + firstDarkFromFrame(pLu, pDg, scale, "RIGHT", -1);
       points.right.push([xPos, row]);
     }
   }
@@ -2331,41 +2366,43 @@ function refineWarpWithMetrics(
   const H = warped.rows;
   const W = warped.cols;
 
-  // Compute R-B channel from a BGR-pre-blurred warp output. Same root
-  // cause as the inner-border (9d53237) and source-corner (9a1dbfa)
-  // pre-blur fixes: the BGR sub-cell layout in the LCD source puts B
-  // (165 for WH, 255 for DG) at the left of each LCD pixel, so the
-  // R-B+128 channel peaks at the B sub-cell rather than at the actual
-  // pixel boundary. Horizontal Gaussian blur (σ ≈ scale/3) averages
-  // each LCD pixel's sub-cell emissions together; the channel then
-  // transitions at the pixel boundary. Pass-1 / pass-2 then refine the
-  // homography based on actually-pixel-boundary edges rather than
-  // sub-cell-skewed ones.
-  const rbCh = withMats((track, untrack) => {
+  // Compute DG and Luma channels from a BGR-pre-blurred warp output.
+  const { dgMat, lumaMat } = withMats((track, untrack) => {
     const blurred = track(new cv.Mat());
     const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+    // Use longitudinal smoothing (9-tap) as part of the pre-blur.
+    // This helps remove zigzags and jitter.
     cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
-    const rgb = track(new cv.Mat());
-    cv.cvtColor(blurred, rgb, cv.COLOR_BGR2RGB);
+    
+    const H = blurred.rows;
+    const W = blurred.cols;
+    const dg = new cv.Mat(H, W, cv.CV_8UC1);
+    const luma = new cv.Mat(H, W, cv.CV_8UC1);
+    const bgrData = blurred.data as Uint8Array;
+    const dData = dg.data as Uint8Array;
+    const lData = luma.data as Uint8Array;
 
-    // Create single-channel Mat for R-B+128
-    const result = new cv.Mat(H, W, cv.CV_8UC1);
-    const rgbData = rgb.data;
-    const outData = result.data;
     for (let i = 0; i < H * W; i++) {
-      const r = rgbData[i * 3];
-      const b = rgbData[i * 3 + 2];
-      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+      const b = bgrData[i * 3];
+      const g = bgrData[i * 3 + 1];
+      const r = bgrData[i * 3 + 2];
+      
+      const vDg = 2 * b - r - g;
+      dData[i] = vDg < 0 ? 0 : vDg > 255 ? 255 : vDg;
+      
+      const vLuma = 0.299 * r + 0.587 * g + 0.114 * b;
+      lData[i] = vLuma < 0 ? 0 : vLuma > 255 ? 255 : vLuma;
     }
-    return untrack(result);
+    return { dgMat: untrack(dg), lumaMat: untrack(luma) };
   });
 
   // Get multi-point border detection
-  const borderPoints = findBorderPoints(rbCh, scale);
+  const borderPoints = findBorderPoints(dgMat, lumaMat, scale);
 
   // Get corner detection
-  const corners = findBorderCorners(rbCh, scale);
-  rbCh.delete();
+  const corners = findBorderCorners(dgMat, lumaMat, scale);
+  dgMat.delete();
+  lumaMat.delete();
 
   const expTop = INNER_TOP * scale;
   const expBottom = INNER_BOT * scale;
@@ -2732,10 +2769,10 @@ const CORNER_WEIGHT = 0;
 // canonical. Without this constraint, pass-2's homography fits the
 // dashes at the screen-edge perimeter but lets the inner-border drift
 // in the camera-area interior; the user perceives this as "camera-
-// area corners shifted inward by 1-3 px". Weight 1 (= dashes also at
-// 1) gives the best aggregate accuracy empirically — higher weights
-// over-constrain pass-2's homography against dashes' detected positions.
-const BORDER_POINT_WEIGHT = 1;
+// area corners shifted inward by 1-3 px". Weight 2 (vs dashes at 1)
+// gives better alignment on the inner border while still respecting
+// the unbiased dash signals.
+const BORDER_POINT_WEIGHT = 2;
 const DASH_WEIGHT = 1;
 
 function refineWarpMultiAnchor(
@@ -2753,30 +2790,27 @@ function refineWarpMultiAnchor(
   const dashes = detectDashesOnWarp(warped, scale);
 
   // 2. Detect inner-border points on the pass-1 warped output using the
-  // legacy R-B+128 + argmin-of-derivative detector. Compute on a
-  // BGR-pre-blurred warp output (σ ≈ scale/3) so the R-B+128 channel
-  // transitions at the actual pixel boundary instead of at the sub-cell
-  // (same fix as in refineWarpWithMetrics + detectInnerBorderThreshold
-  // Crossings: BGR sub-cell layout skews the channel peak away from the
-  // pixel boundary on left/right borders).
-  const rb = withMats((track, untrack) => {
+  // accurate DG+Luma detector.
+  const { dgMat, lumaMat } = withMats((track, untrack) => {
     const blurred = track(new cv.Mat());
     const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
     cv.GaussianBlur(warped, blurred, new cv.Size(kx, 1), scale / 3, 0);
-    const rgb = track(new cv.Mat());
-    cv.cvtColor(blurred, rgb, cv.COLOR_BGR2RGB);
-    const out = new cv.Mat(Hc, Wc, cv.CV_8UC1);
-    const rgbData = rgb.data;
-    const outData = out.data;
+    const dg = new cv.Mat(Hc, Wc, cv.CV_8UC1);
+    const luma = new cv.Mat(Hc, Wc, cv.CV_8UC1);
+    const bgrData = blurred.data as Uint8Array;
+    const dData = dg.data as Uint8Array;
+    const lData = luma.data as Uint8Array;
     for (let i = 0; i < Hc * Wc; i++) {
-      const r = rgbData[i * 3];
-      const b = rgbData[i * 3 + 2];
-      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+      const b = bgrData[i * 3], g = bgrData[i * 3 + 1], r = bgrData[i * 3 + 2];
+      const vDg = 2 * b - r - g;
+      dData[i] = vDg < 0 ? 0 : vDg > 255 ? 255 : vDg;
+      const vLu = 0.299 * r + 0.587 * g + 0.114 * b;
+      lData[i] = vLu < 0 ? 0 : vLu > 255 ? 255 : vLu;
     }
-    return untrack(out);
+    return { dgMat: untrack(dg), lumaMat: untrack(luma) };
   });
-  const borderPoints = findBorderPoints(rb, scale);
-  rb.delete();
+
+  const borderPoints = findBorderPoints(dgMat, lumaMat, scale);
 
   const expTop = INNER_TOP * scale;
   const expBot = INNER_BOT * scale;
@@ -2844,7 +2878,7 @@ function refineWarpMultiAnchor(
       dstPts.push(cornerDst[i][0], cornerDst[i][1]);
     }
   }
-  // Dashes (×DASH_WEIGHT) — first dashCount entries
+  // Dashes (×DASH_WEIGHT)
   for (let i = 0; i < dashCount; i++) {
     for (let r = 0; r < DASH_WEIGHT; r++) {
       srcPts.push(sourceXY[i * 2], sourceXY[i * 2 + 1]);
@@ -2866,18 +2900,10 @@ function refineWarpMultiAnchor(
   const dstMat = cv.matFromArray(totalPairs, 1, cv.CV_32FC2, dstPts);
   const inliersMask = new cv.Mat();
   let Hnew: any = null;
-  let inlierCount = 0;
   let refinedOk = false;
   try {
-    Hnew = cv.findHomography(
-      srcMat, dstMat, cv.RANSAC, MULTI_ANCHOR_RANSAC_THRESHOLD, inliersMask,
-    );
-    if (Hnew && Hnew.rows === 3 && Hnew.cols === 3) {
-      for (let i = 0; i < inliersMask.rows; i++) {
-        if (inliersMask.ucharAt(i, 0) > 0) inlierCount++;
-      }
-      refinedOk = true;
-    }
+    Hnew = cv.findHomography(srcMat, dstMat, cv.RANSAC, MULTI_ANCHOR_RANSAC_THRESHOLD, inliersMask);
+    if (Hnew && Hnew.rows === 3 && Hnew.cols === 3) refinedOk = true;
   } catch {
     refinedOk = false;
   }
@@ -2898,7 +2924,9 @@ function refineWarpMultiAnchor(
   }
 
   // 7. Compute final metrics on refined output.
-  const metrics = computeBorderMetrics(refined, scale, refinedOk);
+  const metrics = computeBorderMetrics(refined, scale, refinedOk, dgMat, lumaMat);
+  dgMat.delete();
+  lumaMat.delete();
 
   return { refined, M: MOut, metrics };
 }
@@ -2912,22 +2940,29 @@ function computeBorderMetrics(
   const H = warpedBgr.rows;
   const W = warpedBgr.cols;
 
-  const rb = withMats((track, untrack) => {
-    const rgb = track(new cv.Mat());
-    cv.cvtColor(warpedBgr, rgb, cv.COLOR_BGR2RGB);
-    const out = new cv.Mat(H, W, cv.CV_8UC1);
-    const rgbData = rgb.data;
-    const outData = out.data;
+  const { dgMat, lumaMat } = withMats((track, untrack) => {
+    const blurred = track(new cv.Mat());
+    const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+    cv.GaussianBlur(warpedBgr, blurred, new cv.Size(kx, 1), scale / 3, 0);
+    const dg = new cv.Mat(H, W, cv.CV_8UC1);
+    const luma = new cv.Mat(H, W, cv.CV_8UC1);
+    const bgrData = blurred.data as Uint8Array;
+    const dData = dg.data as Uint8Array;
+    const lData = luma.data as Uint8Array;
     for (let i = 0; i < H * W; i++) {
-      const r = rgbData[i * 3];
-      const b = rgbData[i * 3 + 2];
-      outData[i] = Math.max(0, Math.min(255, r - b + 128));
+      const b = bgrData[i * 3], g = bgrData[i * 3 + 1], r = bgrData[i * 3 + 2];
+      const vDg = 2 * b - r - g;
+      dData[i] = vDg < 0 ? 0 : vDg > 255 ? 255 : vDg;
+      const vLu = 0.299 * r + 0.587 * g + 0.114 * b;
+      lData[i] = vLu < 0 ? 0 : vLu > 255 ? 255 : vLu;
     }
-    return untrack(out);
+    return { dgMat: untrack(dg), lumaMat: untrack(luma) };
   });
-  const borderPoints = findBorderPoints(rb, scale);
-  const corners = findBorderCorners(rb, scale);
-  rb.delete();
+
+  const borderPoints = findBorderPoints(dgMat, lumaMat, scale);
+  const corners = findBorderCorners(dgMat, lumaMat, scale);
+  dgMat.delete();
+  lumaMat.delete();
 
   const expTop = INNER_TOP * scale;
   const expBot = INNER_BOT * scale;
@@ -2935,14 +2970,10 @@ function computeBorderMetrics(
   const expRight = INNER_RIGHT * scale;
 
   const edgeCurvatures = {
-    top: borderPoints.top.length > 0
-      ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) / borderPoints.top.length : 0,
-    bottom: borderPoints.bottom.length > 0
-      ? borderPoints.bottom.reduce((s, [, y]) => s + (y - expBot), 0) / borderPoints.bottom.length : 0,
-    left: borderPoints.left.length > 0
-      ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) / borderPoints.left.length : 0,
-    right: borderPoints.right.length > 0
-      ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length : 0,
+    top: borderPoints.top.length > 0 ? borderPoints.top.reduce((s, [, y]) => s + (y - expTop), 0) / borderPoints.top.length : 0,
+    bottom: borderPoints.bottom.length > 0 ? borderPoints.bottom.reduce((s, [, y]) => s + (y - expBot), 0) / borderPoints.bottom.length : 0,
+    left: borderPoints.left.length > 0 ? borderPoints.left.reduce((s, [x]) => s + (x - expLeft), 0) / borderPoints.left.length : 0,
+    right: borderPoints.right.length > 0 ? borderPoints.right.reduce((s, [x]) => s + (x - expRight), 0) / borderPoints.right.length : 0,
   };
   const cornerErrors = {
     TL: [corners.TL[0] - expLeft, corners.TL[1] - expTop] as [number, number],
@@ -2951,64 +2982,38 @@ function computeBorderMetrics(
     BL: [corners.BL[0] - expLeft, corners.BL[1] - expBot] as [number, number],
   };
   const maxCornerErr = Math.max(...Object.values(cornerErrors).flat().map(Math.abs));
-  const meanEdgeCurv = (Math.abs(edgeCurvatures.top) + Math.abs(edgeCurvatures.bottom) +
-    Math.abs(edgeCurvatures.left) + Math.abs(edgeCurvatures.right)) / 4;
+  const meanEdgeCurv = (Math.abs(edgeCurvatures.top) + Math.abs(edgeCurvatures.bottom) + Math.abs(edgeCurvatures.left) + Math.abs(edgeCurvatures.right)) / 4;
 
-  // Dash residuals on the final refined warp.
   const dashes = detectDashesOnWarp(warpedBgr, scale);
-  const aggregateDash = (
-    arr: DetectedDashes["top"],
-    axis: 0 | 1,
-  ): { mean: number; count: number } => {
-    let s = 0;
-    let n = 0;
-    for (const d of arr) {
-      if (d.detected !== null) {
-        s += d.detected[axis] - d.expected[axis];
-        n++;
-      }
-    }
+  const aggregateDash = (arr: any[], axis: 0 | 1): { mean: number; count: number } => {
+    let s = 0, n = 0;
+    for (const d of arr) if (d.detected !== null) { s += d.detected[axis] - d.expected[axis]; n++; }
     return { mean: n > 0 ? Number((s / n).toFixed(3)) : 0, count: n };
   };
-  const allDashResid: NonNullable<RefineMetrics["dashResiduals"]>["all"] = [];
+  const allDashResid: any[] = [];
   for (const [side, arr] of [["top", dashes.top], ["bottom", dashes.bottom], ["left", dashes.left], ["right", dashes.right]] as const) {
-    for (const d of arr) {
-      if (d.detected !== null) {
-        allDashResid.push({
-          side,
-          expected: [Number(d.expected[0].toFixed(2)), Number(d.expected[1].toFixed(2))],
-          detected: [Number(d.detected[0].toFixed(2)), Number(d.detected[1].toFixed(2))],
-          err: [Number((d.detected[0] - d.expected[0]).toFixed(3)), Number((d.detected[1] - d.expected[1]).toFixed(3))],
-        });
-      }
+    for (const d of arr) if (d.detected !== null) {
+      allDashResid.push({
+        side, expected: [d.expected[0], d.expected[1]], detected: [d.detected[0], d.detected[1]],
+        err: [d.detected[0] - d.expected[0], d.detected[1] - d.expected[1]]
+      });
     }
   }
-  const dashResiduals = {
-    top: aggregateDash(dashes.top, 1),
-    bottom: aggregateDash(dashes.bottom, 1),
-    left: aggregateDash(dashes.left, 0),
-    right: aggregateDash(dashes.right, 0),
-    all: allDashResid,
-  };
 
   return {
-    dashResiduals,
-    edgeCurvatures: {
-      top: Number(edgeCurvatures.top.toFixed(3)),
-      bottom: Number(edgeCurvatures.bottom.toFixed(3)),
-      left: Number(edgeCurvatures.left.toFixed(3)),
-      right: Number(edgeCurvatures.right.toFixed(3)),
+    dashResiduals: {
+        top: aggregateDash(dashes.top, 1), bottom: aggregateDash(dashes.bottom, 1),
+        left: aggregateDash(dashes.left, 0), right: aggregateDash(dashes.right, 0),
+        all: allDashResid
     },
+    edgeCurvatures: { top: Number(edgeCurvatures.top.toFixed(3)), bottom: Number(edgeCurvatures.bottom.toFixed(3)), left: Number(edgeCurvatures.left.toFixed(3)), right: Number(edgeCurvatures.right.toFixed(3)) },
     cornerErrors: {
       TL: [Number(cornerErrors.TL[0].toFixed(2)), Number(cornerErrors.TL[1].toFixed(2))],
       TR: [Number(cornerErrors.TR[0].toFixed(2)), Number(cornerErrors.TR[1].toFixed(2))],
       BR: [Number(cornerErrors.BR[0].toFixed(2)), Number(cornerErrors.BR[1].toFixed(2))],
       BL: [Number(cornerErrors.BL[0].toFixed(2)), Number(cornerErrors.BL[1].toFixed(2))],
     },
-    residual: {
-      maxCornerErr: Number(maxCornerErr.toFixed(3)),
-      meanEdgeCurv: Number(meanEdgeCurv.toFixed(3)),
-    },
+    residual: { maxCornerErr: Number(maxCornerErr.toFixed(3)), meanEdgeCurv: Number(meanEdgeCurv.toFixed(3)) },
     refined: refinedOk,
   };
 }
@@ -3044,49 +3049,34 @@ interface InnerBorderXing {
    *  more reliable (= clean WH→DG transition). */
   contrast: number;
 }
+/**
+ * Detect inner-border DG-line positions using the 3D adaptive bias model.
+ */
 function detectInnerBorderThresholdCrossings(
   warpedBgr: any, scale: number,
 ): InnerBorderXing[] {
   const cv = getCV();
-  const W = warpedBgr.cols;
   const H = warpedBgr.rows;
-  // Pre-blur the BGR image horizontally to integrate sub-cell-emitted
-  // light into LCD-pixel-level RGB. Without this, the DG-signature
-  // (2B-R-G) peaks at each LCD pixel's B sub-cell (= LEFT third of the
-  // pixel), not at the pixel centre, so the half-peak threshold-crossing
-  // on left/right borders lands ~(kernel_half − sub_cell_half) image-px
-  // outward of the actual pixel boundary — exactly the 1-3 px outward
-  // bias the user observed on left/right magenta crosses. A horizontal
-  // Gaussian σ ≈ scale/3 (= ~1 sub-cell width) blurs the sub-cells of
-  // each LCD pixel together, after which the DG-signature transitions
-  // at the actual pixel boundary the user perceives. Vertical σ = 0
-  // (no vertical blur) — top/bottom borders don't have BGR asymmetry on
-  // the Y axis, and a vertical blur would smear dashes and other
-  // horizontal features the rest of the pipeline relies on. This blur is
-  // local to detector use only (a separate Mat); the warp output itself
-  // stays untouched.
-  const blurredBgr = new cv.Mat();
-  const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
-  cv.GaussianBlur(warpedBgr, blurredBgr, new cv.Size(kx, 1), scale / 3, 0);
-  // Build a DG-signature channel: clip(2B - R - G, 0, 255). DG = (148, 148,
-  // 255) → 2*255 - 148 - 148 = 214. WH = (255, 255, 165) → 2*165 - 510 < 0
-  // → 0. BK = 0 - 0 = 0. LG = 296 - 255 - 148 = -107 → 0. So this channel
-  // is HIGH only for DG-coloured pixels and 0 for the rest. This is much
-  // more selective than gray: in 165926-class images where the WH frame at
-  // corners is dim (= similar gray to DG), gray-threshold detection picks
-  // up the WH→camera transition instead of the actual DG strip; the DG
-  // signature stays specific to DG.
-  const gray = new cv.Mat(H, W, cv.CV_8UC1);
-  const bgrData = blurredBgr.data as Uint8Array;
-  const gData = gray.data as Uint8Array;
-  for (let i = 0; i < H * W; i++) {
-    const b = bgrData[i * 3];
-    const g = bgrData[i * 3 + 1];
-    const r = bgrData[i * 3 + 2];
-    const v = 2 * b - r - g;
-    gData[i] = v < 0 ? 0 : v > 255 ? 255 : v;
-  }
-  blurredBgr.delete();
+  const W = warpedBgr.cols;
+
+  const { dgMat, lumaMat } = withMats((track, untrack) => {
+    const blurred = track(new cv.Mat());
+    const kx = Math.max(3, Math.floor(scale / 2) * 2 + 1);
+    cv.GaussianBlur(warpedBgr, blurred, new cv.Size(kx, 1), scale / 3, 0);
+    const dg = new cv.Mat(H, W, cv.CV_8UC1);
+    const luma = new cv.Mat(H, W, cv.CV_8UC1);
+    const bgrData = blurred.data as Uint8Array;
+    const dData = dg.data as Uint8Array;
+    const lData = luma.data as Uint8Array;
+    for (let i = 0; i < H * W; i++) {
+      const b = bgrData[i * 3], g = bgrData[i * 3 + 1], r = bgrData[i * 3 + 2];
+      const vDg = 2 * b - r - g;
+      dData[i] = vDg < 0 ? 0 : vDg > 255 ? 255 : vDg;
+      const vLu = 0.299 * r + 0.587 * g + 0.114 * b;
+      lData[i] = vLu < 0 ? 0 : vLu > 255 ? 255 : vLu;
+    }
+    return { dgMat: untrack(dg), lumaMat: untrack(luma) };
+  });
 
   const expTop = INNER_TOP * scale;
   const expBot = (INNER_BOT + 1) * scale;
@@ -3094,221 +3084,78 @@ function detectInnerBorderThresholdCrossings(
   const expRight = (INNER_RIGHT + 1) * scale;
   const points: InnerBorderXing[] = [];
 
-  const symBox = (p: Float64Array, k: number): Float64Array => {
-    if (k <= 1) return p.slice();
-    const odd = k % 2 === 0 ? k + 1 : k;
-    const half = Math.floor(odd / 2);
-    const out = new Float64Array(p.length);
-    for (let i = 0; i < p.length; i++) {
-      let s = 0, n = 0;
-      for (let j = -half; j <= half; j++) {
-        const idx = i + j;
-        if (idx >= 0 && idx < p.length) { s += p[idx]; n++; }
-      }
-      out[i] = s / Math.max(1, n);
-    }
-    return out;
-  };
-  const gauss = (p: Float64Array, sigma: number): Float64Array => {
-    const radius = Math.max(1, Math.ceil(3 * sigma));
-    const k = new Float64Array(2 * radius + 1);
-    let sum = 0;
-    for (let i = -radius; i <= radius; i++) {
-      const v = Math.exp(-(i * i) / (2 * sigma * sigma));
-      k[i + radius] = v; sum += v;
-    }
-    for (let i = 0; i < k.length; i++) k[i] /= sum;
-    const out = new Float64Array(p.length);
-    for (let i = 0; i < p.length; i++) {
-      let s = 0;
-      for (let j = -radius; j <= radius; j++) {
-        const idx = Math.max(0, Math.min(p.length - 1, i + j));
-        s += p[idx] * k[j + radius];
-      }
-      out[i] = s;
-    }
-    return out;
-  };
-
-  // For the DG-signature channel: the DG strip is HIGH-valued (~100-200);
-  // surrounding WH frame and camera content are LOW (~0-30). We find the
-  // strip's PEAK (argmax), then the OUTER edge as the sub-pixel position
-  // where signature crosses 0.5 * peak going from the peak toward the
-  // outer screen edge.
-  //
-  // "Floor" here is the OUTER-side baseline (= LOW DG signature in WH
-  // frame). Contrast = peakValue - baselineValue. Wide search to capture
-  // user-reported 5-7 px corner-area distortions where the DG strip can
-  // be far from canonical position.
-  const findEdge = (
-    profile: Float64Array, canonOuterIdx: number, frameDir: 1 | -1,
-  ): { edge: number; contrast: number } | null => {
-    const sm = gauss(symBox(profile, scale + 1), 1.0);
-    // Strip-centre canonical (= half-LCD-px inward of canonical outer).
-    const stripCentreIdx = canonOuterIdx - frameDir * (scale / 2);
-    // Wide peak search: ±3 LCD-px (= ±3*scale image-px). User-reported
-    // 5-7 px corner-area shifts on 165926 / ~2-EDIT can extend to 15-20
-    // image-px in the top-left quadrant per the border-curve-overlay
-    // diagnostic. The previous ±scale (±8 image-px) search missed those
-    // peaks entirely, so TPS received no anchor for the deviated regions
-    // and left them uncorrected. Widening to ±3*scale lets us find the
-    // actual DG strip even when it has shifted far from canonical.
-    //
-    // Risk: wider search may catch DG-toned CAMERA content as a spurious
-    // peak. Mitigated by the contrast filter (peak >= baseline+60) and
-    // by sampling baseline 1.5 LCD-px outward (still in the WH frame
-    // even when the strip has shifted by up to 2 LCD-px).
-    const peakHalf = Math.max(1, 3 * scale);
-    const peakLo = Math.max(0, Math.floor(stripCentreIdx - peakHalf));
-    const peakHi = Math.min(sm.length - 1, Math.ceil(stripCentreIdx + peakHalf));
-    if (peakLo >= peakHi) return null;
-    let peakIdx = peakLo, peakVal = sm[peakLo];
-    for (let i = peakLo + 1; i <= peakHi; i++) {
-      if (sm[i] > peakVal) { peakVal = sm[i]; peakIdx = i; }
-    }
-    // Baseline = signature 3 LCD-px OUTWARD (= deep in WH frame, where
-    // DG signature should be near 0). The previous 1.5·scale put baseline
-    // INSIDE the shifted strip when the strip itself has moved outward
-    // by 12+ image-px (165926 LEFT shifts the strip to X≈101 vs canonical
-    // 120, so baseline at canonical−12 = X=108 lands inside the shifted
-    // strip → contrast ≈ 0 → detector returns null and TPS loses the
-    // anchor at exactly the most-deviated columns). 3·scale = 24 image-px
-    // outward stays in the WH frame even for the worst observed shifts.
-    const baselineIdx = Math.max(0, Math.min(
-      sm.length - 1,
-      Math.round(canonOuterIdx + frameDir * 3 * scale),
-    ));
-    const baselineVal = sm[baselineIdx];
-    const contrast = peakVal - baselineVal;
-    // Require a clear DG peak. DG signature of ~100+ at peak with
-    // baseline near 0 → contrast ≥ 60 means a real DG strip; below this
-    // is detector noise or a non-DG-coloured screen.
-    if (contrast < 60) return null;
-    const threshold = baselineVal + 0.5 * contrast;
-    // Scan from the peak in frameDir direction (= toward outer screen
-    // edge) until the signature drops below threshold.
-    let i = peakIdx;
-    while (i + frameDir >= 0 && i + frameDir < sm.length) {
-      const a = sm[i];
-      const b = sm[i + frameDir];
-      if (a >= threshold && b < threshold) {
-        const t = (a - threshold) / (a - b);
-        return { edge: i + frameDir * Math.max(0, Math.min(1, t)), contrast };
-      }
-      i += frameDir;
-    }
-    return null;
-  };
-
   const linspace = (start: number, end: number, n: number): number[] => {
     const r: number[] = [];
     for (let i = 0; i < n; i++) r.push(start + (end - start) * i / (n - 1));
     return r;
   };
-  // Sample 33 points per side, spanning 0%–100% of each side (= include
-  // the corner positions). User-reported "top-left corner X px too far
-  // left" distortions are at the side endpoints; rejecting them via a
-  // non-zero CORNER_FRAC was missing those signal positions. The
-  // contrast filter drops any corner samples that the detector can't
-  // resolve reliably. Tried 65 — over-fits detection noise on
-  // clean images (thing-2: 100 → 200 diff px); 33 is the sweet spot.
   const N_POINTS = 33;
-  const CORNER_FRAC = 0;
 
-  for (const colFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
+  const getProfile = (mat: any, pos: number, r1: number, r2: number, horizontal: boolean): number[] => {
+    const p: number[] = [];
+    for (let t = r1; t < r2; t++) {
+      const x = horizontal ? pos : t;
+      const y = horizontal ? t : pos;
+      p.push(mat.ucharAt(y, x));
+    }
+    return p;
+  };
+
+  for (const colFrac of linspace(0, 1, N_POINTS)) {
     const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
     if (x < 0 || x >= W) continue;
-    const r1 = Math.max(0, expTop - 6 * scale);
-    const r2 = Math.min(H, expTop + 6 * scale);
-    if (r2 - r1 < 3 * scale) continue;
-    const profile = new Float64Array(r2 - r1);
-    const cLo = Math.max(0, x - 1);
-    const cHi = Math.min(W, x + 2);
-    for (let r = r1; r < r2; r++) {
-      let s = 0, n = 0;
-      for (let c = cLo; c < cHi; c++) { s += gray.ucharAt(r, c); n++; }
-      profile[r - r1] = s / Math.max(1, n);
-    }
-    const canonOuterIdx = expTop - r1;
-    const result = findEdge(profile, canonOuterIdx, -1);
-    if (result === null) continue;
-    points.push({
-      expectedX: x, expectedY: expTop,
-      detectedX: x, detectedY: r1 + result.edge,
-      contrast: result.contrast,
-    });
+    const r1 = Math.max(0, expTop - 6 * scale), r2 = Math.min(H, expTop + 6 * scale);
+    const pLu = getProfile(lumaMat, x, r1, r2, true), pDg = getProfile(dgMat, x, r1, r2, true);
+    const detY = r1 + firstDarkFromFrame(pLu, pDg, scale, "TOP", 1);
+    points.push({ expectedX: x, expectedY: expTop, detectedX: x, detectedY: detY, contrast: 100 });
   }
-  for (const colFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
+  for (const colFrac of linspace(0, 1, N_POINTS)) {
     const x = Math.floor(expLeft + (expRight - expLeft) * colFrac);
     if (x < 0 || x >= W) continue;
-    const r1 = Math.max(0, expBot - 6 * scale);
-    const r2 = Math.min(H, expBot + 6 * scale);
-    if (r2 - r1 < 3 * scale) continue;
-    const profile = new Float64Array(r2 - r1);
-    const cLo = Math.max(0, x - 1);
-    const cHi = Math.min(W, x + 2);
-    for (let r = r1; r < r2; r++) {
-      let s = 0, n = 0;
-      for (let c = cLo; c < cHi; c++) { s += gray.ucharAt(r, c); n++; }
-      profile[r - r1] = s / Math.max(1, n);
-    }
-    const canonOuterIdx = expBot - r1;
-    const result = findEdge(profile, canonOuterIdx, +1);
-    if (result === null) continue;
-    points.push({
-      expectedX: x, expectedY: expBot,
-      detectedX: x, detectedY: r1 + result.edge,
-      contrast: result.contrast,
-    });
+    const r1 = Math.max(0, expBot - 6 * scale), r2 = Math.min(H, expBot + 6 * scale);
+    const pLu = getProfile(lumaMat, x, r1, r2, true), pDg = getProfile(dgMat, x, r1, r2, true);
+    const detY = r1 + firstDarkFromFrame(pLu, pDg, scale, "BOT", -1);
+    points.push({ expectedX: x, expectedY: expBot, detectedX: x, detectedY: detY, contrast: 100 });
   }
-  for (const rowFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
+  for (const rowFrac of linspace(0, 1, N_POINTS)) {
     const y = Math.floor(expTop + (expBot - expTop) * rowFrac);
     if (y < 0 || y >= H) continue;
-    const c1 = Math.max(0, expLeft - 6 * scale);
-    const c2 = Math.min(W, expLeft + 6 * scale);
-    if (c2 - c1 < 3 * scale) continue;
-    const profile = new Float64Array(c2 - c1);
-    const rLo = Math.max(0, y - 1);
-    const rHi = Math.min(H, y + 2);
-    for (let c = c1; c < c2; c++) {
-      let s = 0, n = 0;
-      for (let r = rLo; r < rHi; r++) { s += gray.ucharAt(r, c); n++; }
-      profile[c - c1] = s / Math.max(1, n);
-    }
-    const canonOuterIdx = expLeft - c1;
-    const result = findEdge(profile, canonOuterIdx, -1);
-    if (result === null) continue;
-    points.push({
-      expectedX: expLeft, expectedY: y,
-      detectedX: c1 + result.edge, detectedY: y,
-      contrast: result.contrast,
-    });
+    const c1 = Math.max(0, expLeft - 6 * scale), c2 = Math.min(W, expLeft + 6 * scale);
+    const pLu = getProfile(lumaMat, y, c1, c2, false), pDg = getProfile(dgMat, y, c1, c2, false);
+    const detX = c1 + firstDarkFromFrame(pLu, pDg, scale, "LEFT", 1);
+    points.push({ expectedX: expLeft, expectedY: y, detectedX: detX, detectedY: y, contrast: 100 });
   }
-  for (const rowFrac of linspace(CORNER_FRAC, 1 - CORNER_FRAC, N_POINTS)) {
+  for (const rowFrac of linspace(0, 1, N_POINTS)) {
     const y = Math.floor(expTop + (expBot - expTop) * rowFrac);
     if (y < 0 || y >= H) continue;
-    const c1 = Math.max(0, expRight - 6 * scale);
-    const c2 = Math.min(W, expRight + 6 * scale);
-    if (c2 - c1 < 3 * scale) continue;
-    const profile = new Float64Array(c2 - c1);
-    const rLo = Math.max(0, y - 1);
-    const rHi = Math.min(H, y + 2);
-    for (let c = c1; c < c2; c++) {
-      let s = 0, n = 0;
-      for (let r = rLo; r < rHi; r++) { s += gray.ucharAt(r, c); n++; }
-      profile[c - c1] = s / Math.max(1, n);
-    }
-    const canonOuterIdx = expRight - c1;
-    const result = findEdge(profile, canonOuterIdx, +1);
-    if (result === null) continue;
-    points.push({
-      expectedX: expRight, expectedY: y,
-      detectedX: c1 + result.edge, detectedY: y,
-      contrast: result.contrast,
-    });
+    const c1 = Math.max(0, expRight - 6 * scale), c2 = Math.min(W, expRight + 6 * scale);
+    const pLu = getProfile(lumaMat, y, c1, c2, false), pDg = getProfile(dgMat, y, c1, c2, false);
+    const detX = c1 + firstDarkFromFrame(pLu, pDg, scale, "RIGHT", -1);
+    points.push({ expectedX: expRight, expectedY: y, detectedX: detX, detectedY: y, contrast: 100 });
   }
-  gray.delete();
-  return points;
+
+  // Filter outliers using a median-based moving window.
+  const filtered: InnerBorderXing[] = [];
+  const OUTLIER_MAX_DEV = 15;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const neighbors: number[] = [];
+    for (let j = Math.max(0, i - 2); j <= Math.min(points.length - 1, i + 2); j++) {
+      if (i === j) continue;
+      if (points[i].expectedX === points[j].expectedX || points[i].expectedY === points[j].expectedY) {
+        neighbors.push(points[j].detectedX === points[j].expectedX ? points[j].detectedY : points[j].detectedX);
+      }
+    }
+    if (neighbors.length === 0) { filtered.push(p); continue; }
+    neighbors.sort((a, b) => a - b);
+    const median = neighbors[Math.floor(neighbors.length / 2)];
+    const val = p.detectedX === p.expectedX ? p.detectedY : p.detectedX;
+    if (Math.abs(val - median) <= OUTLIER_MAX_DEV) filtered.push(p);
+  }
+
+  dgMat.delete();
+  lumaMat.delete();
+  return filtered;
 }
 
 // ─── Polynomial post-correction ───
