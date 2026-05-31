@@ -4,92 +4,67 @@ PIPELINE RUN
   Output dir: test-output\zelda-poster-3
 
 PIPELINE DIAGNOSTICS
-  [warp] lens-distortion: k1=-0.0150 score=95.37 (searched 32 candidates)
-  [warp] corner detection: area=1305898 aspect=1.097 (target 1.111) thresh=190 score=0.0464
-  [warp] detected source corners (TL TR BR BL): (26,11) (1240,22) (1230,1107) (25,1121)
-  [warp] pass 1 edge curvatures: top=-1.81 bot=1.22 left=-1.97 right=3.61
-  [warp] pass 1 corner errors: TL=(-0.4,-0.4) TR=(1.1,-0.6) BR=(1.1,0.5) BL=(0.3,-0.5)
-  [warp] pass1 residual: maxCornerErr=1.11 meanEdgeCurv=2.15
-  [warp] pass 2 edge curvatures: top=-1.07 bot=1.59 left=-0.96 right=1.77
-  [warp] pass 2 corner errors: TL=(0.8,0.5) TR=(-0.5,0.0) BR=(-0.4,0.5) BL=(0.6,0.1)
-  [warp] pass2 residual: maxCornerErr=0.79 meanEdgeCurv=1.35
-  [warp] pass2 dash residuals (image-px, det-exp): top=0.23(15/15) bot=-1.00(15/15) left=-0.09(12/12) right=-1.79(12/12)
-  [warp] tpsCorrection: fit on 176 pts (54 dashes + 114 border + 8 anchors), λ=0.05, maxFitError=1.461 px
-  [warp] borderDetection: 114 points, meanAbsBias=0.17 px, maxAbsBias=0.89 px, 0 with |bias|>1px (missing: T=9, B=0, L=2, R=8)
-  [pipeline] raw frame B median = 221; useB = true (gate < 240)
-  [white-balance] raw frame median: R=227 G=227 B=221 (target 255 255 165)
-  [white-balance] scales: R=1.123 G=1.125 B=0.748 (clamp [0.4, 2.5])
-  [white-balance] balanced frame median: R=255 G=255 B=165
-  [correct] raw frame median: R=231 G=232 B=151 (target FFFFA5 = 255 255 165)
-  [correct] raw inner-border median: R=172 G=185 B=154 (target 9494FF = 148 148 255)
-  [correct] B global-scale pathology: median border B=154.0 not ≥ 5 above median frame B=165.0; falling back to passthrough
-  [correct] R: white samples kept=7274 (median 255.0, range 187–255)
-  [correct] G: white samples kept=7394 (median 254.5, range 185–255)
-  [correct] white surface R: 224–259; G: 223–259
-  [correct] dark surface  R: 153–194; G: 173–208
-  [correct] bright-heavy heuristic: cameraMeanR=174.9 skipRefinement=true
-  [correct] interior DG calibration: R=0px G=0px
-  [correct] frame post-correction p85: R=255 G=255 B=158 (target #FFFFA5 = R255 G255 B165)
-  [correct] camera region mean: R=174.9 G=155.4 B=150.4
-  [crop] inner-border mean=166.2 white-frame mean=181.5 (ratio 0.916, WARN)
-  [sample] R: 0–255  G: 0–255  B: 60–191
+  [warp] corner detection: area=1324985 aspect=1.119 (target 1.111) thresh=175 score=0.0494
+  [warp] detected source corners (TL TR BR BL): (27,13) (1236,23) (1229,1106) (28,1121)
+  [warp] pass 1 edge curvatures: top=-1.04 bot=-0.17 left=-1.79 right=3.75
+  [warp] pass 1 corner errors: TL=(-2.2,-1.0) TR=(4.1,-1.1) BR=(2.9,0.7) BL=(-1.7,-1.3)
+  [warp] pass 2 edge curvatures: top=-0.55 bot=0.26 left=-0.68 right=1.99
+  [warp] pass 2 corner errors: TL=(-0.9,-0.4) TR=(1.9,-0.5) BR=(1.3,0.6) BL=(-0.7,-0.5)
+  [warp] border detection: n=113, meanAbsBias=1.16 px, maxAbsBias=2.85 px, 65 with |bias|>1px (missing: T=8, B=0, L=2, R=9)
+  [correct] R: white samples kept=7349 (median 227.0, range 168–255)
+  [correct] G: white samples kept=7509 (median 225.6, range 166–254)
+  [correct] white surface R: 191–250; G: 191–249
+  [correct] dark surface  R: 137–163; G: 153–173
+  [correct] interior DG calibration: R=3801px G=5904px
+  [correct] frame post-correction p85: R=255 G=255 B=212 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=173.5 G=153.6 B=201.0
+  [crop] inner-border mean=167.8 white-frame mean=195.1 (ratio 0.860, WARN)
+  [sample] R: 2–255  G: 0–255  B: 77–250
   [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
-  [sample] LCD centre offsets (clamped): mean=0.27 range=[-3.00, 2.85] dist=0:4578 ≤-4:0 -3:19 -2:1182 -1:2209 +1:4279 +2:2044 +3:25 ≥+4:0
-  [sample] LCD centre offsets (raw, pre-clamp): mean=0.27 range=[-3.27, 2.85] dist=0:4578 ≤-4:0 -3:19 -2:1182 -1:2209 +1:4279 +2:2044 +3:25 ≥+4:0
-  [quantize] 3D RGB refinement: dgBTarget=169 bInit=[BK103 DG174 LG122 WH148] changed=636
-  [quantize] global k-means cluster centers (palette-ordered):  BK=(R57,G31)  DG=(R136,G141)  LG=(R227,G137)  WH=(R233,G243)
-  [quantize] after global kmeans: BK=1485  DG=3986  LG=3574  WH=5291
-  [quantize] drift snap (0 snapped, * marks snapped): BK=65 DG=14 LG=30 WH=25
-  [quantize] strip ensemble: 7 strips, changed 832 px  now: BK=1528  DG=3904  LG=4030  WH=4874
-  [quantize] G-valley refinement: threshold=189.9 (LG center G=136.9, WH center G=242.9), changed 629 px
-  [quantize] final: BK=1528 (10.7%)  DG=3904 (27.2%)  LG=3547 (24.7%)  WH=5357 (37.4%)
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R48,G26)  DG=(R143,G151)  LG=(R234,G155)  WH=(R244,G246)
+  [quantize] after global kmeans: BK=1572  DG=3527  LG=4214  WH=5023
+  [quantize] strip ensemble: 7 strips, changed 32 px  now: BK=1572  DG=3525  LG=4244  WH=4995
+  [quantize] G-valley refinement: threshold=210.0 (LG center G=155.2, WH center G=246.0), changed 17 px
+  [quantize] final: BK=1572 (11.0%)  DG=3525 (24.6%)  LG=4249 (29.6%)  WH=4990 (34.8%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 11941  (83.29%)
-  Different    : 2395   (16.71%)
+  Matching     : 14322  (99.90%)
+  Different    : 14   (0.10%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
-  BK  #000000                 1528        1572  -44
-  DG  #9494FF                 3904        3526  +378
-  LG  #FF9494                 3547        4255  -708
-  WH  #FFFFA5                 5357        4983  +374
+  BK  #000000                 1572        1572  +0
+  DG  #9494FF                 3525        3526  -1
+  LG  #FF9494                 4249        4255  -6
+  WH  #FFFFA5                 4990        4983  +7
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
-  BK  #000000                    1435 v               15 X               78 X                0      1528
-  DG  #9494FF                     131 X             3388 v              384 X                1 X    3904
-  LG  #FF9494                       2 X               91 X             2795 v              659 X    3547
-  WH  #FFFFA5                       4 X               32 X              998 X             4323 v    5357
+  BK  #000000                    1572 v                0                  0                  0      1572
+  DG  #9494FF                       0               3525 v                0                  0      3525
+  LG  #FF9494                       0                  1 X             4245 v                3 X    4249
+  WH  #FFFFA5                       0                  0                 10 X             4980 v    4990
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  BK  #000000  ->  DG  #9494FF : 15 px
-  BK  #000000  ->  LG  #FF9494 : 78 px
-  DG  #9494FF  ->  BK  #000000 : 131 px
-  DG  #9494FF  ->  LG  #FF9494 : 384 px
-  DG  #9494FF  ->  WH  #FFFFA5 : 1 px
-  LG  #FF9494  ->  BK  #000000 : 2 px
-  LG  #FF9494  ->  DG  #9494FF : 91 px
-  LG  #FF9494  ->  WH  #FFFFA5 : 659 px
-  WH  #FFFFA5  ->  BK  #000000 : 4 px
-  WH  #FFFFA5  ->  DG  #9494FF : 32 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 998 px
+  LG  #FF9494  ->  DG  #9494FF : 1 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 3 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 10 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 11941  (83.29%)
-  Different    : 2395   (16.71%)
+  Matching     : 14322  (99.90%)
+  Different    : 14   (0.10%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
