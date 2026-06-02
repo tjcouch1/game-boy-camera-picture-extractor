@@ -45,6 +45,8 @@ const TEST_OUTPUT_DIR = join(REPO_ROOT, "test-output");
 const REFERENCE_SUFFIX = "-output-corrected.png";
 const SUMMARY_LOG = join(TEST_OUTPUT_DIR, "test-summary.log");
 
+const DEFAULT_SCALE = 8;
+
 // ─── Color constants ───
 
 const COLOR_NAMES: Record<number, string> = {
@@ -275,11 +277,12 @@ async function saveErrorMap(
   result: Uint8Array,
   reference: Uint8Array,
   outputDir: string,
-  stem: string
+  stem: string,
+  scale: number = 1,
+  suffix: string = ""
 ): Promise<void> {
   const w = CAM_W;
   const h = CAM_H;
-  const scale = 4;
   const outW = w * scale;
   const outH = h * scale;
   const buf = Buffer.alloc(outW * outH * 4);
@@ -313,7 +316,7 @@ async function saveErrorMap(
     }
   }
 
-  const outPath = join(outputDir, `${stem}_diag_error_map.png`);
+  const outPath = join(outputDir, `${stem}_diag_error_map${suffix}.png`);
   await sharp(buf, { raw: { width: outW, height: outH, channels: 4 } })
     .png()
     .toFile(outPath);
@@ -368,7 +371,7 @@ async function runPipeline(
   inputPath: string,
   outputDir: string,
   stem: string,
-  scale: number = 8
+  scale: number = DEFAULT_SCALE
 ): Promise<PipelineRunResult> {
   const input = await loadImage(inputPath);
   const result = await processPicture(input, {
@@ -561,7 +564,7 @@ async function main() {
         try {
           const input = await loadImage(inputPath);
           const result = await processPicture(input, {
-            scale: 8,
+            scale: DEFAULT_SCALE,
             debug: true,
             onProgress: (step, pct) => {
               if (pct === 0) process.stdout.write(`    ${step}...`);
@@ -645,7 +648,7 @@ async function main() {
             inputPath,
             outputDir,
             stem,
-            8
+            DEFAULT_SCALE
           );
 
           // Echo per-step diagnostic logs into the test log
@@ -661,7 +664,15 @@ async function main() {
           const cmp = compare(resultGray, referenceGray, outputDir, stem, log);
 
           // Save diagnostic images
-          await saveErrorMap(resultGray, referenceGray, outputDir, stem);
+          await saveErrorMap(resultGray, referenceGray, outputDir, stem, 1);
+          await saveErrorMap(
+            resultGray,
+            referenceGray,
+            outputDir,
+            stem,
+            DEFAULT_SCALE,
+            "_scaled"
+          );
           await savePaletteImage(
             resultGray,
             outputDir,
