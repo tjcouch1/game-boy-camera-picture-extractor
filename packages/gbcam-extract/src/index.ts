@@ -63,7 +63,11 @@ export async function processPicture(
   onProgress?.("sample", 100);
 
   onProgress?.("quantize", 0);
-  const quantized = quantize(sampled, { debug: collector });
+  const quantized = quantize(sampled, {
+    corrected,
+    scale,
+    debug: collector,
+  });
   onProgress?.("quantize", 100);
 
   const result: PipelineResult = { grayscale: quantized };
