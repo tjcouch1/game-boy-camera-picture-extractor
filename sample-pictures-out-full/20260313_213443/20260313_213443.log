@@ -1,0 +1,78 @@
+PIPELINE RUN
+  Input:      sample-pictures-full\20260313_213443.jpg
+  Output dir: sample-pictures-out-full\20260313_213443
+  locate:     true
+
+PIPELINE DIAGNOSTICS
+  [locate] working-res 1000×450 (scale=0.248 from 4032×1816)
+  [locate] found 3 candidate(s); top score=0.009
+  [locate] chose candidate 0: totalScore=0.990 (innerBorder=0.973, darkRing=1.000)
+  [locate] dash search: top@row=7 (expected 7, off 0), bottom@row=137 (expected 136, off 1), left@col=2 (expected 3, off 1), right@col=157 (expected 156, off 1)
+  [locate] output region: 1431×1287 (margin=6.0%, passThrough=false)
+  [warp] corner detection: area=1482924 aspect=1.106 (target 1.111) thresh=180 score=0.0216
+  [warp] detected source corners (TL TR BR BL): (80,61) (1355,63) (1353,1219) (77,1221)
+  [warp] pass 1 edge curvatures: top=-1.95 bot=0.42 left=-1.42 right=3.80
+  [warp] pass 1 corner errors: TL=(-2.3,-1.9) TR=(3.6,-1.8) BR=(4.7,0.7) BL=(-0.8,0.7)
+  [warp] pass 2 edge curvatures: top=-0.80 bot=-0.25 left=5.65 right=0.86
+  [warp] pass 2 corner errors: TL=(-1.0,-0.9) TR=(1.3,-0.9) BR=(2.0,-0.0) BL=(-0.3,-0.0)
+  [correct] R: white samples kept=7305 (median 188.0, range 141–212)
+  [correct] G: white samples kept=7490 (median 202.0, range 151–244)
+  [correct] white surface R: 154–201; G: 167–222
+  [correct] dark surface  R: 71–144; G: 132–170
+  [correct] interior DG calibration: R=2330px G=5629px
+  [correct] frame post-correction p85: R=253 G=253 B=225 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=179.2 G=148.4 B=216.7
+  [crop] inner-border mean=185.2 white-frame mean=212.9 (ratio 0.870, WARN)
+  [sample] R: 0–255  G: 0–255  B: 101–255
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R68,G22)  DG=(R148,G148)  LG=(R232,G149)  WH=(R251,G228)
+  [quantize] after global kmeans: BK=2480  DG=2493  LG=4711  WH=4652
+  [quantize] strip ensemble: 7 strips, changed 433 px  now: BK=2464  DG=2500  LG=4992  WH=4380
+  [quantize] G-valley refinement: threshold=195.0 (LG center G=149.0, WH center G=228.3), changed 133 px
+  [quantize] final: BK=2464 (17.2%)  DG=2500 (17.4%)  LG=4871 (34.0%)  WH=4501 (31.4%)
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14136  (98.60%)
+  Different    : 200   (1.40%)
+
+----------------------------------------------------------------------
+COLOR DISTRIBUTION
+----------------------------------------------------------------------
+  Color                     Result   Reference      Diff
+  BK  #000000                 2464        2451  +13
+  DG  #9494FF                 2500        2548  -48
+  LG  #FF9494                 4871        4923  -52
+  WH  #FFFFA5                 4501        4414  +87
+
+----------------------------------------------------------------------
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+----------------------------------------------------------------------
+  Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
+  BK  #000000                    2451 v               13 X                0                  0      2464
+  DG  #9494FF                       0               2477 v               23 X                0      2500
+  LG  #FF9494                       0                 57 X             4804 v               10 X    4871
+  WH  #FFFFA5                       0                  1 X               96 X             4404 v    4501
+
+----------------------------------------------------------------------
+ERROR BREAKDOWN  (result -> reference)
+----------------------------------------------------------------------
+  BK  #000000  ->  DG  #9494FF : 13 px
+  DG  #9494FF  ->  LG  #FF9494 : 23 px
+  LG  #FF9494  ->  DG  #9494FF : 57 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 10 px
+  WH  #FFFFA5  ->  DG  #9494FF : 1 px
+  WH  #FFFFA5  ->  LG  #FF9494 : 96 px
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14136  (98.60%)
+  Different    : 200   (1.40%)
+
+======================================================================
+RESULT: FAIL — see diagnostics above and in the output directory.
+======================================================================

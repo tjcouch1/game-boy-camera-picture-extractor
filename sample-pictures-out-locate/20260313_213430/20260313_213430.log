@@ -1,0 +1,64 @@
+PIPELINE RUN
+  Input:      sample-pictures\20260313_213430.jpg
+  Output dir: sample-pictures-out-locate\20260313_213430
+  locate:     true
+
+PIPELINE DIAGNOSTICS
+  [locate] input 1297×1188 aspect=1.092 ≈ target 1.111; treating as already-cropped (passThrough)
+  [warp] corner detection: area=1401849 aspect=1.108 (target 1.111) thresh=180 score=0.0317
+  [warp] detected source corners (TL TR BR BL): (24,20) (1270,34) (1255,1155) (17,1152)
+  [warp] pass 1 edge curvatures: top=-0.80 bot=0.63 left=-2.32 right=4.08
+  [warp] pass 1 corner errors: TL=(-2.8,-0.9) TR=(4.0,-0.8) BR=(4.0,1.3) BL=(-1.9,0.4)
+  [warp] pass 2 edge curvatures: top=-0.13 bot=-0.04 left=-0.99 right=1.83
+  [warp] pass 2 corner errors: TL=(-1.3,-0.4) TR=(1.8,-0.3) BR=(1.8,0.5) BL=(-0.9,0.1)
+  [correct] R: white samples kept=7164 (median 192.0, range 144–223)
+  [correct] G: white samples kept=7343 (median 209.1, range 156–253)
+  [correct] white surface R: 166–205; G: 181–231
+  [correct] dark surface  R: 86–122; G: 131–158
+  [correct] interior DG calibration: R=3463px G=5533px
+  [correct] frame post-correction p85: R=252 G=253 B=245 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=183.9 G=157.0 B=226.7
+  [crop] inner-border mean=178.2 white-frame mean=211.3 (ratio 0.843, OK)
+  [sample] R: 36–255  G: 0–255  B: 108–255
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R80,G33)  DG=(R160,G151)  LG=(R236,G161)  WH=(R247,G249)
+  [quantize] after global kmeans: BK=1572  DG=3516  LG=4260  WH=4988
+  [quantize] strip ensemble: 7 strips, changed 10 px  now: BK=1572  DG=3521  LG=4260  WH=4983
+  [quantize] G-valley refinement: threshold=221.0 (LG center G=160.9, WH center G=249.1), changed 0 px
+  [quantize] final: BK=1572 (11.0%)  DG=3521 (24.6%)  LG=4260 (29.7%)  WH=4983 (34.8%)
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
+
+----------------------------------------------------------------------
+COLOR DISTRIBUTION
+----------------------------------------------------------------------
+  Color                     Result   Reference      Diff
+  BK  #000000                 1572        1572  +0
+  DG  #9494FF                 3521        3521  +0
+  LG  #FF9494                 4260        4260  +0
+  WH  #FFFFA5                 4983        4983  +0
+
+----------------------------------------------------------------------
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+----------------------------------------------------------------------
+  Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
+  BK  #000000                    1572 v                0                  0                  0      1572
+  DG  #9494FF                       0               3521 v                0                  0      3521
+  LG  #FF9494                       0                  0               4260 v                0      4260
+  WH  #FFFFA5                       0                  0                  0               4983 v    4983
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
+
+======================================================================
+RESULT: PASS — all pixels match the reference.
+======================================================================
