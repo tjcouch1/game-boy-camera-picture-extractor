@@ -1,0 +1,75 @@
+PIPELINE RUN
+  Input:      sample-pictures\20260328_165926~2-EDIT.jpg
+  Output dir: sample-pictures-out-locate\20260328_165926~2-EDIT
+  locate:     true
+
+PIPELINE DIAGNOSTICS
+  [locate] input 1442×1300 aspect=1.109 ≈ target 1.111; treating as already-cropped (passThrough)
+  [warp] corner detection: area=1731279 aspect=1.121 (target 1.111) thresh=180 score=0.0243
+  [warp] detected source corners (TL TR BR BL): (20,30) (1407,23) (1402,1268) (31,1279)
+  [warp] pass 1 edge offsets (avg): top=-1.59 bot=2.60 left=-0.75 right=4.99
+  [warp] pass 1 corner errors: TL=(-4.0,-1.3) TR=(1.8,-0.3) BR=(3.8,1.9) BL=(-3.1,1.0)
+  [warp] pass 1 poly fit RMSE: top=0.47 bot=0.22 left=5.79 right=0.65
+  [warp] pass 1 sub-pixel gap width: left=14.32 right=16.28 top=16.47 bottom=10.11
+  [warp] pass 2 edge offsets (avg): top=-0.72 bot=1.08 left=1.30 right=2.12
+  [warp] pass 2 corner errors: TL=(-1.1,-0.6) TR=(0.7,-0.2) BR=(1.8,0.9) BL=(-0.7,0.4)
+  [warp] pass 2 poly fit RMSE: top=0.49 bot=0.20 left=0.63 right=0.64
+  [warp] pass 2 sub-pixel gap width: left=14.86 right=15.75 top=20.37 bottom=9.97
+  [warp] non-linear pre-remap residuals: top=-0.30 bot=0.41 left=2.22 right=0.87
+  [warp] non-linear fit RMSE: top=0.52 bot=0.23 left=0.63 right=0.63
+  [warp] non-linear shift magnitudes (max |Δ|): top=1.52 bot=1.24 left=0.92 right=2.01
+  [warp] sub-pixel rectify: max shift=2.51 px top G-offset range [3.97, 5.40] bot G-offset range [1.92, 5.80]
+  [warp] final residuals (post-remap, signed mean): top=-0.056 bot=0.031 left=1.549 right=0.056
+  [correct] R: white samples kept=7423 (median 218.6, range 162–254)
+  [correct] G: white samples kept=7587 (median 216.0, range 160–252)
+  [correct] white surface R: 178–244; G: 175–244
+  [correct] dark surface  R: 106–163; G: 141–174
+  [correct] interior DG calibration: R=3766px G=6779px
+  [correct] frame post-correction p85: R=254 G=255 B=199 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=170.4 G=148.3 B=183.3
+  [crop] inner-border mean=175.4 white-frame mean=197.5 (ratio 0.888, WARN)
+  [sample] R: 15–255  G: 0–255  B: 54–237
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[6,8) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R59,G17)  DG=(R146,G153)  LG=(R238,G146)  WH=(R231,G244)
+  [quantize] after global kmeans: BK=1746  DG=3925  LG=3789  WH=4876
+  [quantize] strip ensemble: 7 strips, changed 16 px  now: BK=1746  DG=3918  LG=3785  WH=4887
+  [quantize] G-valley refinement: threshold=208.0 (LG center G=146.0, WH center G=243.8), changed 27 px
+  [quantize] B reclassify: dgMeanB=199.9 warmMeanB=147.3 flipDg->warm=8 flipWarm->dg=0
+  [quantize] confidence refine pass 1: 14228/14336 pixels confident, 0 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] final: BK=1746 (12.2%)  DG=3910 (27.3%)  LG=3820 (26.6%)  WH=4860 (33.9%)
+
+======================================================================
+COMPARISON SUMMARY
+======================================================================
+  Total pixels : 14336
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
+
+----------------------------------------------------------------------
+COLOR DISTRIBUTION
+----------------------------------------------------------------------
+  Color                     Result   Reference      Diff
+  BK  #000000                 1746        1746  +0
+  DG  #9494FF                 3910        3910  +0
+  LG  #FF9494                 3820        3820  +0
+  WH  #FFFFA5                 4860        4860  +0
+
+----------------------------------------------------------------------
+CONFUSION MATRIX  (rows = pipeline result, cols = reference)
+----------------------------------------------------------------------
+  Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
+  BK  #000000                    1746 v                0                  0                  0      1746
+  DG  #9494FF                       0               3910 v                0                  0      3910
+  LG  #FF9494                       0                  0               3820 v                0      3820
+  WH  #FFFFA5                       0                  0                  0               4860 v    4860
+
+======================================================================
+COMPARISON SUMMARY (reprint)
+======================================================================
+  Total pixels : 14336
+  Matching     : 14336  (100.00%)
+  Different    : 0   (0.00%)
+
+======================================================================
+RESULT: PASS — all pixels match the reference.
+======================================================================

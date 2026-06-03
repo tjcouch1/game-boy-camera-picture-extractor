@@ -1,7 +1,7 @@
-
 PIPELINE RUN
   Input:      test-input\bathhouse-1.jpg
   Output dir: test-output\bathhouse-1
+  locate:     false
 
 PIPELINE DIAGNOSTICS
   [warp] corner detection: area=1365231 aspect=1.102 (target 1.111) thresh=180 score=0.0225

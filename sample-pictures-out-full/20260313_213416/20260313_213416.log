@@ -11,64 +11,74 @@ PIPELINE DIAGNOSTICS
   [locate] output region: 1384×1247 (margin=6.0%, passThrough=false)
   [warp] corner detection: area=1392300 aspect=1.109 (target 1.111) thresh=180 score=0.0224
   [warp] detected source corners (TL TR BR BL): (76,58) (1311,60) (1310,1180) (69,1182)
-  [warp] pass 1 edge curvatures: top=-0.36 bot=0.49 left=-2.72 right=2.30
-  [warp] pass 1 corner errors: TL=(-3.2,-0.8) TR=(2.4,-0.4) BR=(2.5,1.0) BL=(-2.6,0.1)
-  [warp] pass 2 edge curvatures: top=0.19 bot=-0.05 left=2.51 right=0.87
-  [warp] pass 2 corner errors: TL=(-1.4,-0.1) TR=(0.9,0.1) BR=(1.1,0.2) BL=(-1.1,-0.2)
-  [correct] R: white samples kept=7249 (median 202.0, range 150–233)
-  [correct] G: white samples kept=7449 (median 214.2, range 159–252)
-  [correct] white surface R: 166–217; G: 177–237
-  [correct] dark surface  R: 77–129; G: 133–169
-  [correct] interior DG calibration: R=8225px G=9471px
-  [correct] frame post-correction p85: R=254 G=254 B=241 (target #FFFFA5 = R255 G255 B165)
-  [correct] camera region mean: R=158.9 G=144.4 B=226.6
-  [crop] inner-border mean=186.6 white-frame mean=212.8 (ratio 0.877, WARN)
-  [sample] R: 36–255  G: 0–255  B: 94–255
-  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[5,7) vMargin=1
-  [quantize] global k-means cluster centers (palette-ordered):  BK=(R92,G32)  DG=(R154,G147)  LG=(R234,G153)  WH=(R250,G239)
-  [quantize] after global kmeans: BK=1336  DG=8601  LG=2454  WH=1945
-  [quantize] strip ensemble: 7 strips, changed 96 px  now: BK=1336  DG=8615  LG=2358  WH=2027
-  [quantize] G-valley refinement: threshold=226.0 (LG center G=153.2, WH center G=239.0), changed 324 px
-  [quantize] final: BK=1336 (9.3%)  DG=8615 (60.1%)  LG=2682 (18.7%)  WH=1703 (11.9%)
+  [warp] pass 1 edge offsets (avg): top=-1.01 bot=0.63 left=-2.28 right=2.59
+  [warp] pass 1 corner errors: TL=(-1.7,-0.6) TR=(1.2,-0.4) BR=(1.6,0.7) BL=(-0.7,-0.1)
+  [warp] pass 1 poly fit RMSE: top=0.52 bot=0.28 left=0.21 right=0.35
+  [warp] pass 1 sub-pixel gap width: left=17.79 right=22.88 top=17.52 bottom=21.07
+  [warp] pass 2 edge offsets (avg): top=-0.54 bot=0.31 left=-1.07 right=1.16
+  [warp] pass 2 corner errors: TL=(-0.8,-0.2) TR=(0.5,-0.2) BR=(0.7,0.5) BL=(-0.3,0.1)
+  [warp] pass 2 poly fit RMSE: top=0.38 bot=0.24 left=0.20 right=0.36
+  [warp] pass 2 sub-pixel gap width: left=17.78 right=21.39 top=17.96 bottom=21.39
+  [warp] non-linear pre-remap residuals: top=-0.33 bot=-0.01 left=-0.51 right=0.53
+  [warp] non-linear fit RMSE: top=0.35 bot=0.24 left=0.21 right=0.37
+  [warp] non-linear shift magnitudes (max |Δ|): top=0.67 bot=0.03 left=2.17 right=0.54
+  [warp] sub-pixel rectify: max shift=3.11 px top G-offset range [0.96, 4.95] bot G-offset range [0.02, 3.61]
+  [warp] final residuals (post-remap, signed mean): top=0.045 bot=-0.006 left=-0.031 right=0.026
+  [correct] R: white samples kept=7211 (median 201.6, range 150–231)
+  [correct] G: white samples kept=7433 (median 215.0, range 159–251)
+  [correct] white surface R: 165–217; G: 176–237
+  [correct] dark surface  R: 77–119; G: 132–162
+  [correct] interior DG calibration: R=7761px G=7913px
+  [correct] frame post-correction p85: R=254 G=255 B=242 (target #FFFFA5 = R255 G255 B165)
+  [correct] camera region mean: R=156.2 G=141.4 B=226.6
+  [crop] inner-border mean=175.9 white-frame mean=213.1 (ratio 0.826, OK)
+  [sample] R: 36–255  G: 0–255  B: 97–255
+  [sample] subpixel cols (scale=8): B=[1,3) G=[3,5) R=[6,8) vMargin=1
+  [quantize] global k-means cluster centers (palette-ordered):  BK=(R90,G30)  DG=(R135,G154)  LG=(R215,G187)  WH=(R195,G251)
+  [quantize] after global kmeans: BK=1336  DG=8614  LG=2665  WH=1721
+  [quantize] strip ensemble: 7 strips, changed 48 px  now: BK=1336  DG=8622  LG=2668  WH=1710
+  [quantize] G-valley refinement: threshold=234.0 (LG center G=186.8, WH center G=251.5), changed 26 px
+  [quantize] B reclassify: dgMeanB=236.0 warmMeanB=217.7 flipDg->warm=0 flipWarm->dg=1
+  [quantize] confidence refine pass 1: 13335/14336 pixels confident, 3 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] confidence refine pass 2: 13335/14336 pixels confident, 0 ambiguous pixels reclassified via similar-RGB neighbour vote
+  [quantize] final: BK=1336 (9.3%)  DG=8626 (60.2%)  LG=2691 (18.8%)  WH=1683 (11.7%)
 
 ======================================================================
 COMPARISON SUMMARY
 ======================================================================
   Total pixels : 14336
-  Matching     : 14302  (99.76%)
-  Different    : 34   (0.24%)
+  Matching     : 14335  (99.99%)
+  Different    : 1   (0.01%)
 
 ----------------------------------------------------------------------
 COLOR DISTRIBUTION
 ----------------------------------------------------------------------
   Color                     Result   Reference      Diff
   BK  #000000                 1336        1336  +0
-  DG  #9494FF                 8615        8608  +7
-  LG  #FF9494                 2682        2708  -26
-  WH  #FFFFA5                 1703        1684  +19
+  DG  #9494FF                 8626        8626  +0
+  LG  #FF9494                 2691        2690  +1
+  WH  #FFFFA5                 1683        1684  -1
 
 ----------------------------------------------------------------------
 CONFUSION MATRIX  (rows = pipeline result, cols = reference)
 ----------------------------------------------------------------------
   Result / Ref             BK  #000000       DG  #9494FF       LG  #FF9494       WH  #FFFFA5   TOTAL
   BK  #000000                    1336 v                0                  0                  0      1336
-  DG  #9494FF                       0               8604 v               11 X                0      8615
-  LG  #FF9494                       0                  4 X             2678 v                0      2682
-  WH  #FFFFA5                       0                  0                 19 X             1684 v    1703
+  DG  #9494FF                       0               8626 v                0                  0      8626
+  LG  #FF9494                       0                  0               2690 v                1 X    2691
+  WH  #FFFFA5                       0                  0                  0               1683 v    1683
 
 ----------------------------------------------------------------------
 ERROR BREAKDOWN  (result -> reference)
 ----------------------------------------------------------------------
-  DG  #9494FF  ->  LG  #FF9494 : 11 px
-  LG  #FF9494  ->  DG  #9494FF : 4 px
-  WH  #FFFFA5  ->  LG  #FF9494 : 19 px
+  LG  #FF9494  ->  WH  #FFFFA5 : 1 px
 
 ======================================================================
 COMPARISON SUMMARY (reprint)
 ======================================================================
   Total pixels : 14336
-  Matching     : 14302  (99.76%)
-  Different    : 34   (0.24%)
+  Matching     : 14335  (99.99%)
+  Different    : 1   (0.01%)
 
 ======================================================================
 RESULT: FAIL — see diagnostics above and in the output directory.
