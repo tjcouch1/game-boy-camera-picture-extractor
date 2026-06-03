@@ -45,6 +45,10 @@ const TEST_INPUT_FULL_DIR = join(REPO_ROOT, "test-input-full");
 const TEST_OUTPUT_FULL_DIR = join(REPO_ROOT, "test-output-full");
 const SAMPLE_PICTURES_FULL_DIR = join(REPO_ROOT, "sample-pictures-full");
 const SAMPLE_PICTURES_OUT_FULL = join(REPO_ROOT, "sample-pictures-out-full");
+const SAMPLE_PICTURES_PRIVATE_DIR = join(REPO_ROOT, "sample-pictures-private");
+const SAMPLE_PICTURES_OUT_PRIVATE = join(REPO_ROOT, "sample-pictures-out-private");
+const TEST_INPUT_PRIVATE_DIR = join(REPO_ROOT, "test-input-private");
+const TEST_OUTPUT_PRIVATE_DIR = join(REPO_ROOT, "test-output-private");
 const REFERENCE_SUFFIX = "-output-corrected.png";
 
 const DEFAULT_SCALE = 8;
@@ -668,7 +672,7 @@ function writeCorpusSummary(corpus: CorpusConfig, results: TestResult[]): void {
 
 /** Corpora used by `pnpm test:pipeline` (the quick day-to-day run). */
 function quickCorpora(): CorpusConfig[] {
-  return [
+  const corpora: CorpusConfig[] = [
     {
       name: "sample-pictures (locate:false)",
       inputDir: SAMPLE_PICTURES_DIR,
@@ -684,11 +688,33 @@ function quickCorpora(): CorpusConfig[] {
       comparison: "reference",
     },
   ];
+
+  if (existsSync(SAMPLE_PICTURES_PRIVATE_DIR)) {
+    corpora.push({
+      name: "sample-pictures-private (locate:true)",
+      inputDir: SAMPLE_PICTURES_PRIVATE_DIR,
+      outputDir: SAMPLE_PICTURES_OUT_PRIVATE,
+      locate: true,
+      comparison: "none",
+    });
+  }
+
+  if (existsSync(TEST_INPUT_PRIVATE_DIR)) {
+    corpora.push({
+      name: "test-input-private (locate:true)",
+      inputDir: TEST_INPUT_PRIVATE_DIR,
+      outputDir: TEST_OUTPUT_PRIVATE_DIR,
+      locate: true,
+      comparison: "reference",
+    });
+  }
+
+  return corpora;
 }
 
 /** All corpora used by `pnpm test:pipeline:all`. */
 function allCorpora(): CorpusConfig[] {
-  return [
+  const corpora: CorpusConfig[] = [
     {
       name: "sample-pictures (locate:false)",
       inputDir: SAMPLE_PICTURES_DIR,
@@ -711,13 +737,6 @@ function allCorpora(): CorpusConfig[] {
       comparison: "reference",
     },
     {
-      name: "test-input (locate:true)",
-      inputDir: TEST_INPUT_DIR,
-      outputDir: TEST_OUTPUT_LOCATE_DIR,
-      locate: true,
-      comparison: "reference",
-    },
-    {
       name: "sample-pictures (locate:true) [self-consistency]",
       inputDir: SAMPLE_PICTURES_DIR,
       outputDir: SAMPLE_PICTURES_OUT_LOCATE,
@@ -734,6 +753,28 @@ function allCorpora(): CorpusConfig[] {
       referenceFromOutputDir: SAMPLE_PICTURES_OUT,
     },
   ];
+
+  if (existsSync(SAMPLE_PICTURES_PRIVATE_DIR)) {
+    corpora.push({
+      name: "sample-pictures-private (locate:true)",
+      inputDir: SAMPLE_PICTURES_PRIVATE_DIR,
+      outputDir: SAMPLE_PICTURES_OUT_PRIVATE,
+      locate: true,
+      comparison: "none",
+    });
+  }
+
+  if (existsSync(TEST_INPUT_PRIVATE_DIR)) {
+    corpora.push({
+      name: "test-input-private (locate:true)",
+      inputDir: TEST_INPUT_PRIVATE_DIR,
+      outputDir: TEST_OUTPUT_PRIVATE_DIR,
+      locate: true,
+      comparison: "reference",
+    });
+  }
+
+  return corpora;
 }
 
 // ─── Main ───

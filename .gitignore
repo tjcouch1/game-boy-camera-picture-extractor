@@ -229,17 +229,11 @@ test-output-full/**/*
 !test-output-full/**/*_gbcam.png
 !test-output-full/**/*_gbcam_rgb.png
 
-test-output-locate/**/*
-!test-output-locate/*/
-!test-output-locate/**/*.log
-!test-output-locate/**/*_gbcam.png
-!test-output-locate/**/*_gbcam_rgb.png
-
-sample-pictures-out-locate/**/*
-!sample-pictures-out-locate/*/
-!sample-pictures-out-locate/**/*.log
-!sample-pictures-out-locate/**/*_gbcam.png
-!sample-pictures-out-locate/**/*_gbcam_rgb.png
+test-output-private/**/*
+!test-output-private/*/
+!test-output-private/**/*.log
+!test-output-private/**/*_gbcam.png
+!test-output-private/**/*_gbcam_rgb.png
 
 sample-pictures-out-full/**/*
 !sample-pictures-out-full/*/
@@ -247,11 +241,21 @@ sample-pictures-out-full/**/*
 !sample-pictures-out-full/**/*_gbcam.png
 !sample-pictures-out-full/**/*_gbcam_rgb.png
 
+sample-pictures-out-private/**/*
+!sample-pictures-out-private/*/
+!sample-pictures-out-private/**/*.log
+!sample-pictures-out-private/**/*_gbcam.png
+!sample-pictures-out-private/**/*_gbcam_rgb.png
+
 test-output-py/**/*
 !test-output-py/*/
 !test-output-py/**/*.log
 !test-output-py/**/*_gbcam.png
 !test-output-py/**/*_gbcam_rgb.png
+
+# Private test inputs
+sample-pictures-private/
+test-input-private/
 
 # Node
 node_modules/
