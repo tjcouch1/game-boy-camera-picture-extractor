@@ -737,14 +737,6 @@ function allCorpora(): CorpusConfig[] {
       comparison: "reference",
     },
     {
-      name: "sample-pictures (locate:true) [self-consistency]",
-      inputDir: SAMPLE_PICTURES_DIR,
-      outputDir: SAMPLE_PICTURES_OUT,
-      locate: true,
-      comparison: "self",
-      referenceFromOutputDir: SAMPLE_PICTURES_OUT,
-    },
-    {
       name: "sample-pictures-full (locate:true) [self-consistency]",
       inputDir: SAMPLE_PICTURES_FULL_DIR,
       outputDir: SAMPLE_PICTURES_OUT_FULL,
