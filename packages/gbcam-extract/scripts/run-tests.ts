@@ -43,9 +43,7 @@ const TEST_INPUT_DIR = join(REPO_ROOT, "test-input");
 const TEST_OUTPUT_DIR = join(REPO_ROOT, "test-output");
 const TEST_INPUT_FULL_DIR = join(REPO_ROOT, "test-input-full");
 const TEST_OUTPUT_FULL_DIR = join(REPO_ROOT, "test-output-full");
-const TEST_OUTPUT_LOCATE_DIR = join(REPO_ROOT, "test-output-locate");
 const SAMPLE_PICTURES_FULL_DIR = join(REPO_ROOT, "sample-pictures-full");
-const SAMPLE_PICTURES_OUT_LOCATE = join(REPO_ROOT, "sample-pictures-out-locate");
 const SAMPLE_PICTURES_OUT_FULL = join(REPO_ROOT, "sample-pictures-out-full");
 const REFERENCE_SUFFIX = "-output-corrected.png";
 
