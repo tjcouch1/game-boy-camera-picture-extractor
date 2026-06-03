@@ -229,11 +229,7 @@ test-output-full/**/*
 !test-output-full/**/*_gbcam.png
 !test-output-full/**/*_gbcam_rgb.png
 
-test-output-private/**/*
-!test-output-private/*/
-!test-output-private/**/*.log
-!test-output-private/**/*_gbcam.png
-!test-output-private/**/*_gbcam_rgb.png
+test-output-private
 
 sample-pictures-out-full/**/*
 !sample-pictures-out-full/*/
@@ -241,11 +237,7 @@ sample-pictures-out-full/**/*
 !sample-pictures-out-full/**/*_gbcam.png
 !sample-pictures-out-full/**/*_gbcam_rgb.png
 
-sample-pictures-out-private/**/*
-!sample-pictures-out-private/*/
-!sample-pictures-out-private/**/*.log
-!sample-pictures-out-private/**/*_gbcam.png
-!sample-pictures-out-private/**/*_gbcam_rgb.png
+sample-pictures-out-private
 
 test-output-py/**/*
 !test-output-py/*/

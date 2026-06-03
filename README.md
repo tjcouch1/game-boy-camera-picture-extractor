@@ -103,9 +103,22 @@ pnpm build
 
 ## To run TypeScript tests
 
+To run unit tests on TypeScript code:
+
 ```bash
 pnpm test
+```
+
+To run tests to check the pipeline's accuracy against `-output-corrected.png` files in `test-input` (and optionally `test-input-private` if it exists):
+
+```bash
 pnpm test:pipeline
+```
+
+To run tests as mentioned above and to run the `sample-pictures` and `sample-pictures-full` through the pipeline as well (and optionally `sample-pictures-private` if it exists):
+
+```bash
+pnpm test:pipeline:all
 ```
 
 ## To run the extraction pipeline locally in Node

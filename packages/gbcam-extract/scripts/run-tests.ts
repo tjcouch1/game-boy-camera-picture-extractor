@@ -10,12 +10,7 @@
  */
 
 import { resolve, join, basename, extname, relative } from "path";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "fs";
 import sharp from "sharp";
 import { initOpenCV } from "../src/init-opencv.js";
 import { processPicture } from "../src/index.js";
@@ -46,7 +41,10 @@ const TEST_OUTPUT_FULL_DIR = join(REPO_ROOT, "test-output-full");
 const SAMPLE_PICTURES_FULL_DIR = join(REPO_ROOT, "sample-pictures-full");
 const SAMPLE_PICTURES_OUT_FULL = join(REPO_ROOT, "sample-pictures-out-full");
 const SAMPLE_PICTURES_PRIVATE_DIR = join(REPO_ROOT, "sample-pictures-private");
-const SAMPLE_PICTURES_OUT_PRIVATE = join(REPO_ROOT, "sample-pictures-out-private");
+const SAMPLE_PICTURES_OUT_PRIVATE = join(
+  REPO_ROOT,
+  "sample-pictures-out-private",
+);
 const TEST_INPUT_PRIVATE_DIR = join(REPO_ROOT, "test-input-private");
 const TEST_OUTPUT_PRIVATE_DIR = join(REPO_ROOT, "test-output-private");
 const REFERENCE_SUFFIX = "-output-corrected.png";
@@ -91,10 +89,7 @@ async function loadImage(filePath: string): Promise<GBImageData> {
   return { data: rgba, width: info.width, height: info.height };
 }
 
-async function saveImage(
-  img: GBImageData,
-  outPath: string
-): Promise<void> {
+async function saveImage(img: GBImageData, outPath: string): Promise<void> {
   const dir = resolve(outPath, "..");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   await sharp(Buffer.from(img.data.buffer), {
@@ -113,7 +108,7 @@ async function loadReference(filePath: string): Promise<Uint8Array> {
 
   if (info.width !== CAM_W || info.height !== CAM_H) {
     throw new Error(
-      `Reference image is ${info.width}x${info.height}, expected ${CAM_W}x${CAM_H}`
+      `Reference image is ${info.width}x${info.height}, expected ${CAM_W}x${CAM_H}`,
     );
   }
 
@@ -172,7 +167,7 @@ function compare(
   reference: Uint8Array,
   outputDir: string,
   stem: string,
-  log: (msg: string) => void
+  log: (msg: string) => void,
 ): ComparisonResult {
   const total = result.length;
   let matches = 0;
@@ -195,7 +190,7 @@ function compare(
   log("COLOR DISTRIBUTION");
   log("-".repeat(70));
   log(
-    `  ${"Color".padEnd(22)}  ${"Result".padStart(8)}  ${"Reference".padStart(10)}  ${"Diff".padStart(8)}`
+    `  ${"Color".padEnd(22)}  ${"Result".padStart(8)}  ${"Reference".padStart(10)}  ${"Diff".padStart(8)}`,
   );
   for (const v of GB_COLORS) {
     let rCnt = 0,
@@ -206,7 +201,7 @@ function compare(
     }
     const diff = rCnt - gCnt;
     log(
-      `  ${COLOR_NAMES[v].padEnd(22)}  ${String(rCnt).padStart(8)}  ${String(gCnt).padStart(10)}  ${(diff >= 0 ? "+" : "") + diff}`
+      `  ${COLOR_NAMES[v].padEnd(22)}  ${String(rCnt).padStart(8)}  ${String(gCnt).padStart(10)}  ${(diff >= 0 ? "+" : "") + diff}`,
     );
   }
 
@@ -289,7 +284,7 @@ async function saveErrorMap(
   outputDir: string,
   stem: string,
   scale: number = 1,
-  suffix: string = ""
+  suffix: string = "",
 ): Promise<void> {
   const w = CAM_W;
   const h = CAM_H;
@@ -336,7 +331,7 @@ async function saveErrorMap(
 async function savePaletteImage(
   gray: Uint8Array,
   outputDir: string,
-  filename: string
+  filename: string,
 ): Promise<void> {
   const w = CAM_W;
   const h = CAM_H;
@@ -429,7 +424,8 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
     return [];
   }
 
-  if (!existsSync(config.outputDir)) mkdirSync(config.outputDir, { recursive: true });
+  if (!existsSync(config.outputDir))
+    mkdirSync(config.outputDir, { recursive: true });
 
   console.log(`\n${"=".repeat(70)}`);
   console.log(`CORPUS: ${config.name}  (${inputs.length} file(s))`);
@@ -443,7 +439,8 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
     let perImageOutDir: string;
     if (config.comparison === "reference" || config.comparison === "self") {
       perImageOutDir = join(config.outputDir, stem);
-      if (!existsSync(perImageOutDir)) mkdirSync(perImageOutDir, { recursive: true });
+      if (!existsSync(perImageOutDir))
+        mkdirSync(perImageOutDir, { recursive: true });
     } else {
       perImageOutDir = config.outputDir;
     }
@@ -452,7 +449,10 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
 
     const logPath = join(perImageOutDir, `${stem}.log`);
     const logLines: string[] = [];
-    const log = (msg: string) => { console.log(msg); logLines.push(msg); };
+    const log = (msg: string) => {
+      console.log(msg);
+      logLines.push(msg);
+    };
 
     try {
       log(`PIPELINE RUN`);
@@ -470,7 +470,10 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
         },
       });
 
-      await saveImage(result.grayscale, join(perImageOutDir, `${stem}_gbcam.png`));
+      await saveImage(
+        result.grayscale,
+        join(perImageOutDir, `${stem}_gbcam.png`),
+      );
       const rgb = applyPalette(result.grayscale, DOWN_PALETTE);
       await saveImage(rgb, join(perImageOutDir, `${stem}_gbcam_rgb.png`));
       await writeDebugArtifacts(result, perImageOutDir, stem);
@@ -483,8 +486,12 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
       // ── Comparison ──
       if (config.comparison === "none") {
         results.push({
-          name: stem, matchN: null, matchPct: null,
-          diffN: null, diffPct: null, verdict: "OK",
+          name: stem,
+          matchN: null,
+          matchPct: null,
+          diffN: null,
+          diffPct: null,
+          verdict: "OK",
         });
         writeFileSync(logPath, logLines.join("\n") + "\n", "utf-8");
         continue;
@@ -493,22 +500,30 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
       // Resolve reference path
       let refPath: string | null;
       if (config.comparison === "reference") {
-        refPath = findReferenceFor(stem, TEST_INPUT_DIR);
+        refPath = findReferenceFor(stem, config.inputDir);
       } else {
         // "self": reference is `<referenceFromOutputDir>/<stem>_gbcam.png`
         // for flat corpora (sample-pictures-out is flat), or
         // `<referenceFromOutputDir>/<stem>/<stem>_gbcam.png` for per-image-dir
         // corpora.
         const flat = join(config.referenceFromOutputDir!, `${stem}_gbcam.png`);
-        const nested = join(config.referenceFromOutputDir!, stem, `${stem}_gbcam.png`);
+        const nested = join(
+          config.referenceFromOutputDir!,
+          stem,
+          `${stem}_gbcam.png`,
+        );
         refPath = existsSync(flat) ? flat : existsSync(nested) ? nested : null;
       }
 
       if (!refPath) {
         log(`\n  No reference image found — skipping comparison.`);
         results.push({
-          name: stem, matchN: null, matchPct: null,
-          diffN: null, diffPct: null, verdict: "NO REF",
+          name: stem,
+          matchN: null,
+          matchPct: null,
+          diffN: null,
+          diffPct: null,
+          verdict: "NO REF",
         });
         writeFileSync(logPath, logLines.join("\n") + "\n", "utf-8");
         continue;
@@ -522,9 +537,20 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
       const debugDir = join(perImageOutDir, "debug");
       if (!existsSync(debugDir)) mkdirSync(debugDir, { recursive: true });
       await saveErrorMap(resultGray, referenceGray, debugDir, stem, 1);
-      await saveErrorMap(resultGray, referenceGray, debugDir, stem, DEFAULT_SCALE, "_scaled");
+      await saveErrorMap(
+        resultGray,
+        referenceGray,
+        debugDir,
+        stem,
+        DEFAULT_SCALE,
+        "_scaled",
+      );
       await savePaletteImage(resultGray, debugDir, `${stem}_diag_result.png`);
-      await savePaletteImage(referenceGray, debugDir, `${stem}_diag_reference.png`);
+      await savePaletteImage(
+        referenceGray,
+        debugDir,
+        `${stem}_diag_reference.png`,
+      );
 
       writeFileSync(logPath, logLines.join("\n") + "\n", "utf-8");
 
@@ -543,8 +569,12 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
       logLines.push(`PIPELINE ERROR: ${msg}`);
       writeFileSync(logPath, logLines.join("\n") + "\n", "utf-8");
       results.push({
-        name: stem, matchN: null, matchPct: null,
-        diffN: null, diffPct: null, verdict: "ERROR",
+        name: stem,
+        matchN: null,
+        matchPct: null,
+        diffN: null,
+        diffPct: null,
+        verdict: "ERROR",
       });
     }
   }
@@ -568,7 +598,7 @@ async function writeDebugArtifacts(
     };
   },
   outputDir: string,
-  stem: string
+  stem: string,
 ): Promise<void> {
   if (!result.intermediates && !result.debug) return;
   const debugDir = join(outputDir, "debug");
@@ -590,9 +620,9 @@ async function writeDebugArtifacts(
       JSON.stringify(
         { metrics: result.debug.metrics, log: result.debug.log },
         null,
-        2
+        2,
       ),
-      "utf-8"
+      "utf-8",
     );
   }
 }
@@ -616,9 +646,12 @@ function writeCorpusSummary(corpus: CorpusConfig, results: TestResult[]): void {
   lines.push(`CORPUS SUMMARY — ${corpus.name}`);
   lines.push(`  inputDir:   ${relative(REPO_ROOT, corpus.inputDir)}`);
   lines.push(`  outputDir:  ${relative(REPO_ROOT, corpus.outputDir)}`);
-  lines.push(`  comparison: ${corpus.comparison}` + (corpus.referenceFromOutputDir
-    ? `  (referenceFromOutputDir: ${relative(REPO_ROOT, corpus.referenceFromOutputDir)})`
-    : ""));
+  lines.push(
+    `  comparison: ${corpus.comparison}` +
+      (corpus.referenceFromOutputDir
+        ? `  (referenceFromOutputDir: ${relative(REPO_ROOT, corpus.referenceFromOutputDir)})`
+        : ""),
+  );
   lines.push("=".repeat(70));
   lines.push("");
 
@@ -648,7 +681,8 @@ function writeCorpusSummary(corpus: CorpusConfig, results: TestResult[]): void {
   const text = lines.join("\n") + "\n";
   console.log("\n" + text);
 
-  if (!existsSync(corpus.outputDir)) mkdirSync(corpus.outputDir, { recursive: true });
+  if (!existsSync(corpus.outputDir))
+    mkdirSync(corpus.outputDir, { recursive: true });
   writeFileSync(join(corpus.outputDir, "test-summary.log"), text, "utf-8");
 }
 
@@ -678,15 +712,6 @@ function quickCorpora(): CorpusConfig[] {
       comparison: "reference",
     },
   ];
-
-  if (existsSync(SAMPLE_PICTURES_PRIVATE_DIR)) {
-    corpora.push({
-      name: "sample-pictures-private",
-      inputDir: SAMPLE_PICTURES_PRIVATE_DIR,
-      outputDir: SAMPLE_PICTURES_OUT_PRIVATE,
-      comparison: "none",
-    });
-  }
 
   if (existsSync(TEST_INPUT_PRIVATE_DIR)) {
     corpora.push({
@@ -772,7 +797,9 @@ async function main() {
 
   console.log("Initializing OpenCV...");
   await initOpenCV();
-  console.log(`OpenCV ready. Running ${mode === "all" ? "ALL" : "QUICK"} corpora.\n`);
+  console.log(
+    `OpenCV ready. Running ${mode === "all" ? "ALL" : "QUICK"} corpora.\n`,
+  );
 
   const corpora = mode === "all" ? allCorpora() : quickCorpora();
 
