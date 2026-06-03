@@ -378,8 +378,6 @@ interface CorpusConfig {
   inputDir: string;
   /** Absolute path to the output directory. */
   outputDir: string;
-  /** Whether to run the locate step. */
-  locate: boolean;
   /**
    * Comparison mode:
    *  - "reference":   compare against hand-corrected refs in test-input/
@@ -434,7 +432,7 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
   if (!existsSync(config.outputDir)) mkdirSync(config.outputDir, { recursive: true });
 
   console.log(`\n${"=".repeat(70)}`);
-  console.log(`CORPUS: ${config.name}  (${inputs.length} file(s), locate=${config.locate})`);
+  console.log(`CORPUS: ${config.name}  (${inputs.length} file(s))`);
   console.log("=".repeat(70));
 
   const results: TestResult[] = [];
@@ -460,13 +458,12 @@ async function runCorpus(config: CorpusConfig): Promise<TestResult[]> {
       log(`PIPELINE RUN`);
       log(`  Input:      ${relative(REPO_ROOT, inputPath)}`);
       log(`  Output dir: ${relative(REPO_ROOT, perImageOutDir)}`);
-      log(`  locate:     ${config.locate}`);
 
       const input = await loadImage(inputPath);
       const result = await processPicture(input, {
         scale: DEFAULT_SCALE,
         debug: true,
-        locate: config.locate,
+        locate: true,
         onProgress: (step, pct) => {
           if (pct === 0) process.stdout.write(`    ${step}...`);
           if (pct === 100) process.stdout.write(" done\n");
@@ -619,7 +616,6 @@ function writeCorpusSummary(corpus: CorpusConfig, results: TestResult[]): void {
   lines.push(`CORPUS SUMMARY — ${corpus.name}`);
   lines.push(`  inputDir:   ${relative(REPO_ROOT, corpus.inputDir)}`);
   lines.push(`  outputDir:  ${relative(REPO_ROOT, corpus.outputDir)}`);
-  lines.push(`  locate:     ${corpus.locate}`);
   lines.push(`  comparison: ${corpus.comparison}` + (corpus.referenceFromOutputDir
     ? `  (referenceFromOutputDir: ${relative(REPO_ROOT, corpus.referenceFromOutputDir)})`
     : ""));
@@ -661,50 +657,42 @@ function writeCorpusSummary(corpus: CorpusConfig, results: TestResult[]): void {
 // Two test-run modes are supported, each running a different subset of
 // corpora. Both share `runCorpus` etc. above.
 //
-// `quick` (default) — focused day-to-day validation: just sample-pictures
-// extraction (a smoke check that the pipeline produces output) and the
-// primary `locate` accuracy run against `test-input-full/`. Skips the
-// already-cropped baseline and the tier-2 self-consistency corpora.
+// `quick` (default) — focused day-to-day validation: just test-input and
+// test-input-full extraction. Skips the tier-2 self-consistency corpora.
 //
-// `full` — every corpus, in dependency order (sample-pictures locate:false
-// runs first because its outputs are referenced by the two locate:true
-// self-consistency corpora).
+// `full` — every corpus, in dependency order.
 
 /** Corpora used by `pnpm test:pipeline` (the quick day-to-day run). */
 function quickCorpora(): CorpusConfig[] {
   const corpora: CorpusConfig[] = [
     {
-      name: "sample-pictures (locate:false)",
-      inputDir: SAMPLE_PICTURES_DIR,
-      outputDir: SAMPLE_PICTURES_OUT,
-      locate: false,
-      comparison: "none",
+      name: "test-input",
+      inputDir: TEST_INPUT_DIR,
+      outputDir: TEST_OUTPUT_DIR,
+      comparison: "reference",
     },
     {
-      name: "test-input-full (locate:true)",
+      name: "test-input-full",
       inputDir: TEST_INPUT_FULL_DIR,
       outputDir: TEST_OUTPUT_FULL_DIR,
-      locate: true,
       comparison: "reference",
     },
   ];
 
   if (existsSync(SAMPLE_PICTURES_PRIVATE_DIR)) {
     corpora.push({
-      name: "sample-pictures-private (locate:true)",
+      name: "sample-pictures-private",
       inputDir: SAMPLE_PICTURES_PRIVATE_DIR,
       outputDir: SAMPLE_PICTURES_OUT_PRIVATE,
-      locate: true,
       comparison: "none",
     });
   }
 
   if (existsSync(TEST_INPUT_PRIVATE_DIR)) {
     corpora.push({
-      name: "test-input-private (locate:true)",
+      name: "test-input-private",
       inputDir: TEST_INPUT_PRIVATE_DIR,
       outputDir: TEST_OUTPUT_PRIVATE_DIR,
-      locate: true,
       comparison: "reference",
     });
   }
@@ -716,31 +704,27 @@ function quickCorpora(): CorpusConfig[] {
 function allCorpora(): CorpusConfig[] {
   const corpora: CorpusConfig[] = [
     {
-      name: "sample-pictures (locate:false)",
+      name: "sample-pictures",
       inputDir: SAMPLE_PICTURES_DIR,
       outputDir: SAMPLE_PICTURES_OUT,
-      locate: false,
       comparison: "none",
     },
     {
-      name: "test-input (locate:false)",
+      name: "test-input",
       inputDir: TEST_INPUT_DIR,
       outputDir: TEST_OUTPUT_DIR,
-      locate: false,
       comparison: "reference",
     },
     {
-      name: "test-input-full (locate:true)",
+      name: "test-input-full",
       inputDir: TEST_INPUT_FULL_DIR,
       outputDir: TEST_OUTPUT_FULL_DIR,
-      locate: true,
       comparison: "reference",
     },
     {
-      name: "sample-pictures-full (locate:true) [self-consistency]",
+      name: "sample-pictures-full [self-consistency]",
       inputDir: SAMPLE_PICTURES_FULL_DIR,
       outputDir: SAMPLE_PICTURES_OUT_FULL,
-      locate: true,
       comparison: "self",
       referenceFromOutputDir: SAMPLE_PICTURES_OUT,
     },
@@ -748,20 +732,18 @@ function allCorpora(): CorpusConfig[] {
 
   if (existsSync(SAMPLE_PICTURES_PRIVATE_DIR)) {
     corpora.push({
-      name: "sample-pictures-private (locate:true)",
+      name: "sample-pictures-private",
       inputDir: SAMPLE_PICTURES_PRIVATE_DIR,
       outputDir: SAMPLE_PICTURES_OUT_PRIVATE,
-      locate: true,
       comparison: "none",
     });
   }
 
   if (existsSync(TEST_INPUT_PRIVATE_DIR)) {
     corpora.push({
-      name: "test-input-private (locate:true)",
+      name: "test-input-private",
       inputDir: TEST_INPUT_PRIVATE_DIR,
       outputDir: TEST_OUTPUT_PRIVATE_DIR,
-      locate: true,
       comparison: "reference",
     });
   }
@@ -781,8 +763,8 @@ async function main() {
     else if (arg === "--help" || arg === "-h") {
       console.log(
         "Usage: run-tests [--mode=quick|all]\n" +
-          "  --mode=quick  Run sample-pictures + test-input-full (default)\n" +
-          "  --mode=all    Run all six corpora (tier-1 + tier-2 self-consistency)",
+          "  --mode=quick  Run test-input + test-input-full (default)\n" +
+          "  --mode=all    Run all corpora",
       );
       return;
     }

@@ -1,9 +1,9 @@
 PIPELINE RUN
   Input:      test-input\prison-1.jpg
   Output dir: test-output\prison-1
-  locate:     false
 
 PIPELINE DIAGNOSTICS
+  [locate] input 1302×1187 aspect=1.097 ≈ target 1.111; treating as already-cropped (passThrough)
   [warp] corner detection: area=1433613 aspect=1.106 (target 1.111) thresh=180 score=0.0204
   [warp] detected source corners (TL TR BR BL): (22,20) (1278,29) (1273,1163) (16,1162)
   [warp] pass 1 edge offsets (avg): top=-1.95 bot=0.56 left=-2.24 right=3.81

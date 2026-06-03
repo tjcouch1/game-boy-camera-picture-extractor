@@ -1,7 +1,6 @@
 PIPELINE RUN
   Input:      test-input-full\thing-3.jpg
   Output dir: test-output-full\thing-3
-  locate:     true
 
 PIPELINE DIAGNOSTICS
   [locate] working-res 1000×450 (scale=0.248 from 4032×1816)

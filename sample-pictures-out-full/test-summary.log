@@ -1,8 +1,7 @@
 ======================================================================
-CORPUS SUMMARY — sample-pictures-full (locate:true) [self-consistency]
+CORPUS SUMMARY — sample-pictures-full [self-consistency]
   inputDir:   sample-pictures-full
   outputDir:  sample-pictures-out-full
-  locate:     true
   comparison: self  (referenceFromOutputDir: sample-pictures-out)
 ======================================================================
 

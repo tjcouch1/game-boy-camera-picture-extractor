@@ -1,7 +1,6 @@
 PIPELINE RUN
   Input:      sample-pictures-full\20260313_213510.jpg
   Output dir: sample-pictures-out-full\20260313_213510
-  locate:     true
 
 PIPELINE DIAGNOSTICS
   [locate] working-res 1000×450 (scale=0.248 from 4032×1816)
