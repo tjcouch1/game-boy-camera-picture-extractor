@@ -38,6 +38,55 @@ task 1's edge-fit improvement is in, etc.).
    variant warps correctly. So the problem is *not* in `warp` per se — it's
    in how `warp` consumes `locate`'s output for the un-pre-cropped version.
 
+## Progress log
+
+- **Tasks 3 & 4 — RESOLVED (shared root cause).** Both were caused by
+  `subPixelRectify` (warp step *e*) **extrapolating its stripe-phase
+  polynomial beyond the data it was fit on.** When the WH-frame "vertical
+  frame line" signal is only detectable across part of the screen width
+  (blurry / low-contrast frame), the valid G-peak samples cluster on one
+  side; the quad/cubic fit then extrapolates to non-physical offsets over
+  the unsupported camera blocks. Measured: 20260602_184946 produced a
+  13-point right-side top-strip fit that evaluated to **−97** at the left
+  camera edge → an **84.9px** "sub-pixel" shift that wrecked the warp
+  (task 4). 20260602_184434 hit the same thing at 20.8px (task 3) — which
+  is exactly why it failed while its three siblings (~2px) were fine.
+  Fix in `warp.ts`: (a) clamp polynomial evaluation to the x-range actually
+  covered by valid samples (nearest-value hold outside support, so
+  unsupported blocks inherit the closest real measurement instead of an
+  extrapolation); (b) skip the rectify entirely when the resulting shift
+  exceeds one GB pixel (`SUB_PIXEL_MAX_SHIFT`) — non-physical for a phase
+  correction. After fix: 184946 → 0.92px (clean), 184434 → 20.8px **skipped**
+  (falls back to the already-correct perspective warp). **Provably a no-op
+  on tier-1** — `test-output-full` numbers identical before/after the change
+  (verified by git-stash A/B), all tier-1 images still apply with
+  maxShift<4.
+- **Task 2 — improved by the same fix** (not yet fully closed). The
+  `sample-pictures-out` (non-full) `20260313_213443` had a partially-
+  extrapolated shift of 5.9px; the clamp brought it to **2.95px**, close to
+  the full variant's 2.0px. Re-measure the 246-diff after a fresh full run;
+  remaining divergence (if any) is a separate locate/warp-handoff question.
+- **Task 1 — re-assessed, not a real geometric defect in current code.**
+  The reported "BR 2px inward" symptom is **not reproduced** by the current
+  pipeline: `inspect-warp` shows the inner-border ring well-aligned on all
+  four edges (right edge mean dev 0.06px; BR corner at ~ideal, slightly
+  *outward* if anything). The `finalResidual.left=1.549` metric is an
+  artifact of **two outlier border-point detections** (+20px at two rows
+  where blue camera content next to the left inner border fooled the
+  WH→DG drop detector) inflating a plain mean; the robust poly fit rejects
+  them so geometry is unaffected. The genuine residual signal is sub-pixel
+  stripe-phase drift down the right side (the "vertical frame lines"),
+  which is partly corrected by `subPixelRectify`. Left-border detector
+  fragility against DG-like content is a real lurking issue worth hardening
+  (candidate for the broad iteration), but task 1 as written needs no
+  dedicated geometric fix.
+
+New diagnostics added: `scripts/inspect-warp.ts` (per-edge inner-border
+deviation curves + left/right stripe-phase-vs-height), `scripts/warp-one.ts`
+(run warp alone on one image with debug, optional `--out`), `scripts/zoom.mjs`
+(crop+nearest-upscale a region for eyeballing). `buildRBChannel`,
+`findBorderPoints`, `findGPeakOffset` are now exported from `warp.ts`.
+
 ## Overall goals (in order)
 
 This is the same shape as the prior `frame-dash-color-anchors` work, but
@@ -119,11 +168,52 @@ perfect.
   The fit is dominated by where dashes are clearly visible. If the right
   edge has weaker dash contrast toward the bottom (e.g. fading frontlight),
   the polynomial pulls inward.
-- The user explicitly suggests: "use the vertical frame lines". The right
-  frame has 14 vertical dashes; you should be able to fit a line through
-  them and extrapolate to the corner. If the polynomial fit is the culprit,
-  raising its degree (cubic) or weighting the fit by dash signal-strength
-  per row may help.
+
+> **What "vertical frame lines" actually means** (user clarification — the
+> earlier draft of this plan wrongly equated them with the 14 vertical
+> dashes; that was a misread). The WH frame is not a flat color: each GB
+> pixel is rendered on the GBA-SP LCD as three vertical sub-pixel bars in
+> **B G R** order (blue left, green middle, red right). WH is `#FFFFA5`, so
+> the blue bar is dimmer (B≈A5) while G and R are full. The result is that
+> **every WH GB-pixel column shows a repeating dark→light cycle across its
+> width** — a fine vertical striping at the GB-pixel pitch (one cycle per
+> 8 output px at scale=8), running the full height of the left/right WH
+> frame strips and the full width of the top/bottom strips. These stripes
+> are the "vertical frame lines." They are far denser than the dashes
+> (one per GB pixel, ~128–144 of them, vs 14 dashes) and carry two signals:
+>   1. **Curvature / lens distortion** — the stripes are *supposed* to be
+>      perfectly vertical. Any residual bend (the right stripes bowing out
+>      then back in toward the bottom; the left stripes drifting right
+>      below ~Y650 in park-1) directly measures the warp error that a
+>      pure perspective transform can't remove.
+>   2. **Horizontal GB-pixel alignment** — the bright part of each stripe
+>      should sit on the right side of its GB-pixel cell (G/R bars), with
+>      the dark blue bar on the left. If the bright part drifts to the
+>      cell's left/center, the GB-pixel grid is horizontally misaligned in
+>      that row, by the same amount the camera content is misaligned.
+> The right border also detects *differently* from the left because of this
+> sub-pixel order: the right inner border is DG with WH to its **right**
+> (`B___GR`), giving a thick dark gap before the WH; the left inner border
+> has WH to its **left** (`_GRB__`), so the WH→DG boundary is crisp with
+> little gap. Border detection should account for this asymmetry.
+> Blur is also uneven (worse toward the bottom, worse along Y than X):
+> the dark blue bar in the `_GR` stripe washes out in blurry regions, which
+> weakens the stripe signal exactly where (bottom corners) the warp error
+> tends to be largest.
+
+- **Current state of the code:** `warp.ts` already has a `subPixelRectify`
+  pass (step *e*) that exploits signal (1)/(2): it measures the green-bar
+  peak offset within each GB-pixel block along the **top and bottom** WH
+  frame strips, fits a polynomial across x, and remaps each row to align
+  the stripes to a global phase. **But it only samples the top and bottom
+  strips and interpolates the per-column shift linearly between them**
+  (`t = 0..1` down the image). It does *not* sample the **left/right** WH
+  frame strips to measure how the stripe phase drifts with *height* — so
+  vertical curvature of the kind the user describes (right side bowing,
+  left side drifting below mid-height) is only captured to the extent a
+  top↔bottom linear blend can represent it. Extending the stripe-phase
+  measurement to the left/right strips (giving a 2-D phase field instead of
+  a top/bottom-only linear interp) is the most principled lever here.
 
 **Fix approach (principled, image-agnostic):**
 - Add a per-edge sub-pixel refinement that measures each dash position along

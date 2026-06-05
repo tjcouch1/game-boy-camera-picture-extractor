@@ -668,7 +668,7 @@ function findBorderCornersDirect(channel: any, scale: number): CornerPts {
 // Original interface (kept for type compatibility)
 type CornerPts = { TL: Point; TR: Point; BR: Point; BL: Point };
 
-function findBorderPoints(channel: any, scale: number): BorderPoints {
+export function findBorderPoints(channel: any, scale: number): BorderPoints {
   const H = channel.rows;
   const W = channel.cols;
   const srch = BORDER_DETECT_BAND * scale + scale; // give a couple extra cols for poly tails
@@ -1024,7 +1024,7 @@ function constrainedQuadFitWithSelection(
 
 // ─── Build R-B channel (warm vs cool) ───
 
-function buildRBChannel(warped: any): any {
+export function buildRBChannel(warped: any): any {
   const cv = getCV();
   const H = warped.rows;
   const W = warped.cols;
@@ -1521,7 +1521,7 @@ function recordSubPixelMetrics(dbg: DebugCollector, r: SubPixelResult): void {
  * by sampling a vertical strip of WH frame. Returns NaN if the peak isn't
  * confident (no clear winner among the columns).
  */
-function findGPeakOffset(
+export function findGPeakOffset(
   warped: any,
   blockStartCol: number,
   rowStart: number,
@@ -1563,6 +1563,12 @@ function findGPeakOffset(
 }
 
 const SUB_PIXEL_MIN_SHIFT = 0.3; // skip if max shift is below this
+// A sub-pixel phase correction realigns the BGR stripe within a GB-pixel
+// cell, so it can never legitimately need to move content by more than one
+// GB pixel. If the computed shift exceeds this the underlying fit is
+// untrustworthy (bad/sparse stripe signal) — skip the whole rectify rather
+// than warp the image by a non-physical amount.
+const SUB_PIXEL_MAX_SHIFT = 8; // = scale (1 GB pixel) at scale=8
 
 function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const cv = getCV();
@@ -1644,9 +1650,23 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const topOffsets = new Array<number>(nBlocks);
   const botOffsets = new Array<number>(nBlocks);
   const cameraBlockOffset = (camLeft - detectStartCol) / scale;
+  // Only trust the polynomial within the x-range actually covered by valid
+  // samples. A quadratic/cubic extrapolates to non-physical values outside
+  // its data support — when the WH-frame stripe signal is only detectable
+  // across part of the width (e.g. a blurry/low-contrast top strip yields
+  // valid G-peaks clustered on one side), evaluating the fit over the full
+  // camera span produces a runaway offset (observed: a 13-point right-side
+  // fit extrapolated to −97 at the left edge → an 84px "sub-pixel" shift).
+  // Clamp the evaluation x to the sampled support so unsupported blocks
+  // inherit the nearest real measurement instead of an extrapolation.
+  const topXs = topPts.map(([x]) => x);
+  const botXs = botPts.map(([x]) => x);
+  const topXmin = Math.min(...topXs), topXmax = Math.max(...topXs);
+  const botXmin = Math.min(...botXs), botXmax = Math.max(...botXs);
   for (let bx = 0; bx < nBlocks; bx++) {
-    topOffsets[bx] = polyEval(topFit, bx + cameraBlockOffset);
-    botOffsets[bx] = polyEval(botFit, bx + cameraBlockOffset);
+    const X = bx + cameraBlockOffset;
+    topOffsets[bx] = polyEval(topFit, Math.max(topXmin, Math.min(topXmax, X)));
+    botOffsets[bx] = polyEval(botFit, Math.max(botXmin, Math.min(botXmax, X)));
   }
 
   // Target = mean of top and bottom offsets across the image. This is the
@@ -1669,7 +1689,10 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
     if (Math.abs(shiftBot[bx]) > maxShift) maxShift = Math.abs(shiftBot[bx]);
   }
 
-  if (maxShift < SUB_PIXEL_MIN_SHIFT) {
+  // Skip when the correction is negligible (avoid sub-pixel jitter) or when
+  // it is non-physically large (untrustworthy fit — see SUB_PIXEL_MAX_SHIFT).
+  const maxPhysical = SUB_PIXEL_MAX_SHIFT * (scale / 8);
+  if (maxShift < SUB_PIXEL_MIN_SHIFT || maxShift > maxPhysical) {
     return {
       rectified: new cv.Mat(),
       applied: false,
