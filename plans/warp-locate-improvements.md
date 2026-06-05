@@ -61,11 +61,17 @@ task 1's edge-fit improvement is in, etc.).
   on tier-1** — `test-output-full` numbers identical before/after the change
   (verified by git-stash A/B), all tier-1 images still apply with
   maxShift<4.
-- **Task 2 — improved by the same fix** (not yet fully closed). The
-  `sample-pictures-out` (non-full) `20260313_213443` had a partially-
-  extrapolated shift of 5.9px; the clamp brought it to **2.95px**, close to
-  the full variant's 2.0px. Re-measure the 246-diff after a fresh full run;
-  remaining divergence (if any) is a separate locate/warp-handoff question.
+- **Task 2 — RESOLVED by the same fix.** Measured the non-full vs full
+  divergence directly: committed/old = **246** (matches the user's number),
+  after the fix = **105** (−57%). The non-full warp's "stretch" defect (the
+  user's "top-left pushed right, GB-cam stretched left") was the 5.9px
+  extrapolated sub-pixel shift; after the clamp the non-full inner border is
+  well-aligned (`inspect-warp`: LEFT mean 1.08 w/ one blue-content outlier,
+  RIGHT mean 0.12). The residual 105 is near the inherent floor: the two
+  inputs are **different captures** (pre-cropped 1340×1220 vs full
+  4032×1816), so some quantize-boundary divergence is expected and chasing
+  it risks overfitting. Left-border-detector vs blue-content fragility (the
+  lone outlier) remains the shared lurking issue.
 - **Task 1 — re-assessed, not a real geometric defect in current code.**
   The reported "BR 2px inward" symptom is **not reproduced** by the current
   pipeline: `inspect-warp` shows the inner-border ring well-aligned on all
