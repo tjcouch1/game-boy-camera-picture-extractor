@@ -13,7 +13,11 @@ live — `warp` was originally written assuming an already-cropped input and
 some of its assumptions (especially around edge curvature / inner-border
 refinement) are tripping over `locate`'s outputs on harder photos.
 
-The four failure cases (in priority order, addressed one at a time):
+The four failure cases. Task 1 is the priority because the BR-corner
+curvature symptom is the most localised and the fix is likely the simplest;
+tasks 2–4 can be tackled in whatever order makes sense once you've seen the
+debug images (they may share root causes — task 2 may resolve itself once
+task 1's edge-fit improvement is in, etc.).
 
 1. **`sample-pictures-out/20260328_165926~2-EDIT_warp.png`** — bottom-right
    corner is 2 px too far left and 2 px too far up. The other three corners
@@ -36,12 +40,14 @@ The four failure cases (in priority order, addressed one at a time):
 
 ## Overall goals (in order)
 
-This is the same shape as the prior `frame-dash-color-anchors` work: **fix
-warp first regardless of downstream test results**, then propagate
-adjustments through the rest of the pipeline (the goal of those isn't
-necessarily to improve test results — it's to make each step accurate given
-what the previous step now produces), then make precise final tweaks to
-recover test accuracy.
+This is the same shape as the prior `frame-dash-color-anchors` work, but
+expanded to cover the new step: **fix locate-and-warp first regardless of
+downstream test results** (they work together — `warp` now consumes
+`locate`'s output rather than the raw photo, so they need to be evaluated
+as a pair), then propagate adjustments through the rest of the pipeline
+(the goal of those isn't necessarily to improve test results — it's to
+make each step accurate given what the previous step now produces), then
+make precise final tweaks to recover test accuracy.
 
 Constraints:
 - **No hard-coded solutions to the particular test images.** The pipeline
@@ -221,7 +227,13 @@ un-pre-cropped version.
 
 ## Working method
 
-Work tasks **in order**. After each task is fixed:
+Do task 1 first because it's the most localised and the fix likely
+benefits the other cases too. After that, tasks 2–4 can be ordered however
+makes sense given what the debug images suggest — if the task 1 edge-fit
+fix already resolves the task 2 self-consistency diff, skip ahead; if
+task 4's locate-handoff is clearly its own root cause, address it next.
+
+After each task is fixed:
 1. Run `pnpm test:pipeline:all`. Verify the target case improves and nothing
    else regresses meaningfully. If something else regressed, understand why
    and decide if the fix needs adjusting.
@@ -236,12 +248,15 @@ may resolve themselves.
 
 ## After the four tasks
 
-Same loop as the prior `frame-dash-color-anchors` work:
-1. **Warp first** — get the warp output right regardless of test numbers.
+Same loop as the prior `frame-dash-color-anchors` work, but now with
+`locate` in the mix:
+1. **Locate + warp first** — get the locate/warp outputs right regardless
+   of test numbers. They're now a pair: `warp` consumes `locate`'s output
+   on `locate:true` runs, so an issue in either propagates to the other.
    The corner-detection step is the foundation; everything downstream
    inherits its mistakes.
 2. **Then propagate** — adjust `correct` / `crop` / `sample` / `quantize`
-   given what `warp` now produces. The goal here isn't to push test
+   given what locate+warp now produce. The goal here isn't to push test
    accuracy yet; it's to make sure each step is operating accurately on the
    improved input. Use diagnostics, not test accuracy, to verify each step.
 3. **Then test-accuracy-driven refinement** — once the upstream steps are
@@ -253,8 +268,11 @@ Same loop as the prior `frame-dash-color-anchors` work:
    - DG-anomaly detection (section 3e).
 
 The prior chat got every non-bathhouse test to ≤2 errors (thing-1 at 0).
-That work shouldn't regress on `test-input/` even as `locate`/`warp`/etc.
-are improved.
+The user has since fixed the bathhouse reference image so bathhouse no
+longer needs to be treated as a special case — the goal is now 0–2 errors
+on **every** test image including bathhouse. The prior refinement work
+should not regress on `test-input/` even as `locate`/`warp`/etc. are
+improved.
 
 ## Useful references
 
