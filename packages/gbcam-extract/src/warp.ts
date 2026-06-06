@@ -116,6 +116,9 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   // WH frame columns above and below the camera area, and remap each row so
   // LCD pixel boundaries align uniformly with the 8-col output grid. Fixes
   // residual lens-distortion drift the perspective transform cannot model.
+  // The per-row drift down each edge is taken from the WH-frame vertical
+  // frame lines (reliable into the blurry bottom corners) rather than the
+  // bottom strip (which collapses there).
   {
     const subPixelResult = subPixelRectify(currentWarped, scale);
     if (subPixelResult.applied) {
@@ -1491,6 +1494,74 @@ function nonLinearRemap(
   };
 }
 
+// ─── Frame-line detection (used by the sub-pixel rectifier) ───
+
+/**
+ * Track one WH-frame vertical frame line (the dim B-sub-pixel column) down the
+ * image. Returns [y, x] points. At each sample row it averages a small band of
+ * rows (robust to blur) and finds the luminance minimum in a sub-GB-pixel
+ * window around the running estimate (so it never jumps to an adjacent line),
+ * with quadratic sub-pixel interpolation.
+ */
+function trackFrameLine(
+  data: Uint8Array,
+  W: number,
+  H: number,
+  seedX: number,
+  yTop: number,
+  yBot: number,
+  scale: number,
+): Array<[number, number]> {
+  const half = Math.max(3, Math.floor(scale / 2));
+  const band = Math.max(3, Math.floor(scale * 0.6));
+  const colLum = (xc: number, yc: number): Array<[number, number]> => {
+    const x0 = Math.max(1, xc - half);
+    const x1 = Math.min(W - 2, xc + half);
+    const out: Array<[number, number]> = [];
+    for (let x = x0; x <= x1; x++) {
+      let s = 0, n = 0;
+      const ya = Math.max(0, yc - band), yb = Math.min(H - 1, yc + band);
+      for (let y = ya; y <= yb; y++) {
+        const i = (y * W + x) * 3;
+        s += data[i] + data[i + 1] + data[i + 2];
+        n++;
+      }
+      out.push([x, s / n]);
+    }
+    return out;
+  };
+  let cur = seedX;
+  const out: Array<[number, number]> = [];
+  const step = Math.max(2, Math.floor(scale / 2));
+  for (let yc = yTop; yc <= yBot; yc += step) {
+    const m = colLum(Math.round(cur), yc);
+    const sm = gaussianFilter1d(m.map((v) => v[1]), 1.0);
+    let bi = 0;
+    for (let k = 1; k < sm.length; k++) if (sm[k] < sm[bi]) bi = k;
+    let xx = m[bi][0];
+    if (bi > 0 && bi < sm.length - 1) {
+      const y0 = sm[bi - 1], y1 = sm[bi], y2 = sm[bi + 1];
+      const dn = y0 - 2 * y1 + y2;
+      if (Math.abs(dn) > 1e-6) xx += 0.5 * (y0 - y2) / dn;
+    }
+    // Reject jumps to an adjacent frame line; keep tracking the same one.
+    if (out.length === 0 || Math.abs(xx - cur) <= scale * 0.75) cur = xx;
+    out.push([yc, cur]);
+  }
+  return out;
+}
+
+/** Fit a smooth curve to a tracked frame line, in (y-yTop)/scale units. */
+function frameBendFit(
+  pts: Array<[number, number]>,
+  yTop: number,
+  scale: number,
+): Poly | null {
+  if (pts.length < 5) return null;
+  const norm = pts.map(([y, x]) => [(y - yTop) / scale, x] as [number, number]);
+  return robustPolyFit(norm);
+}
+
 // ─── Sub-pixel rectification (Phase 5) ───
 
 interface SubPixelResult {
@@ -1663,10 +1734,48 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const botXs = botPts.map(([x]) => x);
   const topXmin = Math.min(...topXs), topXmax = Math.max(...topXs);
   const botXmin = Math.min(...botXs), botXmax = Math.max(...botXs);
+
+  // Per-edge top→bottom drift from the WH-frame vertical frame lines. These
+  // stay reliable into the blurry bottom corners where the bottom strip's
+  // G-peak collapses, so we use them — not the bottom strip — to set the
+  // top→bottom drift. The bottom strip is kept only as a fallback when a
+  // frame line can't be tracked. Drift is the same in geometric px and in
+  // sub-pixel phase (the content grid is rigid), so it adds directly.
+  const yTopRef0 = (topR1 + topR2) / 2;
+  const yBotRef0 = (botR1 + botR2) / 2;
+  const lineBend = (seedX: number): number | null => {
+    const pts = trackFrameLine(warped.data, W, H, seedX, Math.round(yTopRef0), Math.round(yBotRef0), scale);
+    if (pts.length < 5) return null;
+    const fit = frameBendFit(pts, yTopRef0, scale);
+    if (!fit) return null;
+    const b = polyEval(fit, (yBotRef0 - yTopRef0) / scale) - polyEval(fit, 0);
+    return Math.abs(b) <= scale * 1.5 ? b : null;
+  };
+  const rightBend = lineBend(camRight + 2 * scale);
+  const leftBend = lineBend(Math.max(2 * scale, 6 * scale));
+  const rB = rightBend ?? 0;
+  const lB = leftBend ?? 0;
+
   for (let bx = 0; bx < nBlocks; bx++) {
     const X = bx + cameraBlockOffset;
     topOffsets[bx] = polyEval(topFit, Math.max(topXmin, Math.min(topXmax, X)));
-    botOffsets[bx] = polyEval(botFit, Math.max(botXmin, Math.min(botXmax, X)));
+    // Bottom drift from the bottom strip (captures the per-column SHAPE, which
+    // the frame lines — only measured at the two edges — cannot). But the
+    // bottom strip's reading collapses in the blurry bottom CORNERS, so near
+    // the left/right edges blend toward the frame-line drift (reliable there).
+    const botStrip = polyEval(botFit, Math.max(botXmin, Math.min(botXmax, X)));
+    const u = Math.max(0, Math.min(1, (bx * scale) / (camRight - camLeft)));
+    const driftStrip = botStrip - topOffsets[bx];
+    const driftLine = lB * (1 - u) + rB * u;
+    // Edge weight: 0 across the central 40%, ramping to 1 in the outer 30%.
+    const edge = Math.max(0, (Math.abs(u - 0.5) - 0.2) / 0.3);
+    // Confidence gate: a tracked frame line carries ~1.5px of detection noise,
+    // so only trust it once the measured bend clearly exceeds that — below the
+    // floor the local bottom strip is the better signal and overriding it with
+    // a noisy small bend adds error. Scales the correction in smoothly.
+    const conf = Math.max(0, Math.min(1, (Math.max(Math.abs(rB), Math.abs(lB)) - 2) / 2));
+    const w = rightBend === null ? 0 : Math.max(0, Math.min(1, edge)) * conf;
+    botOffsets[bx] = topOffsets[bx] + (1 - w) * driftStrip + w * driftLine;
   }
 
   // Target = mean of top and bottom offsets across the image. This is the
