@@ -161,6 +161,30 @@ deviation curves + left/right stripe-phase-vs-height), `scripts/warp-one.ts`
 (crop+nearest-upscale a region for eyeballing). `buildRBChannel`,
 `findBorderPoints`, `findGPeakOffset` are now exported from `warp.ts`.
 
+## Test-accuracy iteration — edge-bleed valley fix (LANDED)
+
+After proving B is also bled (the whole edge pixel is uniformly brightened, so
+no per-pixel channel separates it — see below), the breakthrough was that
+*locally* the two levels stay separated. Committed `quantize` per-column LG/WH
+G-valley, restricted to the outermost columns and gated on the column's LG
+mode being lifted >30 above the global LG level (the frame-bleed signature):
+- **park-1 full 22 → 8** (WH→LG 15 → 1), **zelda-poster-2 crop 2 → 1**, and a
+  no-op (fires only on park-1) on every other tier-1 image — **zero regression**.
+- Tier-1 total 75 → 60.
+
+**prison-1 resists it.** Its LG→DG errors are a sparse (~6 px/row), mildly
+R-lifted (DG-R ~172 vs global 148) blob at the top-centre edge — too sparse for
+a per-row valley and below the bleed-lift gate; loosening the thresholds catches
+nothing new but regresses zelda-3. The symmetric top/bottom-row DG/LG R-valley
+was implemented and is a clean no-op on the test set, so it was not kept (no
+measurable benefit, adds untested surface).
+
+**Remaining tier-1 (>2 errors):** bathhouse 7/4, park-full 8, prison 11/12,
+zelda-1-full 5. These are residual inter-pixel bleed (LG↔DG mostly) in the
+blurry full captures, in sparse 2-D blobs that don't fit the dense-edge-line
+valley. Getting them to ≤2 needs either a 2-D local-bleed model or accepting an
+information-loss floor; not solved.
+
 ## Test-accuracy iteration — bleed/classification analysis (the 3 user questions)
 
 After the BR fix, the user asked to drive every test to 99.99% (≤2 errors)
