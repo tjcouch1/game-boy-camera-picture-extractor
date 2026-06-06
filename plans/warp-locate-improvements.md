@@ -161,7 +161,45 @@ deviation curves + left/right stripe-phase-vs-height), `scripts/warp-one.ts`
 (crop+nearest-upscale a region for eyeballing). `buildRBChannel`,
 `findBorderPoints`, `findGPeakOffset` are now exported from `warp.ts`.
 
-## Task 1 (park-1 BR) — deep dive, 2nd pass (user pushed back: NOT fixed)
+## Task 1 (park-1 BR) — FIXED (3rd pass: frame-line straightening)
+
+The user pushed back again (correctly) that the BR was NOT bleed but a warped
+border, and supplied two hand-traced images
+(`park-1-{normal,full}-warp-vertical-frame-line.png`) tracing the WH-frame
+vertical frame line one GB pixel right of the right border. **Root cause
+confirmed by measurement:** the right side carries residual lens/keystone
+distortion the perspective + non-linear passes miss — the right frame lines
+bend ~3.8px left toward the bottom (uniformly across the right frame) while
+the left frame lines stay straight. That pushes the DG inner border into the
+bottom-right content column, so quantize reads spurious DG there. My earlier
+"optical bleed / can't move the edge" conclusion was wrong because a *uniform*
+nudge moves the (correct) top with the bottom; the real fix is a per-row
+**shear** that straightens the bend while leaving the top/left fixed.
+
+**Fix (committed):** detect the frame line directly (luminance minimum of the
+dim B-sub-pixel column, tracked down the image with multi-row averaging +
+sub-pixel interp — validated against the user's red line to 0.3–0.5px), measure
+the per-edge top→bottom bend, and feed that drift into `subPixelRectify`:
+- the bottom strip still provides the per-column drift SHAPE across the
+  reliable centre (the frame lines only exist at the two edges, and a pure
+  edge-to-edge `lerp_u` over-corrects the middle — measured 17/51);
+- near the outer (blurry) columns the drift blends toward the frame-line
+  value (reliable where the bottom strip's G-peak collapses);
+- a confidence gate (bend must exceed the ~1.5px frame-line detection noise)
+  keeps it a **no-op on clean, low-distortion images**, so it never overrides
+  a reliable bottom strip.
+
+**Results:** park-1 cropped 2→1, full 26→22 (BR DG cluster 10→2 — the user's
+symptom); prison-1 also improves; **zero regression** on any other tier-1 image
+(both cropped and full paths re-verified); task 3/4 images unaffected. The
+remaining park-1 full errors are the separate left-edge column (x=0 WH→LG,
+capture-specific to the full photo — left side is geometrically straight) and
+scattered LG↔DG. The bottom-border curvature the user also described is a
+y-distortion; it's likely already handled by the non-linear remap (horizontal
+border detection has no sub-pixel-column asymmetry), unlike the right border —
+worth confirming if the left-edge/LG-DG residue is chased further.
+
+## Task 1 (park-1 BR) — deep dive, 2nd pass (superseded; kept for the record)
 
 The user is right that the prior "task 1 is fine" call was wrong. park-1's
 bottom-right reads DG where it should be dithered LG/WH. Findings, all from
