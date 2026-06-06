@@ -929,6 +929,67 @@ export function quantize(input: GBImageData, options?: QuantizeOptions): GBImage
     }
   }
 
+  // ── 3f. Per-column local LG/WH G-valley. Edge columns get uniformly
+  // brightened by frame + vertical light bleed, lifting their LG pixels' G (and
+  // even R/B) until they read as WH against the GLOBAL threshold. But WITHIN a
+  // column the LG level and the WH level stay clearly separated, so a per-
+  // column G valley recovers the right split. Clean columns reproduce ~the
+  // global valley (no change); only the bled columns shift. Guarded to fire
+  // only on columns with a genuinely bimodal LG/WH G distribution.
+  {
+    let colFlipped = 0;
+    const MIN_PTS = 12;
+    const MIN_SPREAD = 40;   // LG/WH G levels must be this far apart in the column
+    const MIN_DEPTH = 0.6;   // valley must be ≤ this × the smaller peak (a real dip)
+    // Only the outermost columns: the bright filmstrip frame bleeds light
+    // horizontally into them, which (compounded with vertical bleed) is what
+    // uniformly lifts their LG pixels into the WH range. Interior columns are
+    // left to the global/strip classification (touching them trades errors).
+    const EDGE = process.env.COLVALLEY_EDGE ? Number(process.env.COLVALLEY_EDGE) : 2;
+    for (let x = 0; x < CAM_W; x++) {
+      if (x >= EDGE && x < CAM_W - EDGE) continue;
+      const gv: number[] = [];
+      const idx: number[] = [];
+      for (let y = 0; y < CAM_H; y++) {
+        const i = y * CAM_W + x;
+        if (finalLabels[i] === 2 || finalLabels[i] === 3) { gv.push(flatRG[i * 2 + 1]); idx.push(i); }
+      }
+      if (gv.length < MIN_PTS) continue;
+      let lo = Infinity, hi = -Infinity;
+      for (const g of gv) { if (g < lo) lo = g; if (g > hi) hi = g; }
+      if (hi - lo < MIN_SPREAD) continue;
+      const nb = Math.round(hi - lo) + 1;
+      const hist = new Array<number>(nb).fill(0);
+      for (const g of gv) hist[Math.min(nb - 1, Math.max(0, Math.round(g - lo)))]++;
+      const sm = gaussianFilter1d(hist, Math.max(2, (hi - lo) / 12));
+      // Tallest peak, then the tallest peak separated from it by a dip.
+      let p1 = 0; for (let k = 1; k < nb; k++) if (sm[k] > sm[p1]) p1 = k;
+      let p2 = -1; for (let k = 0; k < nb; k++) {
+        if (Math.abs(k - p1) < (hi - lo) / 6) continue;
+        if (p2 < 0 || sm[k] > sm[p2]) p2 = k;
+      }
+      if (p2 < 0) continue;
+      const a = Math.min(p1, p2), b = Math.max(p1, p2);
+      let valley = a; for (let k = a + 1; k <= b; k++) if (sm[k] < sm[valley]) valley = k;
+      const peakMin = Math.min(sm[p1], sm[p2]);
+      if (peakMin <= 0 || sm[valley] > MIN_DEPTH * peakMin) continue; // not clearly bimodal
+      // Only act when the column's lower (LG) mode is LIFTED above the global
+      // LG level — the signature of frame/vertical bleed. A normal edge column
+      // (LG at its usual G) is already classified correctly globally, and
+      // re-thresholding it only flips correct WH pixels.
+      const lowerModeG = lo + Math.min(p1, p2);
+      if (lowerModeG <= paletteCenters[2][1] + 30) continue;
+      const thr = lo + valley;
+      for (let j = 0; j < idx.length; j++) {
+        const want = gv[j] < thr ? 2 : 3;
+        if (want !== finalLabels[idx[j]]) { finalLabels[idx[j]] = want; colFlipped++; }
+      }
+    }
+    if (dbg && colFlipped > 0) {
+      dbg.log(`[quantize] per-column LG/WH valley: ${colFlipped} pixels reclassified`);
+    }
+  }
+
   // ── 4. Output: map palette indices to grayscale values ──
   const output = createGBImageData(CAM_W, CAM_H);
   for (let i = 0; i < N; i++) {
