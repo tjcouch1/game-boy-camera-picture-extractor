@@ -161,6 +161,54 @@ deviation curves + left/right stripe-phase-vs-height), `scripts/warp-one.ts`
 (crop+nearest-upscale a region for eyeballing). `buildRBChannel`,
 `findBorderPoints`, `findGPeakOffset` are now exported from `warp.ts`.
 
+## Task 1 (park-1 BR) — deep dive, 2nd pass (user pushed back: NOT fixed)
+
+The user is right that the prior "task 1 is fine" call was wrong. park-1's
+bottom-right reads DG where it should be dithered LG/WH. Findings, all from
+the full-pipeline output (not just diagnostics), so they're not measurement
+artifacts:
+
+- **Error location:** the 26 full-path errors are two clusters — a left-edge
+  column (x=0, 14px WH→LG) and the **BR corner** (x=125–127, y=107–111;
+  6 spurious DG + LG→WH). The BR is the one the user flagged.
+- **It's a real asymmetry, confirmed:** LEFT DG-border centre sits at its
+  geometric ideal (x≈124); the RIGHT DG-border centre sits at x≈1152 vs the
+  symmetric ideal of 1156 — **~4px inward** — so the DG ring overlaps the
+  last content column. Matches the user's "BR 2px left".
+- **But it is NOT fixable by moving the edge.** The frame and the camera
+  content are one rigid LCD, so the warp can't move the border relative to
+  the content. A gated `RIGHT_NUDGE` sweep on the right-border detection
+  proved it: nudge 0 → 26 errors; ±2 → 667/981; ±4 → 2127/2437. Any
+  reposition drags the content with it and wrecks alignment. The current
+  edge position is the one that keeps content aligned to the sample grid.
+- **Sub-pixel rectify via the side frame strips does NOT work either.** The
+  right WH-frame "vertical frame lines" do drift (G-peak phase 2.7→−1.0 top→
+  bottom, the curvature the user sees), but a 4-strip rectifier built on them
+  made both normal (2→1380) and full (26→474) far worse. Reason, measured:
+  the side strips sit ~64px *inside* the frame, nearer the screen edge where
+  lens distortion is worst, so they overestimate the camera-edge drift ~2×
+  (right strip drift −4.0 vs the horizontal strips' correct −2.3 at the edge).
+  Calibrating the side strip to the horizontal strips just reproduces the
+  legacy result — a catch-22, since the side strip is only needed where the
+  horizontal strips are unreliable. Reverted.
+- **Conclusion: the BR residual is optical DG bleed, not geometry.** DG
+  (R=148) bleeds into the rightmost column's R-sub-pixel — which physically
+  sits hard against the DG border — lowering its R so quantize (which
+  separates DG vs LG on R) sees DG. Worst in the blurry full capture. This
+  is a deconvolution/de-bleed problem at the structurally-worst pixel, not
+  something warp geometry or phase rectification can move.
+- **Untried, higher-risk levers that remain:** (a) an edge-column R de-bleed
+  in `sample`/`quantize` that compensates the rightmost/bottom content
+  R-channel for adjacent-DG contribution (principled — known optical bleed —
+  but touches every image's edge pixels, so needs all-corpora validation);
+  (b) a stronger non-linear warp on the right that straightens the frame
+  lines further (the residual frame-line curvature *is* residual warp
+  distortion the perspective+nonlinear passes don't fully remove). Both are
+  bigger swings to attempt next rather than the small fixes already ruled out.
+
+Diagnostics confirmed park-1 ≡ 20260328_165926~2-EDIT (byte-identical input),
+so park-1's reference can be used as the oracle for this image.
+
 ## Overall goals (in order)
 
 This is the same shape as the prior `frame-dash-color-anchors` work, but
