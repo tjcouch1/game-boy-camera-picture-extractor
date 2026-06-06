@@ -146,11 +146,14 @@ on the original 8 tests; `prison-1` is a newly-added test never optimized.
    `sample`-side mitigation (bias the edge-column sampling window away from
    the frame side) could help broadly — but validate it doesn't regress, as
    the effect is sub-pixel.
-4. **Apples-to-apples locate impact.** `run-tests` hardcodes `locate:true`
-   for all corpora (so `test-output` already covers locate-on-cropped). To
-   actually measure locate's *cost*, add a `locate:false` variant run on the
-   same `test-input/` images and diff — that isolates locate's contribution
-   from the confound that `test-input-full/` is a different, harder capture.
+4. **Apples-to-apples locate impact — measured, locate is harmless.** Ran
+   park-1's cropped input both ways (`extract --start warp` = locate:false vs
+   the locate:true `test-output`): **2 errors either way**. So locate is an
+   exact no-op on cropped inputs, and park-1 full's 26 errors are entirely
+   the harder full capture, not locate or warp. (`run-tests` hardcodes
+   `locate:true` everywhere; a standing locate:false corpus would let this
+   A/B run for the whole set, but the single-image result already settles
+   the question.)
 
 New diagnostics added: `scripts/inspect-warp.ts` (per-edge inner-border
 deviation curves + left/right stripe-phase-vs-height), `scripts/warp-one.ts`
