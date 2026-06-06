@@ -87,6 +87,71 @@ task 1's edge-fit improvement is in, etc.).
   (candidate for the broad iteration), but task 1 as written needs no
   dedicated geometric fix.
 
+- **Identity note: `park-1` IS `20260328_165926~2-EDIT`.** `test-input/park-1.jpg`
+  and `sample-pictures/20260328_165926~2-EDIT.jpg` are **byte-identical**
+  (same md5). So the task-1 image is the tier-1 `park-1` test (a sunset over
+  a landscape) and has a hand-corrected reference. Its `locate:false` output
+  scores **2 errors**; its `locate:true`/full output scores **26**. (Briefly
+  looked like a debug-image corruption bug — `test-output/park-1/debug/park-1_warp.png`
+  hashes equal to the 20260328 warp — but that's just because they're the
+  same input. No tooling bug; all other warp intermediates hash distinct.)
+
+### Tier-1 status after the sub-pixel fix (no regression; baselines)
+
+`test-output` (locate:true on already-cropped `test-input/` — see note
+below): thing-1 **0**; thing-2/3, zelda-1/2/3, park-1 all **≤2**; prison-1
+**13**, bathhouse-1 **7**. `test-output-full` (locate:true on full
+`test-input-full/`): zelda-2 **0**; thing-1/2/3, zelda-1/3, bathhouse-1 all
+≤5; **park-1 26**, prison-1 **14**. These match the documented prior baseline
+on the original 8 tests; `prison-1` is a newly-added test never optimized.
+
+> **Doc drift found:** `run-tests.ts` hardcodes `locate: true` for *every*
+> corpus (line 466). So `test-output` is **not** `locate:false` as AGENTS.md
+> / this plan's "Tooling" section claim — it is locate:true on the
+> already-cropped `test-input/` images, i.e. it already *is* the
+> "test-output-locate" no-op check. park-1 cropped = 2 errors (== the prior
+> locate:false baseline) confirms **locate is a near-no-op on cropped
+> inputs**. There is currently no locate:false run anywhere, so a true
+> "locate vs no-locate on the same input" A/B would need a new flag.
+
+**What the remaining errors are (measured, not guessed):**
+- No single residual *warp* defect remains. Cross-image error breakdowns are
+  dominated by **LG↔DG** (pink #FF9494 vs blue #9494FF — the two hardest-to-
+  separate middle colors): prison-1 full LG→DG 11, bathhouse/zelda LG→DG 2–3.
+  This is a **quantize/colour-classification** problem, the domain of the
+  existing confidence-refine / palette-vote / DG-anomaly passes — phase-3
+  territory, and easy to over-fit, so approach with cross-corpus guards.
+- **park-1 full's 26** are dominated by **15 WH→LG at x=0** (leftmost camera
+  column only), sampled RGB ≈ (228,203,172) — borderline between WH (dist 59)
+  and LG (dist 66). The left border position is nearly identical between the
+  two paths (mean 1.55 vs 1.53 px), and the full path consumes a **different,
+  harder capture** (`test-input-full/park-1.jpg` ≠ `test-input/park-1.jpg`).
+  So this is **capture-inherent edge brightness / bleed**, not a geometry
+  bug — tuning it would be over-fitting.
+
+### Prioritized next levers (for the broad iteration)
+
+1. **LG↔DG separation robustness** (biggest cross-image error class). Improve
+   the warm/cool decision in `quantize` without regressing the tuned 8 tests
+   — verify on *all* corpora each change. prison-1 (new, LG→DG 11) is the
+   cleanest oracle.
+2. **Left inner-border vs DG-like content fragility.** The WH→DG drop
+   detector still locks onto blue/DG camera content at isolated rows (+~20px
+   outliers in park-1 both paths, task-2 non-full). Currently masked by
+   `robustPolyFit` outlier rejection, but worth hardening (e.g. require the
+   drop be followed by the DG→content rise within the expected band, or use
+   the sub-pixel gap-width asymmetry) so it can't bite harder on other images.
+3. **Edge-column sampling bleed.** The leftmost/rightmost camera columns can
+   inherit brightness from the adjacent WH frame/DG border. A principled
+   `sample`-side mitigation (bias the edge-column sampling window away from
+   the frame side) could help broadly — but validate it doesn't regress, as
+   the effect is sub-pixel.
+4. **Apples-to-apples locate impact.** `run-tests` hardcodes `locate:true`
+   for all corpora (so `test-output` already covers locate-on-cropped). To
+   actually measure locate's *cost*, add a `locate:false` variant run on the
+   same `test-input/` images and diff — that isolates locate's contribution
+   from the confound that `test-input-full/` is a different, harder capture.
+
 New diagnostics added: `scripts/inspect-warp.ts` (per-edge inner-border
 deviation curves + left/right stripe-phase-vs-height), `scripts/warp-one.ts`
 (run warp alone on one image with debug, optional `--out`), `scripts/zoom.mjs`
