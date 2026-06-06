@@ -161,6 +161,51 @@ deviation curves + left/right stripe-phase-vs-height), `scripts/warp-one.ts`
 (crop+nearest-upscale a region for eyeballing). `buildRBChannel`,
 `findBorderPoints`, `findGPeakOffset` are now exported from `warp.ts`.
 
+## Test-accuracy iteration — bleed/classification analysis (the 3 user questions)
+
+After the BR fix, the user asked to drive every test to 99.99% (≤2 errors)
+and posed three questions. Findings (all evidence-backed):
+
+1. **Cropped vs full divergence is NOT locate — it's blur→bleed.** thing-1's
+   warp geometry is essentially identical cropped vs full (quadScore
+   0.034/0.022, BR corner err 0.89/0.73, finalResidual ~0 both). The full
+   photos are a smaller screen-in-frame → blurrier when warped up → more
+   inter-pixel light bleed → more borderline classification errors. locate
+   reproduces the crop faithfully; the harder capture is the difference.
+2. **park-1 left column (x=0) WH→LG** = vertical WH bleed (the column is a
+   vertical WH/LG dither; bright WH neighbours lift the sandwiched LG pixel's
+   G from ~154 toward WH's ~250) compounded with horizontal bleed from the
+   bright left frame. The bled-LG read as WH in RG space. B/brightness *does*
+   separate them locally (LG B~180 vs WH B~235), and the de-bled (central-row)
+   G also recovers ~154 — but neither generalises (see below).
+3. **prison-1 LG→DG** = the mirror, horizontal R bleed: DG pixels next to
+   bright LG/WH neighbours get their R lifted (148→LG-ish), reading as LG.
+
+**Robust fixes attempted, all rejected** (each helps one image but the global
+RG k-means couples everything, so it trades others — and the perfectly-tuned
+images like thing-1=0 are fragile):
+- Global `vMargin=2` (skip more bled rows): park-full 22→4 but thing-1 0→16,
+  prison 11→21 — catastrophic.
+- B-channel LG/WH tiebreaker in the confidence vote: monotonically *worse*
+  (sampled-B doesn't separate LG/WH globally; palette B differ by only 17).
+- Unsharp mask on the 128×112 sample: park-full 22→10 but prison 11→481.
+- **Adaptive vertical-G de-bleed** (use the central-row G only when the block
+  edges are >T brighter — fires only on real bleed, protects thing-1): the
+  best of the lot — park-full 22→12, zelda-1-full 5→4, thing-1 untouched — but
+  changing G shifts the global clustering, so prison/bathhouse drift +1–3 and
+  (at low T) zelda-2-crop 2→3. Net −9 errors but it gets *no* image to ≤2 and
+  worsens prison, so it doesn't advance the all-≤2 goal. Reverted.
+
+**Conclusion:** the remaining tier-1 errors (park-full 22, prison 11/12,
+bathhouse 7/4, zelda-1-full 5) sit at the inter-pixel-bleed difficulty floor
+for these (blurry full) captures. The classifier is near a local optimum;
+single global sample/quantize knobs trade images rather than help all. The
+principled next step is a **targeted post-classification de-bleed** that fixes
+the specific LG↔WH / DG↔LG boundary pixels using the de-bled (central-band) G
+or R **without** disturbing the global RG clustering (the source of all the
+collateral) — a quantize-refinement pass, higher-effort but the only path that
+avoids the coupling. Not yet implemented.
+
 ## Task 1 (park-1 BR) — FIXED (3rd pass: frame-line straightening)
 
 The user pushed back again (correctly) that the BR was NOT bleed but a warped
