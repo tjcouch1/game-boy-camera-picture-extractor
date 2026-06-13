@@ -248,6 +248,9 @@ function parseArgs(argv: string[]): CLIArgs {
       case "--debug":
         args.debug = true;
         break;
+      case "--":
+        // Some pnpm versions forward the argument separator literally; ignore it.
+        break;
       default:
         if (!arg.startsWith("-")) {
           args.inputs.push(arg);

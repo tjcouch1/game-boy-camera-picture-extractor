@@ -116,6 +116,9 @@ export function warp(input: GBImageData, options?: WarpOptions): GBImageData {
   // WH frame columns above and below the camera area, and remap each row so
   // LCD pixel boundaries align uniformly with the 8-col output grid. Fixes
   // residual lens-distortion drift the perspective transform cannot model.
+  // The per-row drift down each edge is taken from the WH-frame vertical
+  // frame lines (reliable into the blurry bottom corners) rather than the
+  // bottom strip (which collapses there).
   {
     const subPixelResult = subPixelRectify(currentWarped, scale);
     if (subPixelResult.applied) {
@@ -668,7 +671,7 @@ function findBorderCornersDirect(channel: any, scale: number): CornerPts {
 // Original interface (kept for type compatibility)
 type CornerPts = { TL: Point; TR: Point; BR: Point; BL: Point };
 
-function findBorderPoints(channel: any, scale: number): BorderPoints {
+export function findBorderPoints(channel: any, scale: number): BorderPoints {
   const H = channel.rows;
   const W = channel.cols;
   const srch = BORDER_DETECT_BAND * scale + scale; // give a couple extra cols for poly tails
@@ -1024,7 +1027,7 @@ function constrainedQuadFitWithSelection(
 
 // ─── Build R-B channel (warm vs cool) ───
 
-function buildRBChannel(warped: any): any {
+export function buildRBChannel(warped: any): any {
   const cv = getCV();
   const H = warped.rows;
   const W = warped.cols;
@@ -1491,6 +1494,74 @@ function nonLinearRemap(
   };
 }
 
+// ─── Frame-line detection (used by the sub-pixel rectifier) ───
+
+/**
+ * Track one WH-frame vertical frame line (the dim B-sub-pixel column) down the
+ * image. Returns [y, x] points. At each sample row it averages a small band of
+ * rows (robust to blur) and finds the luminance minimum in a sub-GB-pixel
+ * window around the running estimate (so it never jumps to an adjacent line),
+ * with quadratic sub-pixel interpolation.
+ */
+function trackFrameLine(
+  data: Uint8Array,
+  W: number,
+  H: number,
+  seedX: number,
+  yTop: number,
+  yBot: number,
+  scale: number,
+): Array<[number, number]> {
+  const half = Math.max(3, Math.floor(scale / 2));
+  const band = Math.max(3, Math.floor(scale * 0.6));
+  const colLum = (xc: number, yc: number): Array<[number, number]> => {
+    const x0 = Math.max(1, xc - half);
+    const x1 = Math.min(W - 2, xc + half);
+    const out: Array<[number, number]> = [];
+    for (let x = x0; x <= x1; x++) {
+      let s = 0, n = 0;
+      const ya = Math.max(0, yc - band), yb = Math.min(H - 1, yc + band);
+      for (let y = ya; y <= yb; y++) {
+        const i = (y * W + x) * 3;
+        s += data[i] + data[i + 1] + data[i + 2];
+        n++;
+      }
+      out.push([x, s / n]);
+    }
+    return out;
+  };
+  let cur = seedX;
+  const out: Array<[number, number]> = [];
+  const step = Math.max(2, Math.floor(scale / 2));
+  for (let yc = yTop; yc <= yBot; yc += step) {
+    const m = colLum(Math.round(cur), yc);
+    const sm = gaussianFilter1d(m.map((v) => v[1]), 1.0);
+    let bi = 0;
+    for (let k = 1; k < sm.length; k++) if (sm[k] < sm[bi]) bi = k;
+    let xx = m[bi][0];
+    if (bi > 0 && bi < sm.length - 1) {
+      const y0 = sm[bi - 1], y1 = sm[bi], y2 = sm[bi + 1];
+      const dn = y0 - 2 * y1 + y2;
+      if (Math.abs(dn) > 1e-6) xx += 0.5 * (y0 - y2) / dn;
+    }
+    // Reject jumps to an adjacent frame line; keep tracking the same one.
+    if (out.length === 0 || Math.abs(xx - cur) <= scale * 0.75) cur = xx;
+    out.push([yc, cur]);
+  }
+  return out;
+}
+
+/** Fit a smooth curve to a tracked frame line, in (y-yTop)/scale units. */
+function frameBendFit(
+  pts: Array<[number, number]>,
+  yTop: number,
+  scale: number,
+): Poly | null {
+  if (pts.length < 5) return null;
+  const norm = pts.map(([y, x]) => [(y - yTop) / scale, x] as [number, number]);
+  return robustPolyFit(norm);
+}
+
 // ─── Sub-pixel rectification (Phase 5) ───
 
 interface SubPixelResult {
@@ -1521,7 +1592,7 @@ function recordSubPixelMetrics(dbg: DebugCollector, r: SubPixelResult): void {
  * by sampling a vertical strip of WH frame. Returns NaN if the peak isn't
  * confident (no clear winner among the columns).
  */
-function findGPeakOffset(
+export function findGPeakOffset(
   warped: any,
   blockStartCol: number,
   rowStart: number,
@@ -1563,6 +1634,12 @@ function findGPeakOffset(
 }
 
 const SUB_PIXEL_MIN_SHIFT = 0.3; // skip if max shift is below this
+// A sub-pixel phase correction realigns the BGR stripe within a GB-pixel
+// cell, so it can never legitimately need to move content by more than one
+// GB pixel. If the computed shift exceeds this the underlying fit is
+// untrustworthy (bad/sparse stripe signal) — skip the whole rectify rather
+// than warp the image by a non-physical amount.
+const SUB_PIXEL_MAX_SHIFT = 8; // = scale (1 GB pixel) at scale=8
 
 function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const cv = getCV();
@@ -1644,9 +1721,61 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
   const topOffsets = new Array<number>(nBlocks);
   const botOffsets = new Array<number>(nBlocks);
   const cameraBlockOffset = (camLeft - detectStartCol) / scale;
+  // Only trust the polynomial within the x-range actually covered by valid
+  // samples. A quadratic/cubic extrapolates to non-physical values outside
+  // its data support — when the WH-frame stripe signal is only detectable
+  // across part of the width (e.g. a blurry/low-contrast top strip yields
+  // valid G-peaks clustered on one side), evaluating the fit over the full
+  // camera span produces a runaway offset (observed: a 13-point right-side
+  // fit extrapolated to −97 at the left edge → an 84px "sub-pixel" shift).
+  // Clamp the evaluation x to the sampled support so unsupported blocks
+  // inherit the nearest real measurement instead of an extrapolation.
+  const topXs = topPts.map(([x]) => x);
+  const botXs = botPts.map(([x]) => x);
+  const topXmin = Math.min(...topXs), topXmax = Math.max(...topXs);
+  const botXmin = Math.min(...botXs), botXmax = Math.max(...botXs);
+
+  // Per-edge top→bottom drift from the WH-frame vertical frame lines. These
+  // stay reliable into the blurry bottom corners where the bottom strip's
+  // G-peak collapses, so we use them — not the bottom strip — to set the
+  // top→bottom drift. The bottom strip is kept only as a fallback when a
+  // frame line can't be tracked. Drift is the same in geometric px and in
+  // sub-pixel phase (the content grid is rigid), so it adds directly.
+  const yTopRef0 = (topR1 + topR2) / 2;
+  const yBotRef0 = (botR1 + botR2) / 2;
+  const lineBend = (seedX: number): number | null => {
+    const pts = trackFrameLine(warped.data, W, H, seedX, Math.round(yTopRef0), Math.round(yBotRef0), scale);
+    if (pts.length < 5) return null;
+    const fit = frameBendFit(pts, yTopRef0, scale);
+    if (!fit) return null;
+    const b = polyEval(fit, (yBotRef0 - yTopRef0) / scale) - polyEval(fit, 0);
+    return Math.abs(b) <= scale * 1.5 ? b : null;
+  };
+  const rightBend = lineBend(camRight + 2 * scale);
+  const leftBend = lineBend(Math.max(2 * scale, 6 * scale));
+  const rB = rightBend ?? 0;
+  const lB = leftBend ?? 0;
+
   for (let bx = 0; bx < nBlocks; bx++) {
-    topOffsets[bx] = polyEval(topFit, bx + cameraBlockOffset);
-    botOffsets[bx] = polyEval(botFit, bx + cameraBlockOffset);
+    const X = bx + cameraBlockOffset;
+    topOffsets[bx] = polyEval(topFit, Math.max(topXmin, Math.min(topXmax, X)));
+    // Bottom drift from the bottom strip (captures the per-column SHAPE, which
+    // the frame lines — only measured at the two edges — cannot). But the
+    // bottom strip's reading collapses in the blurry bottom CORNERS, so near
+    // the left/right edges blend toward the frame-line drift (reliable there).
+    const botStrip = polyEval(botFit, Math.max(botXmin, Math.min(botXmax, X)));
+    const u = Math.max(0, Math.min(1, (bx * scale) / (camRight - camLeft)));
+    const driftStrip = botStrip - topOffsets[bx];
+    const driftLine = lB * (1 - u) + rB * u;
+    // Edge weight: 0 across the central 40%, ramping to 1 in the outer 30%.
+    const edge = Math.max(0, (Math.abs(u - 0.5) - 0.2) / 0.3);
+    // Confidence gate: a tracked frame line carries ~1.5px of detection noise,
+    // so only trust it once the measured bend clearly exceeds that — below the
+    // floor the local bottom strip is the better signal and overriding it with
+    // a noisy small bend adds error. Scales the correction in smoothly.
+    const conf = Math.max(0, Math.min(1, (Math.max(Math.abs(rB), Math.abs(lB)) - 2) / 2));
+    const w = rightBend === null ? 0 : Math.max(0, Math.min(1, edge)) * conf;
+    botOffsets[bx] = topOffsets[bx] + (1 - w) * driftStrip + w * driftLine;
   }
 
   // Target = mean of top and bottom offsets across the image. This is the
@@ -1669,7 +1798,10 @@ function subPixelRectify(warped: any, scale: number): SubPixelResult {
     if (Math.abs(shiftBot[bx]) > maxShift) maxShift = Math.abs(shiftBot[bx]);
   }
 
-  if (maxShift < SUB_PIXEL_MIN_SHIFT) {
+  // Skip when the correction is negligible (avoid sub-pixel jitter) or when
+  // it is non-physically large (untrustworthy fit — see SUB_PIXEL_MAX_SHIFT).
+  const maxPhysical = SUB_PIXEL_MAX_SHIFT * (scale / 8);
+  if (maxShift < SUB_PIXEL_MIN_SHIFT || maxShift > maxPhysical) {
     return {
       rectified: new cv.Mat(),
       applied: false,
